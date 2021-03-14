@@ -1,0 +1,14 @@
+====================
+REFERENCE
+====================
+
+https://www.seeedstudio.com/Grove-Temperature-Humidity-Pressure-and-Gas-Sensor-for-Arduino-BME680.html
+
+====================
+CODE COPIED FROM
+====================
+
+https://github.com/SeeedDocument/Grove-Temperature-Humidity-Pressure-Gas-Sensor_BME680/raw/master/res/Seeed_BME680-master.zip
+
+The only chnage is commenting out '#include <Arduino.h>'.
+
