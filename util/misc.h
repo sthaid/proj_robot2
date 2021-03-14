@@ -1,5 +1,9 @@
-#ifndef __UTIL_MISC_H__
-#define __UTIL_MISC_H__
+#ifndef __MISC_H__
+#define __MISC_H__
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #include <stdbool.h>
 #include <sys/types.h>
@@ -111,5 +115,9 @@ int getsockaddr(char * node, int port, struct sockaddr_in * ret_addr);
 char * sock_addr_to_str(char * s, int slen, struct sockaddr * addr);
 int do_recv(int sockfd, void * recv_buff, size_t len);
 int do_send(int sockfd, void * send_buff, size_t len);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif
