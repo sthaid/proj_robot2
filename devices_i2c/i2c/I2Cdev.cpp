@@ -6,7 +6,7 @@
 
 #define NOT_IMPLEMENTED \
     do { \
-        printf("%s NOT_IMPLEMENTED\n"); \
+        printf("%s NOT_IMPLEMENTED\n", __func__); \
         exit(1); \
     } while (0)
 
@@ -50,7 +50,7 @@ bool I2Cdev::readBytes(uint8_t devAddr, uint8_t regAddr, uint8_t length, uint8_t
 {
     int rc;
 
-    i2c_read(devAddr, regAddr, data, length);
+    rc = i2c_read(devAddr, regAddr, data, length);
     return rc == 0;
 }
 
