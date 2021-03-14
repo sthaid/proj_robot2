@@ -48,7 +48,7 @@
 /*! @file bme680.c
  @brief Sensor driver for BME680 sensor */
 #include "bme680.h"
-#include <Arduino.h>
+//#include <Arduino.h>
 
 /**static variables */
 /**Look up table for the possible gas range values */

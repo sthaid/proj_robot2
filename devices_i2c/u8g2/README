@@ -1,0 +1,12 @@
+=========================
+GENERATING libu8g2.a
+=========================
+
+sudo apt install libi2c-dev
+git clone git@github.com:olikraus/u8g2.git
+cd u8g2/csrc/
+gcc -c -g -Wall *.c
+ar cr libu8g2.a *.o
+ls *.a
+cp *.h libu8g2.a THIS_DIRECTORY
+
