@@ -1,19 +1,23 @@
 #include "STM32_adc.h"
-#include "../common/i2c.h"
+#include "../i2c/i2c.h"
 
-// XXX comment Seeed HAT
-
-// range 0 - 3.3 V
+// Notes:
+// - this ADC is on the Seeed Grove Base Hat for Rapsberry Pi
+// - range 0 - 3.3 V
 
 #define STM32_ADC_DEFAULT_ADDR  0x04
 #define STM32_ADC_REG_VOLTAGE   0x20
 
-int STM32_adc_init(int dev_addr)
-{
-    if (dev_addr == 0) {
-        dev_addr = STM32_ADC_DEFAULT_ADDR;
-    }
+static int dev_addr;
 
+// ------------------------------------------------------------
+
+int STM32_adc_init(int dev_addr_arg)
+{
+    // set dev_addr
+    dev_addr = (dev_addr_arg == 0 ? STM32_ADC_DEFAULT_ADDR : dev_addr_arg);
+
+    // init i2c
     if (i2c_init() < 0) {
         return -1;
     }
@@ -21,13 +25,9 @@ int STM32_adc_init(int dev_addr)
     return 0;
 }
 
-int STM32_adc_read(int dev_addr, int chan, double *voltage)
+int STM32_adc_read(int chan, double *voltage)
 {
     uint8_t data[2];
-
-    if (dev_addr == 0) {
-        dev_addr = STM32_ADC_DEFAULT_ADDR;
-    }
 
     if (chan < 0 || chan > 8) {
         return -1;

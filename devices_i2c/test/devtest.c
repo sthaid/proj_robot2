@@ -32,25 +32,27 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    MCP9808_temp_read(0, &degc);
+    // - - - - - - - - - - - - - - - 
+
+    MCP9808_temp_read(&degc);
     printf("Temperature: %0.1f\n", degc);
 
     printf("Voltage:    ");
     for (int chan = 0; chan < 8; chan++) {
         double voltage;
-        STM32_adc_read(0, chan, &voltage);
+        STM32_adc_read(chan, &voltage);
         printf("%6.3f ", voltage);
     }
     printf("\n");
 
     double temperature, pressure, humidity;
-    BME680_tphg_read(0, &temperature, &pressure, &humidity, NULL);
+    BME680_tphg_read(&temperature, &pressure, &humidity, NULL);
     printf("TPH:         %0.1f C   %0.0f Pa   %0.2f inch-Hg   %0.1f %%\n", 
            temperature, 
            pressure, pressure/3386,
            humidity);
 
-    SSD1306_oled_drawstr(0, "HELLO");
+    SSD1306_oled_drawstr("WORLD");
 
     return 0;
 }

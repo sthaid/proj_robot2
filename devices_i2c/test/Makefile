@@ -6,7 +6,7 @@ SRC = devtest.c \
      ../STM32_adc/STM32_adc.c \
      ../BME680_tphg/BME680_tphg.c ../BME680_tphg/bme680/bme680.c \
      ../SSD1306_oled/SSD1306_oled.c \
-     ../common/i2c.c \
+     ../i2c/i2c.c \
       ../../util/misc.c
 
 $(TARGET): $(SRC:.c=.o)

@@ -1,15 +1,14 @@
-// XXX just supports one of these
-
 #include <string.h>
 
 #include "BME680_tphg.h"
 #include "bme680/bme680.h"
-#include "../common/i2c.h"
+#include "../i2c/i2c.h"
 #include "../../util/misc.h"
 
 #define BME680_DEFAULT_ADDR  0x76
 
 static struct bme680_dev dev;
+static int dev_addr;
 
 static int8_t bme680_i2c_read(uint8_t addr, uint8_t reg_addr, uint8_t * reg_data, uint16_t len);
 static int8_t bme680_i2c_write(uint8_t addr, uint8_t reg_addr, uint8_t * reg_data, uint16_t len);
@@ -17,20 +16,20 @@ static void bme680_delay_ms(uint32_t ms);
 
 // ------------------------------------------------------------
 
-int BME680_tphg_init(int dev_addr)
+int BME680_tphg_init(int dev_addr_arg)
 {
     int rc;
 
-    if (dev_addr == 0) {
-        dev_addr = BME680_DEFAULT_ADDR;
-    }
+    // set dev_addr
+    dev_addr = (dev_addr_arg == 0 ? BME680_DEFAULT_ADDR : dev_addr_arg);
 
+    // init i2c
     if (i2c_init() < 0) {
         return -1;
     }
 
     // init the bme680.cpp code, and provide the i2c access and ms delay routines
-    dev.dev_id   = BME680_DEFAULT_ADDR;
+    dev.dev_id   = dev_addr;
     dev.intf     = BME680_I2C_INTF;
     dev.read     = bme680_i2c_read;
     dev.write    = bme680_i2c_write;
@@ -83,8 +82,7 @@ int BME680_tphg_init(int dev_addr)
     return 0;
 }
 
-int BME680_tphg_read(int dev_addr, double *temperature, double *pressure, 
-                     double *humidity, double *gas_resistance)
+int BME680_tphg_read(double *temperature, double *pressure, double *humidity, double *gas_resistance)
 {
     int rc;
     struct bme680_field_data sensor_data;
@@ -101,11 +99,6 @@ int BME680_tphg_read(int dev_addr, double *temperature, double *pressure,
     *pressure = 0;
     *humidity = 0;
     *gas_resistance = 0;
-
-    // xxx
-    if (dev_addr == 0) {
-        dev_addr = BME680_DEFAULT_ADDR;
-    }
 
     // request bme680 start to obtain the temperature, humidity and pressure;
     // note - the gas_resistance is not currently working, just pass in NULL for gas_resistance

@@ -1,5 +1,5 @@
 #include "MCP9808_temp.h"
-#include "../common/i2c.h"
+#include "../i2c/i2c.h"
 
 #define MCP9808_DEFAULT_ADDR    0x18
 
@@ -9,12 +9,16 @@
 #define MCP9808_LOWER_LIMIT     0x2000
 #define MCP9808_SIGN            0x1000
 
-int MCP9808_temp_init(int dev_addr)
-{
-    if (dev_addr == 0) {
-        dev_addr = MCP9808_DEFAULT_ADDR;
-    }
+static int dev_addr;
 
+// ---------------------------------------------------------
+
+int MCP9808_temp_init(int dev_addr_arg)
+{
+    // set dev_addr
+    dev_addr = (dev_addr_arg == 0 ? MCP9808_DEFAULT_ADDR : dev_addr_arg);
+
+    // init i2c
     if (i2c_init() < 0) {
         return -1;
     }
@@ -22,15 +26,11 @@ int MCP9808_temp_init(int dev_addr)
     return 0;
 }
 
-int MCP9808_temp_read(int dev_addr, double *degc)
+int MCP9808_temp_read(double *degc)
 {
     int      rc;
     uint8_t  data[2];
     uint32_t val;
-
-    if (dev_addr == 0) {
-        dev_addr = MCP9808_DEFAULT_ADDR;
-    }
 
     rc = i2c_read(dev_addr, MCP9808_REG_TEMPERATURE, data, 2);
     if (rc < 0) {

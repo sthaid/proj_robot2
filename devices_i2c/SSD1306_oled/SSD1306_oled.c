@@ -1,7 +1,7 @@
 #include <string.h>
 
 #include "SSD1306_oled.h"
-#include "../common/i2c.h"
+#include "../i2c/i2c.h"
 #include "../u8g2/u8g2.h"
 #include "../../util/misc.h"
 
@@ -64,8 +64,7 @@ int SSD1306_oled_init(int dev_addr_arg)
     return 0;
 }
 
-// XXX get rid of dev_addr here
-int SSD1306_oled_drawstr(int dev_addr_not_used, char *s)
+int SSD1306_oled_drawstr(char *s)
 {
     u8g2_ClearBuffer(&u8g2);
     u8g2_DrawStr(&u8g2, 0, 0, s);
@@ -100,7 +99,7 @@ static uint8_t u8x8_byte_linux_i2c(u8x8_t * u8x8, uint8_t msg, uint8_t arg_int, 
         idx = 0;
         break;
     case U8X8_MSG_BYTE_END_TRANSFER:
-        rc = i2c_write(dev_addr, data[0], data+1, idx-1);
+        rc = i2c_write(u8x8->i2c_address, data[0], data+1, idx-1);
         if (rc < 0) {
             ERROR("i2c_write\n");
             return 0;
