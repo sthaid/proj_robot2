@@ -15,23 +15,24 @@ static int fd;
 
 int i2c_init(void)
 {
-    // xxx maybe a mutex?
-
-    // xxx
+    // if I2C_DEVICE has already been opened successfully then return success
     if (fd > 0) {
         return 0;
     }
+
+    // if previously failed to open I2C_DEVICE then return error
     if (fd < 0) {
         return -1;
     }
 
-    // open i2c device
+    // open I2C_DEVICE
     fd = open(I2C_DEVICE, O_RDWR);
     if (fd < 0) {
         ERROR("open %s, %s\n", I2C_DEVICE, strerror(errno));
         return -1;
     }
 
+    // success
     return 0;
 }
 

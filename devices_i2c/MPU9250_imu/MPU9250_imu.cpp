@@ -20,10 +20,11 @@ int MPU9250_imu_init(int dev_addr)
         return -1;
     }
 
-    // xxx check status
+    // create new mpu9250, and initialize
     mpu9250 = new MPU9250 (dev_addr);
     mpu9250->initialize();
 
+    // success
     return 0;
 }
 
@@ -32,7 +33,7 @@ int MPU9250_imu_getmotion9(int16_t *ax, int16_t *ay, int16_t *az,
                            int16_t *mx, int16_t *my, int16_t *mz)
 {
     mpu9250->getMotion9(ax, ay, az, gx, gy, gz, mx, my, mz);
-    return 0; // XXX status
+    return 0;
 }
 
 } // extern "C"

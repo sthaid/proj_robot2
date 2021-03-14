@@ -35,18 +35,27 @@ THE SOFTWARE.
 */
 
 #include "MPU9250.h"
-#if 0
+#if 0   // CHANGED
 #include <Wire.h>
 #else
-#include <stdio.h>  // XXX review
 #include <stdint.h>
 #include <stdbool.h>
 #include <stdlib.h>
 #include <stddef.h>
 #include <string.h>
-#include <unistd.h>
+#include <errno.h>
+#include <time.h>
 static inline uint8_t pgm_read_byte(const uint8_t *ptr) { return *ptr; }
-static inline void delay(int ms) { usleep(ms*1000); }  // XXX do better
+static inline void delay(int ms)
+{
+    struct timespec req, rem;
+    int rc, ns = ms * 1000000;
+    req.tv_sec  = (ns / 1000000000);
+    req.tv_nsec = (ns % 1000000000);
+    while ((rc = nanosleep(&req, &rem)) && errno == EINTR) {
+        req = rem;
+    }
+}
 #endif
 
 /** Default constructor, uses default I2C address.
@@ -80,7 +89,7 @@ void MPU9250::initialize() {
     setSleepEnabled(false); // thanks to Jack Elston for pointing this one out!
 }
 
-#if 0
+#if 0  // CHANGED
 /** Verify the I2C connection.
  * Make sure the device is connected and responds as expected.
  * @return True if connection is valid, false otherwise

@@ -1,5 +1,5 @@
-#ifndef _I2CDEV_H_
-#define _I2CDEV_H_
+#ifndef __I2CDEV_H__
+#define __I2CDEV_H__
 
 #include <stdint.h>
 
@@ -26,4 +26,4 @@ class I2Cdev {
         static bool writeWords(uint8_t devAddr, uint8_t regAddr, uint8_t length, uint16_t *data);
 };
 
-#endif /* _I2CDEV_H_ */
+#endif

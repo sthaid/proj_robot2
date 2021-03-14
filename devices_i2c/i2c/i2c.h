@@ -1,3 +1,6 @@
+#ifndef __I2C_H__
+#define __I2C_H__
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -13,3 +16,4 @@ void i2c_delay_ns(unsigned int ns);
 }
 #endif
 
+#endif

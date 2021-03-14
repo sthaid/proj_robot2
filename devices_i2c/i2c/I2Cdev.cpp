@@ -11,8 +11,10 @@
     } while (0)
 
 I2Cdev::I2Cdev() {}
+
+// NOTE: only the member functions being used are coded
         
-// -----------------  READ PROCEDURES  -------------------------
+// -----------------  READ MEMBER FUNCTIONS  -------------------
 
 bool I2Cdev::readBit(uint8_t devAddr, uint8_t regAddr, uint8_t bitNum, uint8_t *data)
 {
@@ -57,7 +59,7 @@ bool I2Cdev::readWords(uint8_t devAddr, uint8_t regAddr, uint8_t length, uint16_
     NOT_IMPLEMENTED;
 }
 
-// -----------------  WRITE PROCEDURES  ------------------------
+// -----------------  WRITE MEMBER FUNCTIONS  ------------------
 
 bool I2Cdev::writeBit(uint8_t devAddr, uint8_t regAddr, uint8_t bitNum, uint8_t data)
 {
