@@ -58,6 +58,27 @@ int i2c_read(int dev_addr, uint8_t reg_addr, uint8_t *reg_data, int len)
     return 0;
 }
 
+int8_t i2c_read_data(uint8_t dev_addr, uint8_t *reg_data, uint16_t len)
+{
+    struct i2c_msg messages[] = {
+        { dev_addr, I2C_M_RD, len, reg_data  } };
+    struct i2c_rdwr_ioctl_data ioctl_data = { messages, 1 };
+    int rc;
+
+    if (fd == 0) {
+        ERROR("not initialized\n");
+        return -1;
+    }
+
+    rc = ioctl(fd, I2C_RDWR, &ioctl_data);
+    if (rc < 0) {
+        ERROR("ioctl I2C_RDWR, %s\n", strerror(errno));
+        return -1;
+    }
+
+    return 0;
+}
+
 int i2c_write(int dev_addr, uint8_t reg_addr, uint8_t * reg_data, int len)
 {
     uint8_t tmp[100];

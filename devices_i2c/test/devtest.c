@@ -7,12 +7,13 @@
 #include "../BME680_tphg/BME680_tphg.h"
 #include "../SSD1306_oled/SSD1306_oled.h"
 #include "../MPU9250_imu/MPU9250_imu.h"
+#include "../BMP280_tp/BMP280_tp.h"
 
 int main(int argc, char **argv)
 {
     double degc;
 
-    INFO("Starting\n");
+    //INFO("Starting\n");
 
     if (MCP9808_temp_init(0) < 0) {
         ERROR("MCP9808_temp_init failed\n");
@@ -39,6 +40,12 @@ int main(int argc, char **argv)
         return 1;
     }
 
+    if (BMP280_tp_init(0) < 0) {
+        ERROR("BMP280_tp_init failed\n");
+        return 1;
+    }
+
+
     // - - - - - - - - - - - - - - - 
 
     MCP9808_temp_read(&degc);
@@ -60,6 +67,12 @@ int main(int argc, char **argv)
            humidity);
 
     SSD1306_oled_drawstr("WORLD");
+
+    BMP280_tp_read(&temperature, &pressure);
+    printf("TP:          %0.1f C   %0.0f Pa   %0.2f inch-Hg\n", 
+           temperature, 
+           pressure, pressure/3386);
+
 
     int16_t ax, ay, az;
     int16_t gx, gy, gz;

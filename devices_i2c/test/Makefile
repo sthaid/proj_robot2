@@ -7,7 +7,8 @@ SRC = devtest.c \
      ../SSD1306_oled/SSD1306_oled.c \
      ../BME680_tphg/BME680_tphg.c ../BME680_tphg/bme680/bme680.cpp \
      ../MPU9250_imu/MPU9250_imu.cpp ../MPU9250_imu/mpu9250/MPU9250.cpp \
-     ../i2c/i2c.c ../i2c/I2Cdev.cpp \
+     ../BMP280_tp/BMP280_tp.c ../BMP280_tp/bmp280/BMP280.cpp \
+     ../i2c/i2c.c ../i2c/I2Cdev.cpp ../i2c/Wire.cpp \
       ../../util/misc.c
 
 OBJ := $(SRC:.c=.o)
