@@ -2,23 +2,19 @@
 TITLE: INTRO - TODO
 ===========================
 
-change ls collate order
-
-where to put hdr files
-
 haid@robot-ctlr:~/proj/proj_robot2 $ /bin/ls -1 devices
+  relay.c relay.h                      DONE
   encoder.c encoder.h
   mc.c mc.h
   proximity.c proximity.h
-  relay.c relay.h
 
 haid@robot-ctlr:~/proj/proj_robot2 $ /bin/ls -1 tests/
+  Makefile                       in progress
+  relay                          DONE
+  i2c                            DONE
   gpio
-  i2c
-  Makefile
   mc_and_encoder
   realtime
-  relay
 
 update i2c_test
 - cmds to : read, oled, accel, calibrate magnetometer

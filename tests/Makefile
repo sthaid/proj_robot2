@@ -1,5 +1,6 @@
 SUBDIRS = relay \
-          i2c
+          i2c \
+          gpio
   
 .PHONY: build clean
 
