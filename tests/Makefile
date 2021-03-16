@@ -1,6 +1,8 @@
 SUBDIRS = relay \
           i2c \
-          gpio
+          gpio \
+          realtime/user_mode \
+          realtime/module 
   
 .PHONY: build clean
 

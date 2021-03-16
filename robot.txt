@@ -4,17 +4,19 @@ TITLE: INTRO - TODO
 
 haid@robot-ctlr:~/proj/proj_robot2 $ /bin/ls -1 devices
   relay.c relay.h                      DONE
-  encoder.c encoder.h
   mc.c mc.h
+  encoder.c encoder.h
   proximity.c proximity.h
 
 haid@robot-ctlr:~/proj/proj_robot2 $ /bin/ls -1 tests/
   Makefile                       in progress
   relay                          DONE
   i2c                            DONE
-  gpio
-  mc_and_encoder
+  gpio                           DONE
   realtime
+  mc_and_encoder
+
+run the rt_gpio test pgms and check data on scope
 
 update i2c_test
 - cmds to : read, oled, accel, calibrate magnetometer
