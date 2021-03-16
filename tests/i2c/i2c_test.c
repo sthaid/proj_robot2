@@ -1,4 +1,7 @@
 #include <stdio.h>
+#include <unistd.h>
+#include <stdlib.h>
+#include <time.h>
 #include <math.h>
 
 #include <misc.h>
@@ -12,6 +15,9 @@
 int main(int argc, char **argv)
 {
     double degc;
+
+    setlinebuf(stdout);
+    printf("\a");
 
     if (MCP9808_temp_init(0) < 0) {
         ERROR("MCP9808_temp_init failed\n");
@@ -71,6 +77,51 @@ int main(int argc, char **argv)
            pressure, pressure/3386);
 
     // XXX improve user intfc
+    {
+        int16_t ax, ay, az;
+        int16_t ax_last, ay_last, az_last;
+        int16_t ax_delta, ay_delta, az_delta;
+        time_t t, tlast;
+        int count = 0;
+
+        printf("ACCEL TEST\n");
+        tlast = time(NULL);
+        MPU9250_imu_get_acceleration(&ax_last, &ay_last, &az_last);
+        ax_last -= 1200;
+        ay_last -= 1200;
+        az_last -= 1200;
+        while (true) {
+            MPU9250_imu_get_acceleration(&ax, &ay, &az);
+            ax -= 1200;
+            ay -= 1200;
+            az -= 1200;
+
+            ax_delta = abs(ax - ax_last);
+            ay_delta = abs(ay - ay_last);
+            az_delta = abs(az - az_last);
+
+            ax_last = ax;
+            ay_last = ay;
+            az_last = az;
+
+            if (ax_delta > 20000 || ay_delta > 20000 || az_delta > 20000) {
+                printf("\a  DELTA       %d,%d,%d\n", ax_delta, ay_delta, az_delta);
+                printf("  VALUES      %d,%d,%d\n", ax, ay, az);
+                printf("  LAST_VALUES %d,%d,%d\n", ax_last, ay_last, az_last);
+            }
+
+            count++;
+            usleep(10000);
+            
+            t = time(NULL);
+            if (t != tlast) {
+                printf("TIME %ld   COUNT %d  VALUES %d,%d,%d\n", t, count, ax, ay, az);
+                tlast = t;
+                count = 0;
+            }
+        }
+    }
+
 
     int16_t ax, ay, az;
     int16_t gx, gy, gz;
@@ -78,7 +129,7 @@ int main(int argc, char **argv)
     ax = ay = az = 0;
     gx = gy = gz = 0;
     mx = my = mz = 0;
-    MPU9250_imu_getmotion9(&ax, &ay, &az, &gx, &gy, &gz, &mx, &my, &mz);
+    MPU9250_imu_get_motion9(&ax, &ay, &az, &gx, &gy, &gz, &mx, &my, &mz);
     printf("ax,ay,az = %d %d %d\n", ax, ay, az);
     printf("gx,gy,gz = %d %d %d\n", gx, gy, gz);
     printf("mx,my,mz = %d %d %d\n", mx, my, mz);

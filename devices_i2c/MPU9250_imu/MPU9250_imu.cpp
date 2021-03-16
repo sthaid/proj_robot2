@@ -28,11 +28,17 @@ int MPU9250_imu_init(int dev_addr)
     return 0;
 }
 
-int MPU9250_imu_getmotion9(int16_t *ax, int16_t *ay, int16_t *az,
-                           int16_t *gx, int16_t *gy, int16_t *gz,
-                           int16_t *mx, int16_t *my, int16_t *mz)
+int MPU9250_imu_get_motion9(int16_t *ax, int16_t *ay, int16_t *az,
+                            int16_t *gx, int16_t *gy, int16_t *gz,
+                            int16_t *mx, int16_t *my, int16_t *mz)
 {
     mpu9250->getMotion9(ax, ay, az, gx, gy, gz, mx, my, mz);
+    return 0;
+}
+
+int MPU9250_imu_get_acceleration(int16_t *ax, int16_t *ay, int16_t *az)
+{
+    mpu9250->getAcceleration(ax, ay, az);
     return 0;
 }
 
