@@ -59,7 +59,7 @@ void logmsg(char *lvl, const char *func, char *fmt, ...)
     }
 }
 
-// -----------------  TIME UTILS  -----------------------------------------
+// -----------------  TIME ROUTINES  --------------------------------------
 
 uint64_t microsec_timer(void)
 {

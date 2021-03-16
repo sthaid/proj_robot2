@@ -2,22 +2,27 @@
 TITLE: INTRO - TODO
 ===========================
 
-put max_cpu back to 4  (delete it)
+haid@robot-ctlr:~/proj/proj_robot2 $ /bin/ls -1 devices
+  encoder.c encoder.h
+  mc.c mc.h
+  proximity.c proximity.h
+  relay.c relay.h
 
-bring over robot.txt to new repo
+haid@robot-ctlr:~/proj/proj_robot2 $ /bin/ls -1 tests/
+  gpio
+  i2c
+  Makefile
+  mc_and_encoder
+  realtime
+  relay
 
-more misc
-- gpio, time, etc
+update i2c_test
+- cmds to : read, oled, accel, calibrate magnetometer
+     test magnetometer with other rpi
 
-more devices
-- relay
-- proximity
-- encoder
-- motor_ctlr
+xxxxxxxxxxxxxxxxxx
 
-i2c test pgm, 
-- cleanup
-- detect acceleration
+isolcpus=3
 
 upper levels of the software, design
 - real time thread for gpio, to feed proximity and encoders

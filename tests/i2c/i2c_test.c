@@ -1,13 +1,14 @@
+// XXX move to tests dir
 #include <stdio.h>
 #include <math.h>
 
 #include "../../util/misc.h"
-#include "../MCP9808_temp/MCP9808_temp.h"
-#include "../STM32_adc/STM32_adc.h"
-#include "../BME680_tphg/BME680_tphg.h"
-#include "../SSD1306_oled/SSD1306_oled.h"
-#include "../MPU9250_imu/MPU9250_imu.h"
-#include "../BMP280_tp/BMP280_tp.h"
+#include "MCP9808_temp/MCP9808_temp.h"
+#include "STM32_adc/STM32_adc.h"
+#include "BME680_tphg/BME680_tphg.h"
+#include "SSD1306_oled/SSD1306_oled.h"
+#include "MPU9250_imu/MPU9250_imu.h"
+#include "BMP280_tp/BMP280_tp.h"
 
 int main(int argc, char **argv)
 {
