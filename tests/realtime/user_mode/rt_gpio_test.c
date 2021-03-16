@@ -5,24 +5,40 @@
 #define _GNU_SOURCE
 
 #include <stdio.h>
+#include <stdint.h>
 #include <stdbool.h>
 #include <string.h>
 #include <errno.h>
+#include <signal.h>
 
 #include <pthread.h>
 #include <sched.h>
 #include <time.h>
 
 #include <gpio.h>
+#include <timer.h>
+
+#define MAX_HISTOGRAM 100000
+
+int histogram[MAX_HISTOGRAM];
+int histogram_overflow;
 
 void *test_thread(void *cx);
+void add_histogram(int us);
+void sig_hndlr(int);
+
+// ------------------------------------------------------------
 
 int main(int argc, char **argv)
 {
     pthread_t tid;
+    struct sigaction act;
 
     // init
+    act.sa_handler = sig_hndlr;
+    sigaction(SIGINT, &act, NULL);
     setlinebuf(stdout);
+    time_init();
     gpio_init();
     set_gpio_func(26, FUNC_OUT);
 
@@ -31,6 +47,15 @@ int main(int argc, char **argv)
 
     // pause
     pause();
+
+    // print results
+    printf("\nhistogram_overflow = %d\n", histogram_overflow);
+    printf("\n");
+    for (int us = 0; us < MAX_HISTOGRAM; us++) {
+        if (histogram[us]) {
+            printf("%5d us : %6d cnt\n", us, histogram[us]);
+        }
+    }
 
     // done
     return 0;
@@ -45,6 +70,7 @@ void *test_thread(void *cx)
     struct sched_param param;
     cpu_set_t cpu_set;
     int rc;
+    uint64_t t_now, t_prior;
 
     // set affinity to cpu 2
     printf("setting affinity\n");
@@ -70,15 +96,41 @@ void *test_thread(void *cx)
     printf("create square wave loop\n");
     ts.tv_sec = 0;
     ts.tv_nsec = 1000;
+    t_prior = time_get();
     while (true) {
         // set gpio 26, and 1 usec sleep
         gpio_write(26, 1);
         nanosleep(&ts, NULL);
+        t_now = time_get();
+        add_histogram(t_now-t_prior);
+        t_prior = t_now;
 
         // clear gpio 26, and 1 usec sleep
         gpio_write(26, 0);
         nanosleep(&ts, NULL);
+        t_now = time_get();
+        add_histogram(t_now-t_prior);
+        t_prior = t_now;
     }
 
     return NULL;
 }
+
+void add_histogram(int us)
+{
+    if (us < 0) {
+        printf("FATAL us=%d\n", us);
+        exit(1);
+    }
+
+    if (us >= MAX_HISTOGRAM) {
+        histogram_overflow++;
+    } else {
+        histogram[us]++;
+    }
+}
+
+void sig_hndlr(int signum)
+{
+}
+
