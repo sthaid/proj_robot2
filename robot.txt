@@ -2,6 +2,10 @@
 TITLE: INTRO - TODO
 ===========================
 
+change ls collate order
+
+where to put hdr files
+
 haid@robot-ctlr:~/proj/proj_robot2 $ /bin/ls -1 devices
   encoder.c encoder.h
   mc.c mc.h
@@ -861,6 +865,7 @@ configure my account
         HISTCONTROL=""
         export EDITOR=vim
         export GIT_EXTERNAL_DIFF=~/bin/git_external_diff
+        export LC_COLLATE=C
   * .vimrc
         source /usr/share/vim/vim81/defaults.vim
         " tabs

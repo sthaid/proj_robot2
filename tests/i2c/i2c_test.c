@@ -1,20 +1,17 @@
-// XXX move to tests dir
 #include <stdio.h>
 #include <math.h>
 
-#include "../../util/misc.h"
-#include "MCP9808_temp/MCP9808_temp.h"
-#include "STM32_adc/STM32_adc.h"
-#include "BME680_tphg/BME680_tphg.h"
-#include "SSD1306_oled/SSD1306_oled.h"
-#include "MPU9250_imu/MPU9250_imu.h"
-#include "BMP280_tp/BMP280_tp.h"
+#include <misc.h>
+#include <MCP9808_temp.h>
+#include <STM32_adc.h>
+#include <BME680_tphg.h>
+#include <SSD1306_oled.h>
+#include <MPU9250_imu.h>
+#include <BMP280_tp.h>
 
 int main(int argc, char **argv)
 {
     double degc;
-
-    //INFO("Starting\n");
 
     if (MCP9808_temp_init(0) < 0) {
         ERROR("MCP9808_temp_init failed\n");
@@ -46,7 +43,6 @@ int main(int argc, char **argv)
         return 1;
     }
 
-
     // - - - - - - - - - - - - - - - 
 
     MCP9808_temp_read(&degc);
@@ -74,6 +70,7 @@ int main(int argc, char **argv)
            temperature, 
            pressure, pressure/3386);
 
+    // XXX improve user intfc
 
     int16_t ax, ay, az;
     int16_t gx, gy, gz;
@@ -111,8 +108,6 @@ int main(int argc, char **argv)
     double heading = 180 * atan2(Mxyz[1], Mxyz[0]) / M_PI;
     if (heading < 0) heading += 360;
     printf("%6.1f\n", heading);
-
-
 
     return 0;
 }
