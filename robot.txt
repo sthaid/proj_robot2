@@ -1,7 +1,6 @@
 ===========================
 TITLE: INTRO - TODO
 ===========================
-fix build of realtime/module
 
 don't use printf in gpio.h, and  elsewhere
 
@@ -25,6 +24,7 @@ haid@robot-ctlr:~/proj/proj_robot2 $ /bin/ls -1 tests/
   mc_and_encoder
 
 run the rt_gpio test pgms and check data on scope
+- fix build of realtime/module
 
 update i2c_test
 - cmds to : read, oled, accel, calibrate magnetometer
