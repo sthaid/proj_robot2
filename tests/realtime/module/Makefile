@@ -1,4 +1,4 @@
-EXTRA_CFLAGS += -g -I$(PWD)/../include
+EXTRA_CFLAGS += -g -I$(PWD)/../../../include
 
 KERNEL_ROOT=/lib/modules/$(shell uname -r)/build
 
@@ -10,15 +10,14 @@ default:
 	make -C $(KERNEL_ROOT) M=$(PWD)
 
 install:
-	sudo make -C $(KERNEL_ROOT) M=`pwd` modules_install
+	sudo make -C $(KERNEL_ROOT) M=$(PWD) modules_install
 	sudo depmod
 
 clean:
-	make -C $(KERNEL_ROOT) M=`pwd` clean
+	make -C $(KERNEL_ROOT) M=$(PWD) clean
 
 load:
 	sudo insmod rt_gpio_test_module.ko
-	#sudo modprobe rt_gpio_test_module
 	
 unload:
 	sudo rmmod rt_gpio_test_module

@@ -1,2 +1,13 @@
 *.o
-devtest
+*.ko
+*.cmd
+
+tests/gpio/gpio_test
+tests/i2c/i2c_test
+tests/relay/relay_test
+tests/realtime/user_mode/rt_gpio_test
+tests/realtime/module/Module.symvers
+tests/realtime/module/modules.order
+tests/realtime/module/rt_gpio_test_module.mod
+tests/realtime/module/rt_gpio_test_module.mod.c
+

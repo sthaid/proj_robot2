@@ -7,6 +7,7 @@
 
 #ifndef __KERNEL__
 #include <stdio.h>
+#include <stdbool.h>
 #include <stdlib.h>
 #include <fcntl.h>
 #include <sys/mman.h>
