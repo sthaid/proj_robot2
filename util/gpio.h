@@ -28,9 +28,85 @@
 
 volatile unsigned int *gpio_regs;
 
+// -----------------  GPIO: CONFIGURATION  ----------------
+
+static inline int get_gpio_func(int pin)
+{
+    int regidx, bit;
+
+    regidx = 0 + (pin / 10);
+    bit = (pin % 10) * 3;
+
+    return (gpio_regs[regidx] >> bit) & 7;
+}
+
+static inline void set_gpio_func(int pin, int func)
+{
+    int regidx, bit, curr_func;
+    unsigned int tmp;
+    
+    curr_func = get_gpio_func(pin);
+    if (curr_func != FUNC_IN && curr_func != FUNC_OUT) {
+#ifndef __KERNEL__
+        printf("ERROR: can't change func for pin %d\n", pin);
+        exit(1); 
+#else
+        printk("ERROR: can't change func for pin %d\n", pin);
+#endif
+    }
+
+    regidx = 0 + (pin / 10);
+    bit = (pin % 10) * 3;
+
+    tmp = gpio_regs[regidx];
+    tmp &= ~(7 << bit);  // 3 bit field
+    tmp |= (func << bit);
+
+    gpio_regs[regidx] = tmp;
+}
+
+static inline void set_gpio_pull(int pin, int pull)
+{
+    int regidx, bit;
+    unsigned int tmp;
+
+    regidx = 57 + (pin / 16);
+    bit = (pin % 16) * 2;
+
+    tmp = gpio_regs[regidx];
+    tmp &= ~(3 << bit);   // 2 bit field
+    tmp |= (pull << bit);
+
+    gpio_regs[regidx] = tmp;
+}
+
+// -----------------  GPIO: READ & WRITE  -----------------
+
+// these gpio read/write routines support only gpio 0 to 31, which
+// covers all of the gpios supported on the raspberry-pi header
+
+static inline int gpio_read(int pin)
+{
+    return (gpio_regs[13] & (1 << pin)) != 0;
+}
+
+static inline unsigned int gpio_read_all(void)
+{
+    return gpio_regs[13];
+}
+
+static inline void gpio_write(int pin, int value)
+{
+    if (value) {
+        gpio_regs[7] = (1 << pin);
+    } else {
+        gpio_regs[10] = (1 << pin);
+    }
+}
+
 // -----------------  GPIO: INIT & EXIT  ------------------
 
-static inline int gpio_init(void)
+static inline int gpio_init(bool init)
 {
 #ifndef __KERNEL__
     int fd, rc;
@@ -60,12 +136,28 @@ static inline int gpio_init(void)
         return -1;
     }
     close(fd);
-
-    return 0;
 #else
     gpio_regs = ioremap(GPIO_BASE_ADDR, 0x1000);
-    return 0;
 #endif
+
+    // if init is requested then all GPIO in range 0..31 that are FUNC_IN or FUNC_OUT
+    // are initialized to: FUNC_IN, PULL_DOWN, and output set to 0
+    if (init) {
+        int pin, func;
+        for (pin = 0; pin < 32; pin++) {
+            func = get_gpio_func(pin);
+            if (func == FUNC_IN || func == FUNC_OUT) {
+                if (func == FUNC_OUT) {
+                    set_gpio_func(pin, FUNC_IN);
+                }
+                set_gpio_pull(pin, PULL_DOWN);
+                gpio_write(pin, 0);
+            }
+        }
+    }
+
+    // success
+    return 0;
 }
 
 static inline void gpio_exit(void)
@@ -76,62 +168,6 @@ static inline void gpio_exit(void)
 #else
     iounmap(gpio_regs);
 #endif
-}
-
-// -----------------  GPIO: READ & WRITE  -----------------
-
-// these gpio read/write routines support only gpio 0 to 31, which
-// covers all of the gpios supported on the raspberry-pi header
-
-static inline int gpio_read(int pin)
-{
-    return (gpio_regs[13] & (1 << pin)) != 0;
-}
-
-static inline unsigned int gpio_read_all(void)
-{
-    return gpio_regs[13];
-}
-
-static inline void gpio_write(int pin, int value)
-{
-    if (value) {
-        gpio_regs[7] = (1 << pin);
-    } else {
-        gpio_regs[10] = (1 << pin);
-    }
-}
-
-// -----------------  GPIO: CONFIGURATION  ----------------
-
-static inline void set_gpio_func(int pin, int func)
-{
-    int regidx, bit;
-    unsigned int tmp;
-
-    regidx = 0 + (pin / 10);
-    bit = (pin % 10) * 3;
-
-    tmp = gpio_regs[regidx];
-    tmp &= ~(7 << bit);  // 3 bit field
-    tmp |= (func << bit);
-
-    gpio_regs[regidx] = tmp;
-}
-
-static inline void set_gpio_pull(int pin, int pull)
-{
-    int regidx, bit;
-    unsigned int tmp;
-
-    regidx = 57 + (pin / 16);
-    bit = (pin % 16) * 2;
-
-    tmp = gpio_regs[regidx];
-    tmp &= ~(3 << bit);   // 2 bit field
-    tmp |= (pull << bit);
-
-    gpio_regs[regidx] = tmp;
 }
 
 #endif

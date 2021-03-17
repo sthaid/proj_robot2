@@ -1,9 +1,7 @@
 #ifndef __RELAY_H__
 #define __RELAY_H__
 
-#include <stdarg.h>
-
-int relay_init(int num, ...);
-void relay_ctrl(int gpionum, bool enable);
+int relay_init(void);
+void relay_ctrl(int pin, bool enable);
 
 #endif

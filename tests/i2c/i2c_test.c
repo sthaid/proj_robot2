@@ -76,6 +76,7 @@ int main(int argc, char **argv)
            temperature, 
            pressure, pressure/3386);
 
+#if 0
     // XXX improve user intfc
     {
         int16_t ax, ay, az;
@@ -121,6 +122,7 @@ int main(int argc, char **argv)
             }
         }
     }
+#endif
 
 
     int16_t ax, ay, az;

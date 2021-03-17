@@ -39,7 +39,7 @@ int main(int argc, char **argv)
     sigaction(SIGINT, &act, NULL);
     setlinebuf(stdout);
     time_init();
-    gpio_init();
+    gpio_init(true);
     set_gpio_func(26, FUNC_OUT);
 
     // create test thread

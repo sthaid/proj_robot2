@@ -50,7 +50,7 @@ int gpiotest_init(void)
 
     // init
     time_init();
-    gpio_init();
+    gpio_init(true);
     set_gpio_func(26, FUNC_OUT);
 
     // run gpiotest_proc on cpu 3

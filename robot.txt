@@ -1,6 +1,14 @@
 ===========================
 TITLE: INTRO - TODO
 ===========================
+fix build of realtime/module
+
+don't use printf in gpio.h, and  elsewhere
+
+gpio init arg
+- sets all in,out to in and pull
+- robot.h   define RELAY and RELAY_EXIST_GPIO_BITS
+- relay, don't use stdarg, use these defines
 
 haid@robot-ctlr:~/proj/proj_robot2 $ /bin/ls -1 devices
   relay.c relay.h                      DONE
@@ -13,7 +21,7 @@ haid@robot-ctlr:~/proj/proj_robot2 $ /bin/ls -1 tests/
   relay                          DONE
   i2c                            DONE
   gpio                           DONE
-  realtime
+  realtime                       DONE
   mc_and_encoder
 
 run the rt_gpio test pgms and check data on scope

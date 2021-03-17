@@ -1,4 +1,4 @@
-EXTRA_CFLAGS += -g -I$(PWD)/../../../include
+EXTRA_CFLAGS += -g -I$(PWD)/../include
 
 KERNEL_ROOT=/lib/modules/$(shell uname -r)/build
 
