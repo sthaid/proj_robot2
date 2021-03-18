@@ -1,6 +1,10 @@
 #ifndef __GPIO_H__
 #define __GPIO_H__
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 // This code is for bcm2711.
 //
 // Reference https://datasheets.raspberrypi.org/bcm2711/bcm2711-peripherals.pdf
@@ -168,5 +172,9 @@ static inline void gpio_exit(void)
     iounmap(gpio_regs);
 #endif
 }
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

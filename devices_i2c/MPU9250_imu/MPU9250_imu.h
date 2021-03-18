@@ -1,3 +1,6 @@
+#ifndef __MPU9250_IMU_H__
+#define __MPU9250_IMU_H__
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -12,4 +15,6 @@ int MPU9250_imu_get_acceleration(int16_t *ax, int16_t *ay, int16_t *az);
 
 #ifdef __cplusplus
 }
+#endif
+
 #endif

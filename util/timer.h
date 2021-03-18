@@ -1,6 +1,10 @@
 #ifndef __TIMER_H__
 #define __TIMER_H__
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 // This code is for bcm2711.
 //
 // Reference https://datasheets.raspberrypi.org/bcm2711/bcm2711-peripherals.pdf
@@ -103,5 +107,9 @@ static inline uint64_t timer_delay(int duration)
 
     return now;
 }
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif
