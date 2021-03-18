@@ -23,8 +23,7 @@
 // defines
 //
 
-#define MAX_ENCODER (sizeof(info_tbl) / sizeof(struct info_s))
-#define MAX_HISTORY 1024  // suggest using pwr of 2
+#define MAX_HISTORY 4096  // suggest using pwr of 2
 
 //
 // variables
@@ -37,19 +36,19 @@ static int encoder_tbl[][4] =
       {  2, +1, -1,  0 } };
 
 static struct info_s {
-    int gpio_a;
-    int gpio_b;
-    int errors;
-    int tail;
+    unsigned int gpio_a;
+    unsigned int gpio_b;
+    unsigned int errors;
+    unsigned int tail;
     struct history_s {
         int pos;
         uint64_t time;
-    } history[MAX_HISTORY];  // xxx 256
+    } history[MAX_HISTORY];
 } info_tbl[] = {
     { ENCODER0_GPIO_A, ENCODER0_GPIO_B, },
                 };
 
-static int poll_count;  // XXX display this in another thread for debug
+static unsigned int poll_count;
 
 //
 // prototypes
@@ -62,6 +61,11 @@ static void *encoder_thread(void *cx);
 int encoder_init(void)
 {
     static pthread_t tid;
+
+    // sanity check MAX_ENCODER, which is defined in encoder.h
+    if (MAX_ENCODER != (sizeof(info_tbl) / sizeof(struct info_s))) {
+        FATAL("define MAX_ENCODER is incorrect\n");
+    }
 
     // sanity check that encoder_init has not already been called
     if (tid) {
@@ -77,7 +81,6 @@ int encoder_init(void)
     return 0;
 }
 
-// XXX comments
 void encoder_get(int id, int *position, int *speed)
 {
     #define HIST(n)  (hist[(n) % MAX_HISTORY])
@@ -88,18 +91,18 @@ void encoder_get(int id, int *position, int *speed)
 
     struct info_s * info = &info_tbl[id];
     struct history_s * hist = info->history;
-    int tail, start, end, idx;
+    unsigned int tail, start, end, idx;
     uint64_t time_now, time_desired;
 
+    // find a history entry that is 20 ms earlier than time_now,
+    // use binary search; this entry will be used to calculate the speed
     time_now = timer_get();
     time_desired = time_now - 20000;   // 20 ms earlier than now
 
     tail = info->tail;
     end = tail;
-    start = end - 200;
-    if (start < 0) start = 0;
+    start = (end >= 200 ? end - 200 : 0);
 
-    // XXX put in a safety net
     while (true) {
         if (start == end) {
             idx = start;
@@ -118,9 +121,20 @@ void encoder_get(int id, int *position, int *speed)
         }
     }
 
+    // return speed and position
     *speed = (int64_t)1000000 * (HIST(tail).pos - HIST(idx).pos) / 
              (signed)(time_now - HIST(idx).time);
     *position = HIST(tail).pos;
+}
+
+void encoder_get_stats(unsigned int *errors, unsigned int *poll_count_arg)
+{
+    int id;
+
+    for (id = 0; id < MAX_ENCODER; id++) {
+        errors[id] = info_tbl[id].errors;
+    }
+    *poll_count_arg = poll_count;
 }
 
 // -----------------  ENCODER THREAD  -----------------------------
@@ -129,7 +143,7 @@ static void *encoder_thread(void *cx)
 {
     int val, last_val[MAX_ENCODER], x, rc, id;
     unsigned int gpio_all;
-    struct timespec ts = {0,1000};  // 1 us
+    struct timespec ts;
     struct sched_param param;
     cpu_set_t cpu_set;
 
@@ -149,37 +163,44 @@ static void *encoder_thread(void *cx)
         FATAL("sched_setscheduler, %s\n", strerror(errno));
     }
 
-    // XXX comment
-    // loop, reading the encode gpio, and updating:
-    // - position:    accumulated shaft position, this can be reset to 0 via ctrl+backslash
-    // - error_count: number of out of sequence encoder gpio values
-    // - poll_count:  number of times the gpio values have been read,
-    //                this gets reset to 0 every second in main()
+    // init
     gpio_all = gpio_read_all();
     for (id = 0; id < MAX_ENCODER; id++) {
         struct info_s * info = &info_tbl[id];
         last_val[id] = (IS_BIT_SET(gpio_all,info->gpio_a) << 1) | IS_BIT_SET(gpio_all,info->gpio_b);
     }
 
+    // loop forever
     while (true) {
+        // read all gpio pins
         gpio_all = gpio_read_all();
 
+        // loop over encoders
         for (id = 0; id < MAX_ENCODER; id++) {
             struct info_s * info = &info_tbl[id];
             struct history_s * hist = info->history;
 
+            // determine whether encoder indicates one of the following:
+            // - x == 0         no change
+            // - x == 1 or -1   increment or decrement
+            // - x == 2         error, encoder bits out of sequence
+            //                  probably because the encoder values were not read quickly enough
             val = (IS_BIT_SET(gpio_all,info->gpio_a) << 1) | IS_BIT_SET(gpio_all,info->gpio_b);
             x = encoder_tbl[last_val[id]][val];
             last_val[id] = val;
 
+            // process the 'x'
             if (x == 0) {
                 continue;
             } else if (x == 2) {
                 info->errors++;
-                WARN("encoder sequence error on id=%d\n", id);
+                WARN("encoder %d sequence error\n", id);  // xxx comment this out
             } else {
-                int tail = info->tail;
-                int new_tail = tail + 1;
+                // add entry to history array for this encoder, the
+                // encoder's position and current time are added; 
+                // this information is used by encoder_get() to determine the speed
+                unsigned int tail = info->tail;
+                unsigned int new_tail = tail + 1;
                 HIST(new_tail).pos = HIST(tail).pos + x;
                 HIST(new_tail).time = timer_get();
                 __sync_synchronize();
@@ -187,8 +208,13 @@ static void *encoder_thread(void *cx)
             }
         }
 
+        // this is used to determine the frequency of this code, which 
+        // should ideally be 100000 per second when the sleep below is 10 us
         poll_count++;
 
+        // sleep for 10 us
+        ts.tv_sec = 0;
+        ts.tv_nsec = 10000;  //  10 us
         nanosleep(&ts, NULL);
     }
 

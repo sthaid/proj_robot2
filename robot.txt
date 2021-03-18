@@ -1,12 +1,19 @@
 ===========================
 TITLE: INTRO - TODO
 ===========================
+review encoder.c
+review all tests
+slow down encoder.c
+- isolcpus=3
+0 add proximity
 
-isolcpus=3
+cat tests use printf instead of INFO
 
-continue work on encoder code, and start on test pgm
 
-devices/encoder using printf, and mc.c
+encode
+- device/encoder.c
+- tests/mc_and_encoder test
+- devices/encoder using printf, and mc.c
 
 haid@robot-ctlr:~/proj/proj_robot2 $ /bin/ls -1 devices
   relay.c relay.h                      DONE
