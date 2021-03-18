@@ -157,7 +157,7 @@ static void *encoder_thread(void *cx)
 
     // set realtime priority
     memset(&param, 0, sizeof(param));
-    param.sched_priority = 99;
+    param.sched_priority = 95;
     rc = sched_setscheduler(0, SCHED_FIFO, &param);
     if (rc < 0) {
         FATAL("sched_setscheduler, %s\n", strerror(errno));

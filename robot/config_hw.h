@@ -11,6 +11,9 @@ extern "C" {
 #define ENCODER0_GPIO_A   16
 #define ENCODER0_GPIO_B   17
 
+#define PROXIMITY_FRONT_GPIO_SIG     18
+#define PROXIMITY_FRONT_GPIO_ENABLE  19
+
 #ifdef __cplusplus
 }
 #endif
