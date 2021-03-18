@@ -1,6 +1,7 @@
 ===========================
 TITLE: INTRO - TODO
 ===========================
+consider FATAL in all init routines
 
 review all tests
 enable isolcpus=3
@@ -740,14 +741,18 @@ set motor limit
        low seven bits of the value and the second 
          (limit byte 2) contains the high seven bits.
 
-         4 - max speed forwared   0-3200
-         5 - max accel forward    0-3200 (0=nolimit) = deltaspeed per update period
-         6 - max decel forward    0-3200 (0=nolimit) = deltaspeed per update period
-         7 - brake dur forward    0-16384  units=4ms   (note: get variable units is 1ms)
-         8 - max speed forwared   0-3200
-         9 - max accel forward    0-3200 (0=nolimit) = deltaspeed per update period
-         10- max decel forward    0-3200 (0=nolimit) = deltaspeed per update period
-         11- brake dur forward    0-16384  units=4ms   (note: get variable units is 1ms)
+         0 - 4 and 8
+         1 - 5 and 9
+         2 - 6 and 10
+         3 - 7 and 11
+         4 - max speed forward    0-3200
+         5 - max accel forward    0-3200  (0=nolimit) = deltaspeed per update period
+         6 - max decel forward    0-3200  (0=nolimit) = deltaspeed per update period
+         7 - brake dur forward    0-16384 units=4ms   (note: get variable units is 1ms)
+         8 - max speed reverse    0-3200
+         9 - max accel reverse    0-3200  (0=nolimit) = deltaspeed per update period
+         10- max decel reverse    0-3200  (0=nolimit) = deltaspeed per update period
+         11- brake dur reverse    0-16384 units=4ms   (note: get variable units is 1ms)
 
        response code
          0 - okay

@@ -1,13 +1,8 @@
-// XXX when pgm terminates it should go to error because not getting keep alive
-// XXX todo, 
-// - monitor the current
-
 #include <stdio.h>
 #include <stdint.h>
 #include <stdbool.h>
 #include <string.h>
 #include <errno.h>
-#include <malloc.h>
 #include <unistd.h>
 #include <pthread.h>
 #include <fcntl.h>
@@ -20,7 +15,17 @@
 // defines
 //
 
-#define MAX_MC_LIST 4
+#define CMD_STR(x) \
+   ((x) == 0x83 ? "EXIT_SAFE_START"      : \
+    (x) == 0x85 ? "MOTOR_FORWARD"        : \
+    (x) == 0x86 ? "MOTOR_REVERSE"        : \
+    (x) == 0x92 ? "MOTOR_BRAKE_OR_COAST" : \
+    (x) == 0xa1 ? "GET_VARIABLE"         : \
+    (x) == 0xa2 ? "SET_MOTOR_LIMIT"      : \
+    (x) == 0x91 ? "SET_CURRENT_LIMIT"    : \
+    (x) == 0xc1 ? "GET_FW_VER"           : \
+    (x) == 0xe0 ? "STOP_MOTOR"           : \
+                  "????")
 
 //
 // typedefs
@@ -30,8 +35,12 @@
 // variables
 //
 
-static mc_t * mc_list[MAX_MC_LIST];
-static int    max_mc_list;
+static struct info_s {
+    char *devname;
+    int fd;
+} info_tbl[] = {
+        { "/dev/ttyACM0", -1 },
+                    };
 
 //
 // prototypes
@@ -39,139 +48,134 @@ static int    max_mc_list;
 
 static void *monitor_thread(void *cx);
 
-static int issue_cmd(mc_t *mc, unsigned char *cmd, int cmdlen, unsigned char *resp, int resplen);
+static int issue_cmd(int id, unsigned char *cmd, int cmdlen, unsigned char *resp, int resplen);
 static int open_serial_port(const char * device, uint32_t baud_rate);
-static int write_port(mc_t *mc, const uint8_t * buffer, size_t size);
-static ssize_t read_port(mc_t *mc, uint8_t * buffer, size_t size);
+static int write_port(int id, const uint8_t * buffer, size_t size);
+static ssize_t read_port(int id, uint8_t * buffer, size_t size);
 
 static void crc_init(void);
 static unsigned char crc(unsigned char message[], unsigned char length);
 
 // -----------------  INIT API  --------------------------------------------
 
-void mc_init_module(void)
+int mc_init(void)
 {
+    static pthread_t tid;
+    int id, error_status;
+
+    // sanity check MAX_MC, which is defined in mc.h
+    if (MAX_MC != (sizeof(info_tbl) / sizeof(struct info_s))) {
+        FATAL("define MAX_MC is incorrect\n");
+    }
+
+    // sanity check that mc_init has not already been called
+    if (tid) {
+        ERROR("already initialized\n");
+        return -1;
+    }
+
+    // init crc table
     crc_init();
+
+    // open the motor ctlrs
+    for (id = 0; id < MAX_MC; id++) {
+        struct info_s * info = &info_tbl[id];
+
+        // open usb serial devname
+        // note: baud rate doesn't matter because we are connecting to the SMC over USB
+        info->fd = open_serial_port(info->devname, 9600);
+        if (info->fd < 0) {
+            return -1;
+        }
+
+        // get error status, to confirm we can communicate to the ctlr
+        if (mc_get_variable(id, VAR_ERROR_STATUS, &error_status) < 0) {
+            close(info->fd);
+            info->fd = -1;
+            return -1;
+        }
+    }
+
+    // create monitor_thread to periodically check status of this mc
+    pthread_create(&tid, NULL, monitor_thread, NULL);
+
+    // success
+    return 0;
 }
 
 // -----------------  RUN TIME API  ----------------------------------------
 
-mc_t *mc_new(int id)
-{
-    int fd, rc, error_status;
-    char device[100];
-    mc_t *mc;
-
-    // open usb serial device
-    // note: baud rate doesn't matter because we are connecting to the
-    //       SMC over USB
-    sprintf(device, "/dev/ttyACM%d", id);
-    fd = open_serial_port(device, 9600);
-    if (fd < 0) {
-        return NULL;
-    }
-
-    // allocate and init the mc handle
-    mc = malloc(sizeof(mc_t));
-    mc->fd = fd;
-    strcpy(mc->device, device);
-
-    // get error status, to confirm we can communicate to the ctlr
-    rc = mc_get_variable(mc, VAR_ERROR_STATUS, &error_status);
-    if (rc < 0) {
-        free(mc);
-        close(fd);
-        return NULL;
-    }
-
-    // add mc to list
-    if (max_mc_list >= MAX_MC_LIST) {
-        free(mc);
-        close(fd);
-        return NULL;
-    }
-    mc_list[max_mc_list] = mc;
-    __sync_synchronize();
-    max_mc_list++;
-
-    // create monitor_thread to periodically check status of this mc
-    pthread_create(&mc->monitor_thread_id, NULL, monitor_thread, mc);
-
-    // return handle
-    return mc;
-}
-
-// return 0 success, -1 failed to enable
-int mc_enable(mc_t *mc)
+// enable by exit safe start
+int mc_enable(int id)
 {
     unsigned char cmd[1] = { 0x83 };
+    int error_status;
 
     // exit safe start
-    if (issue_cmd(mc, cmd, sizeof(cmd), NULL, 0) < 0) {
+    if (issue_cmd(id, cmd, sizeof(cmd), NULL, 0) < 0) {
         return -1;
     }
 
     // return success if error_status is 0, else failure
-    return mc_status(mc) == 0 ? 0 : -1;
-}
-
-// return -1 could not get error_status, else error_status is returned
-int mc_status(mc_t *mc)
-{
-    int error_status;
-
-    if (mc_get_variable(mc, VAR_ERROR_STATUS, &error_status) < 0) {
+    if (mc_status(id, &error_status) < 0) {
         return -1;
     }
-
-    return error_status;
+    return error_status == 0 ? 0 : -1;
 }
 
-// return 0 if cmd was successfully issued, else return -1
-int mc_speed(mc_t *mc, int speed)
+// get VAR_ERROR_STATUS
+int mc_status(int id, int *error_status)
+{
+    if (mc_get_variable(id, VAR_ERROR_STATUS, error_status) < 0) {
+        return -1;
+    }
+    return 0;
+}
+
+// set speed, forward or reverse based on speed arg
+int mc_speed(int id, int speed)
 {
     if (speed >= 0) {
-        return issue_cmd(mc, (unsigned char []){0x85, speed & 0x1f, speed >> 5 & 0x7f}, 3, NULL, 0);
+        return issue_cmd(id, (unsigned char []){0x85, speed & 0x1f, speed >> 5 & 0x7f}, 3, NULL, 0);
     } else {
         speed = -speed;
-        return issue_cmd(mc, (unsigned char []){0x86, speed & 0x1f, speed >> 5 & 0x7f}, 3, NULL, 0);
+        return issue_cmd(id, (unsigned char []){0x86, speed & 0x1f, speed >> 5 & 0x7f}, 3, NULL, 0);
     }
 }
 
-// return 0 if cmd was successfully issued, else return -1
-int mc_brake(mc_t *mc)
+// immedeate brake, ignore decel limit
+int mc_brake(int id)
 {
-    return issue_cmd(mc, (unsigned char []){0x92, 0x20}, 2, NULL, 0);
+    return issue_cmd(id, (unsigned char []){0x92, 0x20}, 2, NULL, 0);
 }
 
-// return 0 if cmd was successfully issued, else return -1
-int mc_coast(mc_t *mc)
+// immedeate coast, ignore decel limit
+int mc_coast(int id)
 {
-    return issue_cmd(mc, (unsigned char []){0x92, 0x00}, 2, NULL, 0);
+    return issue_cmd(id, (unsigned char []){0x92, 0x00}, 2, NULL, 0);
 }
 
-// return 0 if cmd was successfully issued, else return -1
-int mc_stop(mc_t *mc)
+// stop motor, observe decel limit, enter safe start violation
+int mc_stop(int id)
 {
-    return issue_cmd(mc, (unsigned char []){0xe0}, 1, NULL, 0);
+    return issue_cmd(id, (unsigned char []){0xe0}, 1, NULL, 0);
 }
 
-// return 0 if cmd was successfully issued, else return -1;
-// when 0 is returned the variable's value has been set
-int mc_get_variable(mc_t *mc, int id, int *value)
+// get variable's value
+int mc_get_variable(int id, int variable_id, int *value)
 {
-    unsigned char cmd[2] = { 0xa1, id };
+    unsigned char cmd[2] = { 0xa1, variable_id };
     unsigned char resp[2];
     bool value_is_signed;
 
-    if (issue_cmd(mc, cmd, sizeof(cmd), resp, sizeof(resp)) < 0) {
+    if (issue_cmd(id, cmd, sizeof(cmd), resp, sizeof(resp)) < 0) {
         return -1;
     }
 
     *value = resp[0] + 256 * resp[1];
 
-    value_is_signed = (id == VAR_TARGET_SPEED) ||
-                      (id == VAR_CURRENT_SPEED);
+    value_is_signed = (variable_id == VAR_TARGET_SPEED) ||
+                      (variable_id == VAR_CURRENT_SPEED);
     if (value_is_signed && *value > 32767 ) {
         *value -= 65536;
     }
@@ -179,44 +183,43 @@ int mc_get_variable(mc_t *mc, int id, int *value)
     return 0;
 }
 
-// return 0 if motor limit was set, else return -1
-int mc_set_motor_limit(mc_t *mc, int id, int value)
+// set motor limit
+int mc_set_motor_limit(int id, int limit_id, int value)
 {
     unsigned char resp[1];
 
-    if (issue_cmd(mc, (unsigned char []){0xa2, value & 0x7f, value >> 7}, 3, resp, sizeof(resp)) < 0) {
+    if (issue_cmd(id, (unsigned char []){0xa2, limit_id, value & 0x7f, value >> 7}, 4, resp, sizeof(resp)) < 0) {
         return -1;
     }
 
     return resp[0] == 0 ? 0 : -1;
 }
 
+#if 0  // instead, configure the current limit using the GUI
 // return 0 if cmd was successfully issued, else return -1
-// XXX this may not be needed
-int mc_set_current_limit(mc_t *mc, int milli_amps)
+// notes: this routine uses default calibration values, so won't be accurate
+int mc_set_current_limit(int id, int milli_amps)
 {
     int limit;
     int current_scale_cal  = 8057;  // default
     int current_offset_cal = 993;   // default
     unsigned char resp[1];
 
-    // XXX probably won't be using the default cal values
-    // XXX need to verify this
-
     limit = (milli_amps * 3200 * 2 / current_scale_cal + current_offset_cal) * 3200 / 65536;
 
-    return issue_cmd(mc, 
+    return issue_cmd(id, 
                      (unsigned char []){0x91, limit & 0x7f, limit >> 7}, 3, 
                      resp, sizeof(resp));
 }
+#endif
 
 // return 0 if cmd was successfully issued, else return -1;
 // when 0 is returned the product_id and fw_ver values have been set
-int mc_get_fw_ver(mc_t *mc, int *product_id, int *fw_ver_maj_bcd, int *fw_ver_min_bcd)
+int mc_get_fw_ver(int id, int *product_id, int *fw_ver_maj_bcd, int *fw_ver_min_bcd)
 {
     unsigned char resp[4];
 
-    if (issue_cmd(mc, (unsigned char []){0xc2}, 1, resp, 4) < 0) {
+    if (issue_cmd(id, (unsigned char []){0xc2}, 1, resp, 4) < 0) {
         return -1;
     }
 
@@ -229,30 +232,57 @@ int mc_get_fw_ver(mc_t *mc, int *product_id, int *fw_ver_maj_bcd, int *fw_ver_mi
 
 // -----------------  MONITOR THREAD  --------------------------------------
 
+// XXX need a way to propogate failure info
 static void *monitor_thread(void *cx)
 {
-    mc_t *mc = (mc_t *)cx;
-    int i, error_status, error_status_last=1;
+    int  id;
+    bool stop_all_motors;
+    int  error_status, error_status_last[MAX_MC];
+    int curr_limit_cnt;
+
+    for (id = 0; id < MAX_MC; id++) {
+        error_status_last[id] = 1;  // Safe Start Violation
+    }
 
     while (true) {
-        // get error status 
-        error_status = mc_status(mc);
+        stop_all_motors = false;
+        for (id = 0; id < MAX_MC; id++) {
+            // get error status 
+            error_status = -1;
+            mc_status(id, &error_status);
 
-        // if not okay now, and was okay last time then
-        // stop all motors
-        if (error_status != 0 && error_status_last == 0) {
-            ERROR("stopping all motors becuase %s failed, error_status=0x%x\n", 
-                  mc->device, error_status);
-            for (i = 0; i < max_mc_list; i++) {
-                mc_stop(mc_list[i]);
+            // if not okay now, and was okay last time then stop all motors
+            if (error_status != 0 && error_status_last[id] == 0) {
+                ERROR("stop_all_motors, id=%d error_status=0x%x\n", id, error_status);
+                stop_all_motors = true;
+                break;
+            }
+            error_status_last[id] = error_status;
+
+            // check for active current limitting; if so then stop all motors
+            // Variable description:
+            //   The number of 10 ms time periods in which the hardware
+            //   current limit has activated since the last time this variable
+            //   was cleared. Reading this variable clears it, resetting it to 0.
+            curr_limit_cnt = 999;
+            mc_get_variable(id, VAR_CURRENT_LIMITTING_OCCUR_CNT, &curr_limit_cnt);
+            if (curr_limit_cnt > 10) {
+                ERROR("stop_all_motors, id=%d curr_limit_cnt=%d\n", id, curr_limit_cnt);
+                stop_all_motors = true;
+                break;
             }
         }
 
-        // remember last error_status
-        error_status_last = error_status;
+        // if something has gone wrong then stop all motors
+        if (stop_all_motors) {
+            for (id = 0; id < MAX_MC; id++) {
+                mc_stop(id);
+            }
+        }
 
-        // sleep for 1 sec
-        sleep(1);
+        // sleep for 250 ms
+        usleep(250000);
+        continue;
     }
 
     return NULL;
@@ -260,34 +290,43 @@ static void *monitor_thread(void *cx)
 
 // -----------------  SEND COMMAND  ----------------------------------------
 
-static int issue_cmd(mc_t *mc, unsigned char *cmd, int cmdlen, unsigned char *resp, int resplen)
+static int issue_cmd(int id, unsigned char *cmd, int cmdlen, unsigned char *resp, int resplen)
 {
     unsigned char lcl_cmd[64], lcl_resp[64];
     int rc;
+    char err_str[100];
 
     // copy cmd to lcl_cmd, and append crc byte, and send
     memcpy(lcl_cmd, cmd, cmdlen);
     lcl_cmd[cmdlen] = crc(lcl_cmd, cmdlen);
-    rc = write_port(mc, lcl_cmd, cmdlen+1);
+    rc = write_port(id, lcl_cmd, cmdlen+1);
     if (rc < 0) {
-        return rc;
+        sprintf(err_str, "write_port");
+        goto err; 
     }
 
     // if resplen then read the response, verify the crc, and 
     // copy the lcl_resp to caller's buffer
     if (resplen) {
-        rc = read_port(mc, lcl_resp, resplen+1);
+        rc = read_port(id, lcl_resp, resplen+1);
         if (rc != resplen+1) {
-            return -1;
+            sprintf(err_str, "read_port rc=%d != exp=%d", rc, resplen+1);
+            goto err; 
         }
         if (lcl_resp[resplen] != crc(lcl_resp, resplen)) {
-            return -1;
+            sprintf(err_str, "crc");
+            goto err; 
         }
         memcpy(resp, lcl_resp, resplen);
     }
 
     // return success
     return 0;
+
+err:
+    // print and return error
+    ERROR("id=%d cmd=%s - %s\n", id, CMD_STR(cmd[0]), err_str);
+    return -1;
 }
 
 // -----------------  SERIAL PORT  -----------------------------------------
@@ -343,8 +382,7 @@ static int open_serial_port(const char * device, uint32_t baud_rate)
     case 38400:  cfsetospeed(&options, B38400);  break;
     case 115200: cfsetospeed(&options, B115200); break;
     default:
-        fprintf(stderr, "warning: baud rate %u is not supported, using 9600.\n",
-                baud_rate);
+        ERROR("baud rate %u is not supported, using 9600.\n", baud_rate);
         cfsetospeed(&options, B9600);
         break;
     }
@@ -361,13 +399,14 @@ static int open_serial_port(const char * device, uint32_t baud_rate)
 }
  
 // Writes bytes to the serial port, returning 0 on success and -1 on failure.
-static int write_port(mc_t *mc, const uint8_t * buffer, size_t size)
+static int write_port(int id, const uint8_t * buffer, size_t size)
 {
     ssize_t result;
+    struct info_s * info = &info_tbl[id];
 
-    result = write(mc->fd, buffer, size);
+    result = write(info->fd, buffer, size);
     if (result != (ssize_t)size) {
-        ERROR("write %s, %s\n", mc->device, strerror(errno));
+        ERROR("write %s, %s\n", info->devname, strerror(errno));
         return -1;
     }
 
@@ -379,18 +418,19 @@ static int write_port(mc_t *mc, const uint8_t * buffer, size_t size)
 // timeout or other error.
 // Returns the number of bytes successfully read into the buffer, or -1 if
 // there was an error reading.
-static ssize_t read_port(mc_t *mc, uint8_t * buffer, size_t size)
+static ssize_t read_port(int id, uint8_t * buffer, size_t size)
 {
     size_t received = 0;
+    struct info_s * info = &info_tbl[id];
 
     while (received < size) {
-        ssize_t r = read(mc->fd, buffer + received, size - received);
+        ssize_t r = read(info->fd, buffer + received, size - received);
         if (r < 0) {
-            ERROR("read %s, %s\n", mc->device, strerror(errno));
+            ERROR("read %s, %s\n", info->devname, strerror(errno));
             return -1;
         }
         if (r == 0) {
-            ERROR("read timedout %s\n", mc->device);
+            ERROR("read timedout %s\n", info->devname);
             break;
         }
         received += r;

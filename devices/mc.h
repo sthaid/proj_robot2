@@ -1,7 +1,7 @@
-#ifndef __UTIL_MC_H__
-#define __UTIL_MC_H__
+#ifndef __MC_H__
+#define __MC_H__
 
-#include <pthread.h>
+#define MAX_MC 1
 
 //
 // defines: variable identifiers
@@ -43,9 +43,13 @@
 
 //
 // defines: motor limit identifiers
-// - the update period is set in the GUI  xxx confirm this
+// - the update period is set in the GUI, the default is 1 ms
 //
 
+#define MTRLIM_MAX_SPEED_FWD_AND_REV      0    // 0-3200
+#define MTRLIM_MAX_ACCEL_FWD_AND_REV      1    // delta speed per update period
+#define MTRLIM_MAX_DECEL_FWD_AND_REV      2    // delta speed per update period
+#define MTRLIM_BRAKE_DUR_FWD_AND_REV      3    // 4 ms
 #define MTRLIM_MAX_SPEED_FORWARD          4    // 0-3200
 #define MTRLIM_MAX_ACCEL_FORWARD          5    // delta speed per update period
 #define MTRLIM_MAX_DECEL_FORWARD          6    // delta speed per update period
@@ -56,35 +60,23 @@
 #define MTRLIM_BRAKE_DUR_REVERSE         11    // 4 ms
 
 //
-// typedefs
-//
-
-typedef struct {
-    int fd;
-    char device[100];
-    pthread_t monitor_thread_id;
-} mc_t;
-
-//
 // prototypes
 //
 
-void mc_init_module(void);
+int mc_init(void);
 
-mc_t *mc_new(int id);
+int mc_enable(int id);
+int mc_status(int id, int *error_status);
 
-int mc_enable(mc_t *mc);
-int mc_status(mc_t *mc);
+int mc_speed(int id, int speed);
+int mc_brake(int id);
+int mc_coast(int id);
+int mc_stop(int id);
 
-int mc_speed(mc_t *mc, int speed);
-int mc_brake(mc_t *mc);
-int mc_coast(mc_t *mc);
-int mc_stop(mc_t *mc);
+int mc_get_variable(int id, int variable_id, int *value);
+int mc_set_motor_limit(int id, int limit_id, int value);
+int mc_set_current_limit(int id, int milli_amps);
 
-int mc_get_variable(mc_t *mc, int id, int *value);
-int mc_set_motor_limit(mc_t *mc, int id, int value);
-int mc_set_current_limit(mc_t *mc, int milli_amps);
-
-int mc_get_fw_ver(mc_t *mc, int *product_id, int *fw_ver_maj_bcd, int *fw_ver_min_bcd);
+int mc_get_fw_ver(int id, int *product_id, int *fw_ver_maj_bcd, int *fw_ver_min_bcd);
 
 #endif
