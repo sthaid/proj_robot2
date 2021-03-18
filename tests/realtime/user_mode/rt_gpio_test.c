@@ -33,13 +33,19 @@ int main(int argc, char **argv)
 {
     pthread_t tid;
     struct sigaction act;
+    int rc;
 
     // init
+    setlinebuf(stdout);
+
     act.sa_handler = sig_hndlr;
     sigaction(SIGINT, &act, NULL);
-    setlinebuf(stdout);
-    timer_init();
-    gpio_init(true);
+
+    rc = timer_init();
+    if (rc < 0) exit(1);
+    rc = gpio_init(true);
+    if (rc < 0) exit(1);
+
     set_gpio_func(26, FUNC_OUT);
 
     // create test thread

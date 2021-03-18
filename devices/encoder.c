@@ -24,7 +24,7 @@
 //
 
 #define MAX_ENCODER (sizeof(info_tbl) / sizeof(struct info_s))
-#define MAX_HISTORY 32768  // xxx pwr 2  // XXX value
+#define MAX_HISTORY 1024  // suggest using pwr of 2
 
 //
 // variables
@@ -77,6 +77,7 @@ int encoder_init(void)
     return 0;
 }
 
+// XXX comments
 void encoder_get(int id, int *position, int *speed)
 {
     #define HIST(n)  (hist[(n) % MAX_HISTORY])
@@ -90,7 +91,7 @@ void encoder_get(int id, int *position, int *speed)
     int tail, start, end, idx;
     uint64_t time_now, time_desired;
 
-    time_now = time_get();
+    time_now = timer_get();
     time_desired = time_now - 20000;   // 20 ms earlier than now
 
     tail = info->tail;
@@ -98,14 +99,13 @@ void encoder_get(int id, int *position, int *speed)
     start = end - 200;
     if (start < 0) start = 0;
 
-    // xxx put in a safety net
+    // XXX put in a safety net
     while (true) {
         if (start == end) {
             idx = start;
             break;
         }
         idx = (start + end) / 2;
-        printf("start %d  end %d  idx %d\n", start, end, idx);
         if ((HIST(idx).time < time_desired) && (HIST(idx+1).time >= time_desired)) {
             break;
         } else if (HIST(idx).time < time_desired) {
@@ -118,9 +118,6 @@ void encoder_get(int id, int *position, int *speed)
         }
     }
 
-    printf("IDX  %d\n", idx);
-    printf("TIME BACK   %lld\n", (time_now - HIST(idx).time));
-    printf("DELTA POS   %d\n", (HIST(tail).pos - HIST(idx).pos));
     *speed = (int64_t)1000000 * (HIST(tail).pos - HIST(idx).pos) / 
              (signed)(time_now - HIST(idx).time);
     *position = HIST(tail).pos;
@@ -137,23 +134,19 @@ static void *encoder_thread(void *cx)
     cpu_set_t cpu_set;
 
     // set affinity to cpu 3
-    printf("setting affinity\n");
     CPU_ZERO(&cpu_set);
     CPU_SET(3, &cpu_set);
     rc = sched_setaffinity(0,sizeof(cpu_set_t),&cpu_set);
     if (rc < 0) {
-        printf("ERROR: sched_setaffinity, %s\n", strerror(errno));  // XXX use logmsg
-        exit(1);
+        FATAL("sched_setaffinity, %s\n", strerror(errno));
     }
 
     // set realtime priority
-    printf("setting priority\n");
     memset(&param, 0, sizeof(param));
     param.sched_priority = 99;
     rc = sched_setscheduler(0, SCHED_FIFO, &param);
     if (rc < 0) {
-        printf("ERROR: sched_setscheduler, %s\n", strerror(errno));
-        exit(1);
+        FATAL("sched_setscheduler, %s\n", strerror(errno));
     }
 
     // XXX comment
@@ -183,12 +176,12 @@ static void *encoder_thread(void *cx)
                 continue;
             } else if (x == 2) {
                 info->errors++;
-                printf("ERRORS %d\n", info->errors);
+                WARN("encoder sequence error on id=%d\n", id);
             } else {
                 int tail = info->tail;
                 int new_tail = tail + 1;
                 HIST(new_tail).pos = HIST(tail).pos + x;
-                HIST(new_tail).time = time_get();
+                HIST(new_tail).time = timer_get();
                 __sync_synchronize();
                 info->tail = new_tail;
             }
@@ -200,24 +193,4 @@ static void *encoder_thread(void *cx)
     }
 
     return NULL;
-}
-
-int main(int argc, char **argv)
-{
-    int position, speed;
-
-    setlinebuf(stdout);
-    printf("MAX_ENCODER %d\n", MAX_ENCODER);
-
-    gpio_init(true);
-    time_init();  // XXX change name
-    encoder_init();
-
-    while (true) {
-        sleep(1);
-        encoder_get(0, &position, &speed);
-        printf("POS %d  SPEED %d   POLL_COUNT %d\n", position, speed, poll_count);
-    }
-
-    return 0;
 }
