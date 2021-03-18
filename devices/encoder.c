@@ -1,15 +1,10 @@
 #define _GNU_SOURCE
 
-//#include <stdio.h>
-//#include <stdbool.h>
-//#include <unistd.h>
 #include <stdint.h>
 #include <pthread.h>
 #include <sched.h>
-//#include <time.h>
 #include <string.h>
 #include <errno.h>
-//#include <signal.h>
 
 #include <config_hw.h>
 #include <encoder.h>

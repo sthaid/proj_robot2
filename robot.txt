@@ -2,10 +2,14 @@
 TITLE: INTRO - TODO
 ===========================
 
+cleanups
+- don't use printf in gpio.h, and  elsewhere
+- review use of FATAL, vs ERROR return -1;
+- review include files
 
 haid@robot-ctlr:~/proj/proj_robot2 $ /bin/ls -1 devices
   relay.c relay.h                      DONE
-  encoder.c encoder.h
+  encoder.c encoder.h                  IN PROG
   mc.c mc.h
   proximity.c proximity.h
 
@@ -27,9 +31,6 @@ update i2c_test
 use git aliases
   git config --global alias.root 'rev-parse --show-toplevel'
 
-don't use printf in gpio.h, and  elsewhere
-
-review use of FATAL, vs ERROR return -1;
 
 xxxxxxxxxxxxxxxxxx
 

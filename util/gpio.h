@@ -6,12 +6,10 @@
 // Reference https://datasheets.raspberrypi.org/bcm2711/bcm2711-peripherals.pdf
 
 #ifndef __KERNEL__
-#include <stdio.h>
-#include <stdbool.h>
-#include <stdlib.h>
+#include <unistd.h>
 #include <fcntl.h>
 #include <sys/mman.h>
-#include <unistd.h>
+#include <misc.h>
 #else
 #include <linux/module.h>
 #endif
@@ -49,10 +47,10 @@ static inline void set_gpio_func(int pin, int func)
     curr_func = get_gpio_func(pin);
     if (curr_func != FUNC_IN && curr_func != FUNC_OUT) {
 #ifndef __KERNEL__
-        printf("ERROR: can't change func for pin %d\n", pin);
-        exit(1); 
+        FATAL("can't change func for pin %d\n", pin);
 #else
-        printk("ERROR: can't change func for pin %d\n", pin);
+        pr_err("can't change func for pin %d\n", pin);
+        return;
 #endif
     }
 
@@ -107,23 +105,23 @@ static inline void gpio_write(int pin, int value)
 
 // -----------------  GPIO: INIT & EXIT  ------------------
 
-static inline int gpio_init(bool init)
+static inline int gpio_init(int init)
 {
 #ifndef __KERNEL__
     int fd, rc;
-    bool okay;
+    int okay;
 
     // verify bcm version
     rc = system("grep BCM2711 /proc/cpuinfo > /dev/null");
     okay = WIFEXITED(rc) && WEXITSTATUS(rc) == 0;
     if (!okay) {
-        printf("ERROR: this program requires BCM2711\n");
+        ERROR("this program requires BCM2711\n");
         return -1;
     }
 
     // map gpio regs
     if ((fd = open("/dev/mem", O_RDWR|O_SYNC) ) < 0) {
-        printf("ERROR: can't open /dev/mem \n");
+        ERROR("can't open /dev/mem \n");
         return -1;
     }
     gpio_regs = mmap(NULL,
@@ -133,7 +131,7 @@ static inline int gpio_init(bool init)
                      fd,
                      GPIO_BASE_ADDR);
     if (gpio_regs == MAP_FAILED) {
-        printf("ERROR: mmap failed\n");
+        ERROR("mmap failed\n");
         return -1;
     }
     close(fd);

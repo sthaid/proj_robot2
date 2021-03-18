@@ -38,7 +38,7 @@ int main(int argc, char **argv)
     act.sa_handler = sig_hndlr;
     sigaction(SIGINT, &act, NULL);
     setlinebuf(stdout);
-    time_init();
+    timer_init();
     gpio_init(true);
     set_gpio_func(26, FUNC_OUT);
 
@@ -96,19 +96,19 @@ void *test_thread(void *cx)
     printf("create square wave loop\n");
     ts.tv_sec = 0;
     ts.tv_nsec = 1000;
-    t_prior = time_get();
+    t_prior = timer_get();
     while (true) {
         // set gpio 26, and 1 usec sleep
         gpio_write(26, 1);
         nanosleep(&ts, NULL);
-        t_now = time_get();
+        t_now = timer_get();
         add_histogram(t_now-t_prior);
         t_prior = t_now;
 
         // clear gpio 26, and 1 usec sleep
         gpio_write(26, 0);
         nanosleep(&ts, NULL);
-        t_now = time_get();
+        t_now = timer_get();
         add_histogram(t_now-t_prior);
         t_prior = t_now;
     }

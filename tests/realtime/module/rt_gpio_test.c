@@ -49,7 +49,7 @@ int gpiotest_init(void)
     int rc;
 
     // init
-    time_init();
+    timer_init();
     gpio_init(true);
     set_gpio_func(26, FUNC_OUT);
 
@@ -57,7 +57,7 @@ int gpiotest_init(void)
     rc = run_offline_cpu(3, gpiotest_proc);
     if (rc != 0) {
         printk("ERROR run_offline_cpu rc=%d\n", rc);
-        time_exit();
+        timer_exit();
         gpio_exit();
         return rc;
     }
@@ -77,7 +77,7 @@ void gpiotest_exit(void)
     msleep(100);
 
     // exit  
-    time_exit();
+    timer_exit();
     gpio_exit();
 
     // done
@@ -96,11 +96,11 @@ static void gpiotest_proc(void)
     while (true) {
         // set gpio 26 and delay until the next hardware timer microsec
         gpio_write(26, 1);
-        time_delay(0);
+        timer_delay(0);
 
         // clear gpio 26 and delay until the next hardware timer microsec
         gpio_write(26, 0);
-        time_delay(0);
+        timer_delay(0);
 
         // check if time to exit
         if (gpiotest_exit_request) {

@@ -23,7 +23,7 @@ volatile unsigned int *timer_regs;
 unsigned int           timer_initial_value;
 unsigned int           timer_last_value;
 
-static inline int time_init(void)
+static inline int timer_init(void)
 {
 #ifndef __KERNEL__
     int fd, rc;
@@ -33,13 +33,13 @@ static inline int time_init(void)
     rc = system("grep BCM2711 /proc/cpuinfo > /dev/null");
     okay = WIFEXITED(rc) && WEXITSTATUS(rc) == 0;
     if (!okay) {
-        printf("ERROR: this program requires BCM2711\n");
+        ERROR("this program requires BCM2711\n");
         return -1;
     }
 
     // map timer regs
     if ((fd = open("/dev/mem", O_RDWR|O_SYNC) ) < 0) {
-        printf("ERROR: can't open /dev/mem \n");
+        ERROR("can't open /dev/mem \n");
         return -1;
     }
     timer_regs = mmap(NULL,
@@ -49,7 +49,7 @@ static inline int time_init(void)
                      fd,
                      TIMER_BASE_ADDR);
     if (timer_regs == MAP_FAILED) {
-        printf("ERROR: mmap failed\n");
+        ERROR("mmap failed\n");
         return -1;
     }
     close(fd);
@@ -63,7 +63,7 @@ static inline int time_init(void)
 #endif
 }
 
-static inline void time_exit(void)
+static inline void timer_exit(void)
 {
 #ifndef __KERNEL__
     // program termination will cleanup
@@ -74,7 +74,7 @@ static inline void time_exit(void)
 }
 
 // returns time in us since the module was loaded
-static inline uint64_t time_get(void)
+static inline uint64_t timer_get(void)
 {
     unsigned int value;
     static uint64_t high_part;
@@ -90,13 +90,13 @@ static inline uint64_t time_get(void)
 }
 
 // delays for duration us, and returns the time at the end of the delay
-static inline uint64_t time_delay(int duration)
+static inline uint64_t timer_delay(int duration)
 {
     uint64_t start, now;
 
-    start = time_get();
+    start = timer_get();
     while (1) {
-        if ((now=time_get()) > start + duration) {
+        if ((now=timer_get()) > start + duration) {
             break;
         }
     }
