@@ -37,8 +37,8 @@
 // variables
 //
 
-// XXX just display all
 volatile unsigned int *gpio_regs;
+#if 1
 int gpio_list[] = {
         4, 5, 6, 12, 13, 16, 17, 22, 23, 24, 25, 26, 27,    // general purpose
         2, 3,                                               // i2c
@@ -46,6 +46,13 @@ int gpio_list[] = {
         18, 19, 20, 21,                                     // pcm
         12, 14,                                             // uart
             };
+#else
+int gpio_list[] = {
+        0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
+        10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
+        20, 21, 22, 23, 24, 25, 26, 27, 28, 29,
+        30, 31 };
+#endif
 
 //
 // prototypes
