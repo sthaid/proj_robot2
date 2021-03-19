@@ -255,6 +255,7 @@ static void *monitor_thread(void *cx)
             if (error_status != 0 && error_status_last[id] == 0) {
                 ERROR("stop_all_motors, id=%d error_status=0x%x\n", id, error_status);
                 stop_all_motors = true;
+                error_status_last[id] = error_status;
                 break;
             }
             error_status_last[id] = error_status;
@@ -296,6 +297,11 @@ static int issue_cmd(int id, unsigned char *cmd, int cmdlen, unsigned char *resp
     int rc;
     char err_str[100];
 
+    static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+
+    // acquire mutex
+    pthread_mutex_lock(&mutex);
+
     // copy cmd to lcl_cmd, and append crc byte, and send
     memcpy(lcl_cmd, cmd, cmdlen);
     lcl_cmd[cmdlen] = crc(lcl_cmd, cmdlen);
@@ -320,12 +326,16 @@ static int issue_cmd(int id, unsigned char *cmd, int cmdlen, unsigned char *resp
         memcpy(resp, lcl_resp, resplen);
     }
 
+    // release mutex
+    pthread_mutex_unlock(&mutex);
+
     // return success
     return 0;
 
 err:
     // print and return error
     ERROR("id=%d cmd=%s - %s\n", id, CMD_STR(cmd[0]), err_str);
+    pthread_mutex_unlock(&mutex);
     return -1;
 }
 

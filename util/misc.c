@@ -23,6 +23,28 @@
 
 // -----------------  LOGMSG  --------------------------------------------
 
+static FILE *logfp;
+
+int logmsg_init(char *log_filename)
+{
+    // if NULL then logfp will reamin NULL, and logmsg() will log to stderr
+    if (log_filename == NULL) {
+        return 0;
+    }
+
+    // open the log_filename for writing at the end
+    logfp = fopen(log_filename, "a");
+    if (logfp == NULL) {
+        return -1;
+    }
+
+    // set line buffered
+    setlinebuf(logfp);
+
+    // success
+    return 0;
+}
+
 void logmsg(char *lvl, const char *func, char *fmt, ...) 
 {
     va_list ap;
@@ -49,13 +71,13 @@ void logmsg(char *lvl, const char *func, char *fmt, ...)
         len--;
     }
 
-    // log to stderr 
+    // log to logfp, use stderr if logfp is NULL
     if (print_prefix) {
-        fprintf(stderr, "%s %s %s: %s\n",
+        fprintf(logfp?logfp:stderr, "%s %s %s: %s\n",
             time2str(time_str, get_real_time_us(), false, true, true),
             lvl, func, msg);
     } else {
-        fprintf(stderr, "%s\n", msg);
+        fprintf(logfp?logfp:stderr, "%s\n", msg);
     }
 }
 

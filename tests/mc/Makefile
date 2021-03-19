@@ -1,6 +1,6 @@
 CC       = gcc
 CPPFLAGS = -Wall -g -O2 -I../../include
-LDFLAGS  = -lpthread
+LDFLAGS  = -lpthread -lcurses
 
 TARGET   = mc_test
 SRC      = mc_test.c \
