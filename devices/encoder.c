@@ -39,9 +39,10 @@ static struct info_s {
     unsigned int gpio_a;
     unsigned int gpio_b;
     unsigned int errors;
+    int          pos_offset;  // xxx 64bit
     unsigned int tail;
     struct history_s {
-        int pos;
+        int pos;  // xxx 64bit
         uint64_t time;
     } history[MAX_HISTORY];
 } info_tbl[] = {
@@ -81,25 +82,30 @@ int encoder_init(void)
     return 0;
 }
 
-void encoder_get(int id, int *position, int *speed)
+void encoder_get_position(int id, int *position)
 {
-    #define HIST(n)  (hist[(n) % MAX_HISTORY])
-
-    if (id < 0 || id >= MAX_ENCODER) {
-        FATAL("invalid id %d\n", id);
-    }
-
-    struct info_s * info = &info_tbl[id];
+    struct info_s    * info = &info_tbl[id];
     struct history_s * hist = info->history;
-    unsigned int tail, start, end, idx;
-    uint64_t time_now, time_desired;
+    unsigned int       tail = info->tail;
+
+    #define HIST(n) (hist[(n) % MAX_HISTORY])   // xxx use inline routine
+
+    *position = HIST(tail).pos - info->pos_offset;
+}
+
+void encoder_get_speed(int id, int *speed)
+{
+    struct info_s    * info = &info_tbl[id];
+    struct history_s * hist = info->history;
+    unsigned int       tail = info->tail;
+    unsigned int       start, end, idx;
+    uint64_t           time_now, time_desired;
 
     // find a history entry that is 20 ms earlier than time_now,
     // use binary search; this entry will be used to calculate the speed
     time_now = timer_get();
     time_desired = time_now - 20000;   // 20 ms earlier than now
 
-    tail = info->tail;
     end = tail;
     start = (end >= 200 ? end - 200 : 0);
 
@@ -121,19 +127,35 @@ void encoder_get(int id, int *position, int *speed)
         }
     }
 
-    // return speed and position
+    // return speed
     *speed = (int64_t)1000000 * (HIST(tail).pos - HIST(idx).pos) / 
              (signed)(time_now - HIST(idx).time);
-    *position = HIST(tail).pos;
 }
 
 void encoder_get_ex(int id, int *position, int *speed, int *errors, int *poll_rate_arg)
 {
-    encoder_get(id, position, speed);
-    *errors = info_tbl[id].errors;
-
-    *poll_rate_arg = poll_rate;
+    if (position) {
+        encoder_get_position(id, position);
+    }
+    if (speed) {
+        encoder_get_speed(id, speed);
+    }
+    if (errors != NULL) {
+        *errors = info_tbl[id].errors;
+    }
+    if (poll_rate_arg != NULL) {
+        *poll_rate_arg = poll_rate;
+    }
 }
+
+void encoder_pos_reset(int id)
+{
+    struct info_s    * info = &info_tbl[id];
+    struct history_s * hist = info->history;
+    unsigned int       tail = info->tail;
+
+    info->pos_offset = HIST(tail).pos;
+}    
 
 // -----------------  ENCODER THREAD  -----------------------------
 

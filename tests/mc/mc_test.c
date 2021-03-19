@@ -24,6 +24,16 @@
 #define COLOR_PAIR_CYAN  2
 
 //
+// typedefs
+//
+
+typedef struct {
+    int id;
+    int encoder_distance;
+    int mtr_ctlr_speed;
+} test_thread_cx_t;
+
+//
 // variables
 //
 
@@ -31,6 +41,7 @@ static WINDOW * window;
 static char     cmdline[100];
 static char     alert_msg[100];
 static uint64_t alert_msg_time_us;
+static bool     test_thread_is_running;
 
 static char     logmsg_strs[MAX_LOGMSG_STRS][200];
 static int      logmsg_strs_tail;
@@ -44,8 +55,9 @@ static void *logfile_monitor_thread(void *cx);
 
 static void update_display(int maxy, int maxx);
 static int input_handler(int input_char);
-static int  process_cmd(char *cmd);
-static void display_alert(char *fmt, ...);
+static int  process_cmdline(void);
+static void *test_thread(void *cx);
+static void display_alert(char *fmt, ...) __attribute__((unused));
 
 static void curses_init(void);
 static void curses_exit(void);
@@ -86,6 +98,11 @@ int main(int argc, char **argv)
     if (mc_init() < 0) {
         fprintf(stderr, "FATAL: mc_init failed\n");
         return 1;
+    }
+
+    // enable all mc
+    for (int id = 0; id < MAX_MC; id++) {
+        mc_enable(id);
     }
 
     // runtime using curses
@@ -177,13 +194,19 @@ static void update_display(int maxy, int maxx)
     }
 
     // display the logfile msgs
-    // rows 6..maxy-3
-    int num_rows = (maxy-3) - 6 + 1;
+    // rows 6..maxy-4
+    int num_rows = (maxy-4) - 6 + 1;
     int tail = logmsg_strs_tail;
     for (int i = 0; i < num_rows; i++) {
         int idx = i + tail - num_rows + 1;
         if (idx < 0) continue;
         mvprintw(6+i, 0, "%s", logmsg_strs[idx%MAX_LOGMSG_STRS]);
+    }
+
+    // display test thread status
+    // row mayx-2
+    if (test_thread_is_running) {
+        mvprintw(maxy-2, 0, "Test Thread Is Running");
     }
 
     // display cmdline
@@ -199,8 +222,7 @@ static int input_handler(int input_char)
 {
     // xxx comment
     if (input_char == '\n') {
-        display_alert("PROCESS CMD %s", cmdline); //xxx temp
-        if (process_cmd(cmdline) == -1) {
+        if (process_cmdline() == -1) {
             return -1;  // return -1, terminates pgm
         }
         memset(cmdline, 0, sizeof(cmdline));
@@ -218,31 +240,118 @@ static int input_handler(int input_char)
     return 0;
 }
 
-// xxx more
-static int process_cmd(char *cmd)
+// XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+// brake, coast, others?
+
+static int process_cmdline(void)
 {
+    char cmd[100];
+    int  arg1, arg2, arg3;
+    int  cnt;
+
+    #define CHECK_SSCANF_CNT(num_expected_cnt, usage) \
+        do { \
+            if (cnt-1 != (num_expected_cnt)) { \
+                ERROR("USAGE: %s %s\n", cmd, usage); \
+                return 0; \
+            } \
+        } while (0)
+
+    cmd[0] = '\0';
+    arg1 = arg2 = 0;
+    cnt = sscanf(cmdline, "%s %d %d %d", cmd, &arg1, &arg2, &arg3);
+
+    if (cnt == 0 || cmd[0] == '\0') {
+        return 0;
+    }
+
+    INFO("CMD: %s\n", cmdline);
+
     if (strcmp(cmd, "enable") == 0) {
-        mc_enable(0);
-    } else if (strcmp(cmd, "fwd") == 0) {
-        mc_speed(0, 2000);
-    } else if (strcmp(cmd, "rev") == 0) {
-        mc_speed(0, -2000);
-    } else if (strcmp(cmd, "Fwd") == 0) {
-        mc_speed(0, 3200);
-    } else if (strcmp(cmd, "Rev") == 0) {
-        mc_speed(0, -3200);
+        CHECK_SSCANF_CNT(1, "id");
+        int id = arg1;
+        mc_enable(id);
+    } else if (strcmp(cmd, "speed") == 0) {
+        CHECK_SSCANF_CNT(2, "id speed");
+        int id = arg1;
+        int speed = arg2;
+        mc_speed(id, speed);
     } else if (strcmp(cmd, "accel") == 0) {
-        mc_set_motor_limit(0, MTRLIM_MAX_ACCEL_FWD_AND_REV, 1);
-        mc_set_motor_limit(0, MTRLIM_MAX_DECEL_FWD_AND_REV, 1);
+        CHECK_SSCANF_CNT(2, "id accel");
+        int id = arg1;
+        int accel = arg2;
+        mc_set_motor_limit(id, MTRLIM_MAX_ACCEL_FWD_AND_REV, accel);
+        mc_set_motor_limit(id, MTRLIM_MAX_DECEL_FWD_AND_REV, accel);
+    } else if (strcmp(cmd, "enc_reset") == 0) {
+        CHECK_SSCANF_CNT(1, "id");
+        int id = arg1;
+        encoder_pos_reset(id);
     } else if (strcmp(cmd, "stop") == 0) {
-        mc_stop(0);
+        CHECK_SSCANF_CNT(1, "id");
+        int id = arg1;
+        mc_stop(id);
+    } else if (strcmp(cmd, "test") == 0) {
+        CHECK_SSCANF_CNT(3, "id encoder_distance mtr_ctlr_speed");
+        pthread_t tid;
+        test_thread_cx_t *cx = malloc(sizeof(test_thread_cx_t));
+        cx->id = arg1;
+        cx->encoder_distance = arg2;
+        cx->mtr_ctlr_speed = arg3;
+        test_thread_is_running = true;
+        pthread_create(&tid, NULL, test_thread, cx);
     } else if (strcmp(cmd, "q") == 0) {
         return -1;
     } else {
+        ERROR("INVALID CMD: %s\n", cmdline);
     }
 
     return 0;
 
+}
+
+static void * test_thread(void *cx_arg)
+{
+    test_thread_cx_t *cx = cx_arg;
+    int id       = cx->id;                // mc id
+    int distance = cx->encoder_distance;  // encoder distance
+    int speed    = cx->mtr_ctlr_speed;    // mc speed
+    int pos_at_end_of_accel;
+    int p;
+
+    // free cx_arg
+    free(cx_arg);
+
+    // reset encode position
+    encoder_pos_reset(id);
+
+    // set desired speed
+    mc_speed(id, speed);
+
+    // delay for the acceleration interval, and
+    // get the encoder position  XXX assumes accel = 1
+    usleep(speed*1000);
+    encoder_get_position(0, &pos_at_end_of_accel);
+    INFO("xxx pos at end of accel %d\n", pos_at_end_of_accel);
+    // XXX need to poll here for short distances
+
+    // wait for position to be 'distance - pos_at_end_of_accel'
+    while (true) {
+        encoder_get_position(0, &p);
+        if (p > distance - pos_at_end_of_accel - 650) {
+            break;
+        }
+        usleep(1000);
+    }
+
+    // set speed to 0
+    INFO("pos at begining of decel %d\n", p);
+    mc_speed(id, 0);
+
+    // XXX could wait for speed 0, and print deviation
+
+    // test thread is done
+    test_thread_is_running = false;
+    return NULL;
 }
 
 // display alert on top line of window 
