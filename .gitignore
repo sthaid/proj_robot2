@@ -13,3 +13,4 @@ tests/realtime/module/rt_gpio_test_module.mod.c
 tests/encoder/enc_test
 tests/proximity/proximity_test
 tests/mc/mc_test
+tests/mc/mc_test.log
