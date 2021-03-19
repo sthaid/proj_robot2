@@ -5,6 +5,7 @@ LDFLAGS  = -lpthread -lcurses
 TARGET   = mc_test
 SRC      = mc_test.c \
            ../../devices/mc.c \
+           ../../devices/encoder.c \
            ../../util/misc.c
 
 OBJ := $(SRC:.c=.o)

@@ -48,7 +48,7 @@ static struct info_s {
     { ENCODER0_GPIO_A, ENCODER0_GPIO_B, },
                 };
 
-static unsigned int poll_count;
+static unsigned int poll_rate;   // units = persec
 
 //
 // prototypes
@@ -127,14 +127,12 @@ void encoder_get(int id, int *position, int *speed)
     *position = HIST(tail).pos;
 }
 
-void encoder_get_stats(unsigned int *errors, unsigned int *poll_count_arg)
+void encoder_get_ex(int id, int *position, int *speed, int *errors, int *poll_rate_arg)
 {
-    int id;
+    encoder_get(id, position, speed);
+    *errors = info_tbl[id].errors;
 
-    for (id = 0; id < MAX_ENCODER; id++) {
-        errors[id] = info_tbl[id].errors;
-    }
-    *poll_count_arg = poll_count;
+    *poll_rate_arg = poll_rate;
 }
 
 // -----------------  ENCODER THREAD  -----------------------------
@@ -146,6 +144,11 @@ static void *encoder_thread(void *cx)
     struct timespec ts;
     struct sched_param param;
     cpu_set_t cpu_set;
+
+    static uint64_t poll_count, poll_count_t_last;
+
+    // used to determine poll_rate stat
+    poll_count_t_last = timer_get();
 
     // set affinity to cpu 3
     CPU_ZERO(&cpu_set);
@@ -209,8 +212,17 @@ static void *encoder_thread(void *cx)
         }
 
         // this is used to determine the frequency of this code, which 
-        // should ideally be 100000 per second when the sleep below is 10 us
+        // should ideally be 100000 per second when the sleep below is 10 us;
+        // however the measured poll_rate is about 47000 per sec
         poll_count++;
+        if ((poll_count & 0xfff) == 0) {
+            uint64_t t_now = timer_get();
+            if (t_now > poll_count_t_last + 1000000) {
+                poll_rate = 1000000LL * poll_count / (t_now - poll_count_t_last);
+                poll_count_t_last = t_now;
+                poll_count = 0;
+            }
+        }
 
         // sleep for 10 us
         ts.tv_sec = 0;

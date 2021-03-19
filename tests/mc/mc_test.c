@@ -1,9 +1,5 @@
 // XXX 
 // add more cmds
-// add encoders
-// display fewer accel values
-// --
-// backspace
 
 #include <stdio.h>
 #include <string.h>
@@ -12,9 +8,11 @@
 #include <pthread.h>
 #include <curses.h>
 
-#include <mc.h>
 #include <misc.h>
+#include <mc.h>
+#include <gpio.h>
 #include <timer.h>
+#include <encoder.h>
 
 //
 // defines
@@ -68,17 +66,25 @@ int main(int argc, char **argv)
         usleep(1000);
     }
 
-    // initialize motor-ctlr and timer
+    // initialize
     if (logmsg_init(LOG_FILENAME) < 0) {
         fprintf(stderr, "FATAL: logmsg_init failed, %s\n", strerror(errno));
         return 1;
     }
-    if (mc_init() < 0) {
-        fprintf(stderr, "FATAL: mc_init failed\n");
+    if (gpio_init(true) < 0) {
+        fprintf(stderr, "FATAL: gpio_init failed\n");
         return 1;
     }
     if (timer_init() < 0) {
         fprintf(stderr, "FATAL: timer_init failed\n");
+        return 1;
+    }
+    if (encoder_init() < 0) {
+        fprintf(stderr, "FATAL: encoder_init failed\n");
+        return 1;
+    }
+    if (mc_init() < 0) {
+        fprintf(stderr, "FATAL: mc_init failed\n");
         return 1;
     }
 
@@ -122,7 +128,6 @@ static void update_display(int maxy, int maxx)
 {
     // display alert status for 5 secs
     // row 0
-    // xxx put in middle
     if ((alert_msg_time_us != 0) &&
         (timer_get() - alert_msg_time_us < 5000000))
     {
@@ -133,10 +138,11 @@ static void update_display(int maxy, int maxx)
 
     // loop over all motor-ctlrs and display their variable values
     // rows: 1..4
-    //             xxxxxxxxxx xxxxxxxxxx xxxxxxxxxx xxxxxxxxxx xxxxxxxxxx xxxxxxxxxx xxxxxxxxxx xxxxxxxxxx xxxxxxxxxx xxxxxxxxxx 
-    mvprintw(1,0, "   ERRSTAT   TGTSPEED  CURRSPEED  MAX_ACCEL  MAX_DECEL        VIN    CURRENT  CURRLIMIT");
+    //             xxxxxxxxx xxxxxxxxx xxxxxxxxx xxxxxxxxx xxxxxxxxx xxxxxxxxx xxxxxxxxx xxxxxxxxx xxxxxxxxx xxxxxxxxx xxxxxxxxx xxxxxxxxx
+    mvprintw(1,0, "  ERRSTAT  TGTSPEED CURRSPEED MAX_ACCEL MAX_DECEL       VIN   CURRENT CURRLIMIT   ENC_POS ENC_SPEED  ENC_ERRS ENC_POLLR");
     for (int id = 0; id < MAX_MC; id++) {
         int errstat, tgtspeed, currspeed, maxaccel, maxdecel, vin, current, currlimit;
+        int enc_pos, enc_speed, enc_errs, enc_pollr;
 
         errstat   = 0x9999;
         tgtspeed  = 9999;
@@ -146,6 +152,10 @@ static void update_display(int maxy, int maxx)
         vin       = 9999;
         current   = 9999;
         currlimit = 9999;
+        enc_pos   = 9999;
+        enc_speed = 9999;
+        enc_errs  = 9999;
+        enc_pollr = 9999;
 
         mc_get_variable(id, VAR_ERROR_STATUS, &errstat);
         mc_get_variable(id, VAR_TARGET_SPEED, &tgtspeed);
@@ -156,15 +166,14 @@ static void update_display(int maxy, int maxx)
         mc_get_variable(id, VAR_CURRENT, &current);
         mc_get_variable(id, VAR_CURRENT_LIMITTING_OCCUR_CNT, &currlimit);
 
-        mvprintw(3+id,0, "%10d %10d %10d %10d %10d %10d %10d %10d",
+        encoder_get_ex(id, &enc_pos, &enc_speed, &enc_errs, &enc_pollr);
+
+        mvprintw(3+id,0, "%9d %9d %9d %9d %9d %9d %9d %9d %9d %9d %9d %9d",
                 errstat,
-                tgtspeed,
-                currspeed,
-                maxaccel,
-                maxdecel,
-                vin,
-                current,
-                currlimit);
+                tgtspeed, currspeed,
+                maxaccel, maxdecel,
+                vin, current, currlimit,
+                enc_pos, enc_speed, enc_errs, enc_pollr);
     }
 
     // display the logfile msgs
@@ -218,6 +227,10 @@ static int process_cmd(char *cmd)
         mc_speed(0, 2000);
     } else if (strcmp(cmd, "rev") == 0) {
         mc_speed(0, -2000);
+    } else if (strcmp(cmd, "Fwd") == 0) {
+        mc_speed(0, 3200);
+    } else if (strcmp(cmd, "Rev") == 0) {
+        mc_speed(0, -3200);
     } else if (strcmp(cmd, "accel") == 0) {
         mc_set_motor_limit(0, MTRLIM_MAX_ACCEL_FWD_AND_REV, 1);
         mc_set_motor_limit(0, MTRLIM_MAX_DECEL_FWD_AND_REV, 1);

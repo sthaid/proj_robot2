@@ -9,7 +9,7 @@ extern "C" {
 
 int encoder_init(void);
 void encoder_get(int id, int *position, int *speed);
-void encoder_get_stats(unsigned int *errors, unsigned int *poll_count);
+void encoder_get_ex(int id, int *position, int *speed, int *errors, int *poll_rate);
 
 #ifdef __cplusplus
 }
