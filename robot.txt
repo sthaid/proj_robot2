@@ -1,10 +1,26 @@
 ===========================
 TITLE: INTRO - TODO
 ===========================
+
+continue work on mc+encoer test pgm
+- think about 2 motors
+
+draw diagram of robot first level
+- leave room for 2nd level
+- design layout of level 0
+   - mounting hardware details
+      - including proximity sensor which doesn't have holes
+
+enable isolcpus=3
+
+
+
+
+
+
 consider FATAL in all init routines
 
 review all tests
-enable isolcpus=3
 work on mc
 
 review use of printf
@@ -18,29 +34,8 @@ update i2c_test
 proximity
 - add enable routine
 
-haid@robot-ctlr:~/proj/proj_robot2 $ /bin/ls -1 devices
-  relay.c relay.h                      DONE
-  proximity.c proximity.h              DONE
-  encoder.c encoder.h                  DONE
-  mc.c mc.h
-
-haid@robot-ctlr:~/proj/proj_robot2 $ /bin/ls -1 tests/
-  Makefile                       in progress
-  relay                          DONE
-  i2c                            DONE
-  gpio                           DONE
-  realtime                       DONE
-  encoder                        DONE
-  proximity                      DONE
-  mc
-
 run the rt_gpio test pgms and check data on scope
 - fix build of realtime/module
-
-use git aliases
-  git config --global alias.root 'rev-parse --show-toplevel'
-
-xxxxxxxxxxxxxxxxxx
 
 upper levels of the software, design
 - real time thread for gpio, to feed proximity and encoders
@@ -56,9 +51,6 @@ alarm conditions to shut down motors
 - high motor current
 - motor-ctlr error condiiton
 - wheels turning too slowly  ?
-
-mounting hardware details
-- including proximity sensor which doesn't have holes
 
 integrate motor ctlr and encoders software
 
@@ -79,8 +71,8 @@ dbg
 - don't use memcpy in RW_MMIO
 - funcs, startup should get BCM base address, and use in timer test
 
-draw diagram of robot first level
-  leave room for 2nd level
+use git aliases
+  git config --global alias.root 'rev-parse --show-toplevel'
 
 ------------------------
 ---- more purchases ----
