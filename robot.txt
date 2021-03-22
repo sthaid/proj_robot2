@@ -2,8 +2,106 @@
 TITLE: INTRO - TODO
 ===========================
 
+next steps
+- more diagraming work
+  - mount for read prox sensor
+  - diagram wiring on both bottom and top
+- second lvl support
+  - tinkercat design
+  - 3d print
+
+place amazon order       ORDERS PLACED
+- dupont crimp kit
+- #18 wire
+- velcro straps
+- spade connectors
+- spade connectors crimper
+- m 2.5 spacers
+- 1/4 watt resistors
+- m 2 spacers
+- current monitoring sensor
+freckleface   ORDER PLACED
+- boards for bottom and top from freckleface
+
+------------------------------------
+---- purchases saveed for later ----
+------------------------------------
+
+- 9x11x 1/4 or 3/8 thick cutting board, farberware
+
+-----------------------------
+--- stuff I already have ----
+-----------------------------
+
+mounting h/w
+- circuit breaker                                  have 4mm 
+- term strips                                      have 4mm
+- 3 pwr supplies                                   4mm x 50mm probably okay
+- rear proximity sensor                            maybe just a cutout and tape down
+- motor mounts                                     use 3mm 
+
+--------------------------------
+---- how to crimp dupont -------
+--------------------------------
+
+ - video  https://www.youtube.com/watch?v=jET1QTP1B7c
+
+---------------------------------------
+---- notes on battery f connector -----
+---------------------------------------
+
+f connectors type yellow (#10 or #12), and crimp tool           IN CART
+ - f1 = 3/16  <== I have     4.75 mm
+ - f2 = 1/4 inch             6.35 mm
+ - my wire is #12
+
+---------------------------------------------------------
+--------NOTES ON proximity sensor  CURRENT --------------
+---------------------------------------------------------
+
+- 16 ma
+- rpi 4b current consumption   575 idle,   600 watching video,  885 startx
+   - https://raspi.tv/2019/how-much-power-does-the-pi4b-use-power-measurements
+- so total current, when idle, 
+    2 x 575
+    2 x  16
+  ---------
+    1.2 amps of 5v,  approx
+
+   at 12 v     1.2A x 5/12  = 0.5 amps
+   
+   batters is 8 Ah,  so idle duration is about 16 hours
+
+  todo - 
+    measure current using my power supply instead of the battery, and
+     see if optimizations, such as shutting down encoder thread processing is helpful
+     OR
+   use an i2c current sensor
+     https://wiki.seeedstudio.com/Grove-10A_DC_Current_Sensor-ACS725/
+             PURCHASED
+
+     grove acs725 current sensor
+
+
+--------------------------------
+----- ideas for later ----------
+--------------------------------
+
+set a led or the oled display when pgm is online,
+  and show activity, rotating indicator
+
+Mini External USB Stereo Speaker
+   PRODUCT ID: 3369
+
+====================================================
+====================================================
+====================================================
+====================================================
+
+buy parts
+
 continue work on mc+encoer test pgm
-- think about 2 motors
+- think about 2 motors, and how to sync their speeds
 
 draw diagram of robot first level
 - leave room for 2nd level
@@ -12,11 +110,6 @@ draw diagram of robot first level
       - including proximity sensor which doesn't have holes
 
 enable isolcpus=3
-
-
-
-
-
 
 consider FATAL in all init routines
 
