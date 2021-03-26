@@ -2,6 +2,22 @@
 TITLE: INTRO - TODO
 ===========================
 
+update current.c to support both ADCs
+
+power saving ideas
+- idle program when robot is not moving
+- switch off the top rpi
+- https://www.raspberrypi.org/forums/viewtopic.php?t=257144
+- How to save Power on your Raspberry Pi
+    Switch OFF USB/LAN IC.
+    Turn OFF HDMI.
+    Throttle CPU.
+    Disable Wi-Fi & Bluetooth.
+    Disable on-board LEDs
+- https://mlagerberg.gitbooks.io/raspberry-pi/content/5.1-power-consumption.html
+- my measurement, idle and with relay disabled
+  0.23 amps on the 12volt supply at 12.1 v
+
 next steps
 - more diagraming work
   - mount for read prox sensor
@@ -9,6 +25,8 @@ next steps
 - second lvl support
   - tinkercat design
   - 3d print
+- try running on battery power, and overnight
+- try attaching charger while running
 
 place amazon order       ORDERS PLACED
 - dupont crimp kit
@@ -328,6 +346,14 @@ Seeed Parts
            3 i2c
            1 pwm
            1 uart
+- GrovePi Plus HAT
+   - https://wiki.seeedstudio.com/GrovePi_Plus/
+           7 digital Ports
+           3 analoge Ports
+           3 I2C ports
+           1 Serial port connect to GrovePi
+           1 Serial port connect to Raspberry Pi
+           Grove header Vcc output Voltage: 5Vdc https://wiki.seeedstudio.com/GrovePi_Plus/
 
 Grove Cables ordered from Amazon and SeeedStudio
 - grove cables
@@ -411,6 +437,11 @@ Grove - I2C High Accuracy Temperature Sensor - MCP9808
   https://www.seeedstudio.com/Grove-I2C-High-Accuracy-Temperature-Sensor-MCP9808.html
   5v or 3.3v
   0x18 to 0x1f
+
+Grove - 10A DC Current Sensor (ACS725)
+  https://www.seeedstudio.com/Grove-10A-DC-Current-Sensor-ACS725-p-2927.html
+  non I2c
+
 
 Amazon
 ------
@@ -539,6 +570,25 @@ ADC On the Grove Base Hat for Raspberry Pi
 - https://wiki.seeedstudio.com/Grove_Base_Hat_for_Raspberry_Pi/
   Resources - Seeed Grove.py Library
 - https://files.seeedstudio.com/wiki/Grove_Base_Hat_for_Raspberry_Pi/res/STM32.pdf
+
+- - - - - - - - - - - - - - - - - - - - - 
+
+ADC On GrovePi Plus HAT for Raspberry Pi
+- https://wiki.seeedstudio.com/GrovePi_Plus/
+- https://files.seeedstudio.com/wiki/GrovePi_Plus/res/Setting_Up_Software_for_GrovePi.pdf
+- git clone https://github.com/DexterInd/GrovePi.git
+   - cd GrovePi/Software/Python/grove_i2c_adc   (contains sample code)
+        REG_ADDR_RESULT = 0x00
+        REG_ADDR_CONFIG = 0x02
+        def __init__(self,address=0x55):
+                self.address=address
+                bus.write_byte_data(self.address, self.REG_ADDR_CONFIG,0x20)
+        def adc_read(self):
+                data=bus.read_i2c_block_data(self.address, self.REG_ADDR_RESULT, 2)
+                raw_val=(data[0]&0x0f)<<8 | data[1]
+                return raw_val
+- chip ATMEGA328P
+     Datasheet: https://ww1.microchip.com/downloads/en/DeviceDoc/Atmel-7810-Automotive-Microcontrollers-ATmega328P_Datasheet.pdf
 
 - - - - - - - - - - - - - - - - - - - - - 
 
@@ -711,6 +761,16 @@ Pololu 38 kHz IR Proximity Sensor, Fixed Gain, High Brightness
   from ambient lighting. When applying shielding, keep in mind that reflection 
   off the shielding itself can cause undesired activation of the sensor.
 - I guess the emitter side should be UP/DOWN?
+
+Grove - 10A DC Current Sensor (ACS725)
+- https://wiki.seeedstudio.com/Grove-10A_DC_Current_Sensor-ACS725/
+- https://www.seeedstudio.com/Grove-10A-DC-Current-Sensor-ACS725-p-2927.html
+- The Grove - 10A DC Current Sensor (ACS725) can measure the DC current up to 10A and has a 
+  base sensitivity of 264mV/A. This sensor do not support AC current.
+- Refer to Grove Python Code:  grove_current_sensor.py
+- Sensitivity	264mV/A(Typ.)
+- current measuring pins,  5 top left  low side
+                           6 top right, high side
 
 ===========================
 TITLE: MOTOR_CTLR - POLOLU SIMPLE MOTOR CONTROLLER
