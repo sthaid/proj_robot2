@@ -18,11 +18,11 @@ int main(int argc, char **argv)
     while (true) {
         printf("enabling relay\n");
         relay_ctrl(RELAY_TEST, true);
-        sleep(1);
+        sleep(5);
 
         printf("disabling relay\n");
         relay_ctrl(RELAY_TEST, false);
-        sleep(1);
+        sleep(7);
     }
 
     return 0;
