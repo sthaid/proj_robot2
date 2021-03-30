@@ -33,6 +33,7 @@ static struct info_s {
     int sum;
 } info_tbl[] = { 
         { PROXIMITY_FRONT_GPIO_SIG, PROXIMITY_FRONT_GPIO_ENABLE },
+        { PROXIMITY_REAR_GPIO_SIG,  PROXIMITY_REAR_GPIO_ENABLE },
                            };
 
 static int poll_rate;
@@ -65,7 +66,7 @@ int proximity_init(void)
     for (id = 0; id < MAX_PROXIMITY; id++) {
         struct info_s * info = &info_tbl[id];
         set_gpio_func(info->gpio_enable, FUNC_OUT);
-        gpio_write(info->gpio_enable, 0);   // XXX check if this is a disable
+        gpio_write(info->gpio_enable, 0);
     }
 
     // create the thread to process the proximity gpio sig values, and to
@@ -90,10 +91,22 @@ bool proximity_check(int id, int *sum_arg, int *poll_rate_arg)
     if (sum_arg) *sum_arg = sum;
     if (poll_rate_arg) *poll_rate_arg = poll_rate;
     
-    return sum > (MAX_SIG/2);
+    return sum > MAX_SIG/8;
 }
 
-// XXX api to enable/disable
+void proximity_enable(int id)
+{
+    struct info_s * info = &info_tbl[id];
+
+    gpio_write(info->gpio_enable, 1);
+}
+
+void proximity_disable(int id)
+{
+    struct info_s * info = &info_tbl[id];
+
+    gpio_write(info->gpio_enable, 0);
+}
 
 // -----------------  THREAD--------------------------------------------
 
@@ -133,7 +146,7 @@ static void *proximity_thread(void *cx)
             struct info_s * info = &info_tbl[id];
             int sig, new_tail;
 
-            sig = (gpio_all >> info->gpio_sig) & 1;
+            sig = ((gpio_all >> info->gpio_sig) & 1) ? 0 : 1;
             new_tail = (info->tail+1) % MAX_SIG;
             info->sum += (sig - info->sig[new_tail]);
             info->sig[new_tail] = sig;
