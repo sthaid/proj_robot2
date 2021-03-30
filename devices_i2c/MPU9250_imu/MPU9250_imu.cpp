@@ -173,8 +173,48 @@ int main(int argc, char **argv)
             sleep(1);
         }
     } else if (strcmp(argv[1], "accel") == 0) {
-        // xxx 
-        printf("TBD\n");
+        int count = 0;
+        time_t time_now, time_last;
+        int ax, ay, az;
+        double axd, ayd, azd, a_total_squared;
+
+        #define ACCEL_ALERT 2.0
+
+        // wait for time to increment to the begining of the next second
+        time_last = time(NULL);
+        while ((time_now = time(NULL)) == time_last) {
+            usleep(1000);
+        }
+        time_last = time_now;
+
+        // loop forever
+        while (true) {
+            // read accel data
+            MPU9250_imu_get_acceleration(&ax, &ay, &az);
+            count++;
+
+            // convert accel data to g units, and check for large accel;
+            // when large accel detected, print ALERT msg
+            axd = (double)(ax-1200) / 16384;
+            ayd = (double)(ay-1200) / 16384;
+            azd = (double)(az-1200) / 16384;
+            a_total_squared = axd*axd + ayd*ayd + azd*azd;
+            if (a_total_squared > (ACCEL_ALERT*ACCEL_ALERT)) {
+                printf("\aALERT: ax,ay,az = %5.2f %5.2f %5.2f  total = %5.2f\n", 
+                       axd, ayd, azd, sqrt(a_total_squared));
+            }
+
+            // every second, print the read rate and the current accel values
+            if ((time_now = time(NULL)) != time_last) {
+                printf("ReadRate = %d /sec   ax,ay,az = %5.2f %5.2f %5.2f  total = %5.2f\n",
+                       count, axd, ayd, azd, sqrt(a_total_squared));
+                count = 0;
+                time_last = time_now;
+            }
+
+            // sleep 5 ms
+            usleep(5000);
+        }
     } else {
         printf("ERROR: invalid arg '%s'\n", argv[1]);
         return 1;
