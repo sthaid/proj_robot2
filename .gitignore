@@ -3,7 +3,7 @@
 *.cmd
 
 tests/gpio/gpio_test
-tests/i2c/i2c_test
+tests/i2c/MPU9250_imu
 tests/relay/relay_test
 tests/realtime/user_mode/rt_gpio_test
 tests/realtime/module/Module.symvers
