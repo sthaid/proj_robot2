@@ -2,11 +2,34 @@
 TITLE: INTRO - TODO
 ===========================
 
-update current.c to support both ADCs
+front wheel,
+- make 1 inch spacer, and mount to spacer
+
+tune proximity sensor
+- adjust software sensitivity, make this a param
+- the prox sensor on right is 20"
+                  on left is 24"
+
+gpio init should always init the outputs and relay disabled
+
+dbg
+- make a backup script, to google drive
+- safe_memcpy
+- don't use memcpy in RW_MMIO
+- funcs, startup should get BCM base address, and use in timer test
+
+run the rt_gpio test pgms and check data on scope
+
+===========================
+TITLE: INFO - SAVE THIS STUFF
+===========================
+
+how to crimp ---
+ - video  https://www.youtube.com/watch?v=jET1QTP1B7c
 
 power saving ideas
 - idle program when robot is not moving
-- switch off the top rpi
+- switch off the top rpi (OR bottom)
 - https://www.raspberrypi.org/forums/viewtopic.php?t=257144
 - How to save Power on your Raspberry Pi
     Switch OFF USB/LAN IC.
@@ -18,143 +41,18 @@ power saving ideas
 - my measurement, idle and with relay disabled
   0.23 amps on the 12volt supply at 12.1 v
 
-next steps
-- more diagraming work
-  - mount for read prox sensor
-  - diagram wiring on both bottom and top
-- second lvl support
-  - tinkercat design
-  - 3d print
-- try running on battery power, and overnight
-- try attaching charger while running
+f connectors type yellow (#10 or #12), and crimp tool ---
+- f1 = 3/16  <== I have     4.75 mm
+- f2 = 1/4 inch             6.35 mm
+- my wire is #12
 
-place amazon order       ORDERS PLACED
-- dupont crimp kit
-- #18 wire
-- velcro straps
-- spade connectors
-- spade connectors crimper
-- m 2.5 spacers
-- 1/4 watt resistors
-- m 2 spacers
-- current monitoring sensor
-freckleface   ORDER PLACED
-- boards for bottom and top from freckleface
-
-------------------------------------
----- purchases saveed for later ----
-------------------------------------
-
-- 9x11x 1/4 or 3/8 thick cutting board, farberware
-
------------------------------
---- stuff I already have ----
------------------------------
-
-mounting h/w
-- circuit breaker                                  have 4mm 
-- term strips                                      have 4mm
-- 3 pwr supplies                                   4mm x 50mm probably okay
-- rear proximity sensor                            maybe just a cutout and tape down
-- motor mounts                                     use 3mm 
-
---------------------------------
----- how to crimp dupont -------
---------------------------------
-
- - video  https://www.youtube.com/watch?v=jET1QTP1B7c
-
----------------------------------------
----- notes on battery f connector -----
----------------------------------------
-
-f connectors type yellow (#10 or #12), and crimp tool           IN CART
- - f1 = 3/16  <== I have     4.75 mm
- - f2 = 1/4 inch             6.35 mm
- - my wire is #12
-
----------------------------------------------------------
---------NOTES ON proximity sensor  CURRENT --------------
----------------------------------------------------------
-
-- 16 ma
-- rpi 4b current consumption   575 idle,   600 watching video,  885 startx
-   - https://raspi.tv/2019/how-much-power-does-the-pi4b-use-power-measurements
-- so total current, when idle, 
-    2 x 575
-    2 x  16
-  ---------
-    1.2 amps of 5v,  approx
-
-   at 12 v     1.2A x 5/12  = 0.5 amps
-   
-   batters is 8 Ah,  so idle duration is about 16 hours
-
-  todo - 
-    measure current using my power supply instead of the battery, and
-     see if optimizations, such as shutting down encoder thread processing is helpful
-     OR
-   use an i2c current sensor
-     https://wiki.seeedstudio.com/Grove-10A_DC_Current_Sensor-ACS725/
-             PURCHASED
-
-     grove acs725 current sensor
-
-
---------------------------------
------ ideas for later ----------
---------------------------------
-
-set a led or the oled display when pgm is online,
-  and show activity, rotating indicator
-
-Mini External USB Stereo Speaker
-   PRODUCT ID: 3369
-
-====================================================
-====================================================
-====================================================
-====================================================
-
-buy parts
-
-continue work on mc+encoer test pgm
-- think about 2 motors, and how to sync their speeds
-
-draw diagram of robot first level
-- leave room for 2nd level
-- design layout of level 0
-   - mounting hardware details
-      - including proximity sensor which doesn't have holes
-
-enable isolcpus=3
-
-consider FATAL in all init routines
-
-review all tests
-work on mc
-
-review use of printf
-- cat tests use printf instead of INFO
-- devices/encoder using printf, and mc.c
-
-update i2c_test
-- cmds to : read, oled, accel, calibrate magnetometer
-     test magnetometer with other rpi
-
-proximity
-- add enable routine
-
-run the rt_gpio test pgms and check data on scope
-- fix build of realtime/module
-
-upper levels of the software, design
-- real time thread for gpio, to feed proximity and encoders
-
-thread for i2c, 
-- collect data from the different devices at different rates
-- collect accel data rapidly
-- alarm on high accel
+misc for later
+- consider FATAL in all init routines
+- review all tests
+- work on mc
+- review use of printf
+   - cat tests use printf instead of INFO
+   - devices/encoder using printf, and mc.c
 
 alarm conditions to shut down motors
 - high accel
@@ -163,80 +61,16 @@ alarm conditions to shut down motors
 - motor-ctlr error condiiton
 - wheels turning too slowly  ?
 
-integrate motor ctlr and encoders software
+set a led or the oled display when pgm is online,
+  and show activity, rotating indicator
 
-initial test commands
-- go forward
-- turn clockwise
-- turn counter-clockwise
+Mini External USB Stereo Speaker
+   PRODUCT ID: 3369
 
-control pgm
-- design screen layout and ctrls
-- use curses?
-
-review video on the connector pin crimping
-
-dbg
-- make a backup script, to google drive
-- safe_memcpy
-- don't use memcpy in RW_MMIO
-- funcs, startup should get BCM base address, and use in timer test
-
-use git aliases
-  git config --global alias.root 'rev-parse --show-toplevel'
-
-------------------------
----- more purchases ----
-------------------------
-
-mini usb powered speaker
-  https://www.adafruit.com/product/3369?gclid=Cj0KCQiA1pyCBhCtARIsAHaY_5dlgZhTCQnYGxz1FiyT1kMasrLJ9ZTd90ENvQ0SRazVM1OeX81B2s0aAgseEALw_wcB
-
-sensor mount standoffs, for rpi
-  https://www.pololu.com/product/1952
-
-standoffs
-  https://www.amazon.com/Litorange-320PCS-Standoff-Assorted-Assortment/dp/B07D78PFQL/ref=sr_1_3?dchild=1&keywords=m2%2Bscrews%2Band%2Bstandoffs&qid=1615347745&s=hi&sr=1-3&th=1
-
---- not as good ?  ---
-other speaker
-  https://www.amazon.com/gp/product/B088CSDZQM/ref=ox_sc_act_title_2?smid=A2DA7S2LQRKGVB&psc=1
-
-standoffs
-  https://www.trossenrobotics.com/store/p/6997-Grove-Mounting-Kit.aspx
-  http://www.mindsensors.com/ev3-and-nxt/22-mounting-kit-for-grove-sensor
-
-old, more to buy list
-- mounting board,  3/8" thick chopping board
-- mounting hardware for rpi and sensors, standoffs and screws
-- dupont? connector pins and crimper, male and female
-- pin connectors and crimp tool
-- larger oled display, 5V, same chip if possible
-- powered speaker, 5V, USB?
-- mounting h/w for grove sensors
-
-------------------------
----- old todo list  ----
-------------------------
-
-plan and buy parts for power distribution
-- mount them on a small board, leave room for motor ctlrs too
-- num 12v circuits
-  2 motors
-  2 rpis
-  1 5V  to upper level
-  1  battery charger connect 
-- num 5v circuits
-  N proximity sensors
-  i2c displays ?
-  relays
-
-estimate weight of robot
-- battery
-- motors
-- chassis
-
-check on my rpi post
+button
+  Grove - Button SKU 101020003
+  Grove - Dual Button
+     SKU 111020103
 
 ===========================
 TITLE: INTRO - ROBOT CAPABILITY IDEAS
@@ -442,7 +276,6 @@ Grove - 10A DC Current Sensor (ACS725)
   https://www.seeedstudio.com/Grove-10A-DC-Current-Sensor-ACS725-p-2927.html
   non I2c
 
-
 Amazon
 ------
 Grove I2C 4 Ch / 16 Bit Analog to Digital Converter for Raspberry Pi/Arduino / ESP8266
@@ -458,8 +291,8 @@ DSD TECH 2 PCS IIC OLED Display 0.91 Inch for Arduino ARM
  The main chip is SSD1306; supports DC 3.3V to 5.0V supply. Working Temperature: -30 degrees ~ 70 degree
   https://www.raspberrypi-spy.co.uk/2018/04/i2c-oled-display-module-with-raspberry-pi/
 
-Pololu (relay and sensor)
--------------------------
+Pololu (relay and proximity sensor)
+-----------------------------------
 Pololu Relay
   2.5V enables
   rpi gpio
@@ -470,6 +303,14 @@ straight 0.1" male header for the control connections
 Pololu 38 kHz IR Proximity Sensor, Fixed Gain, High Brightness
    voltage divider
    https://www.raspberrypi.org/forums/viewtopic.php?t=209958
+
+Grove Latching Relay
+--------------------
+  https://www.seeedstudio.com/Grove-2-Coil-Latching-Relay.html
+  https://wiki.seeedstudio.com/Grove-2-Coil_Latching_Relay/
+  https://www.mouser.com/datasheet/2/744/Seeed_103020010-1217533.pdf
+  Grove - 2-Coil Latching Relay
+     https://www.mouser.com/ProductDetail/Seeed-Studio/103020010?qs=1%252B9yuXKSi8C7XcS%2FsSDTng%3D%3D
 
 ===========================
 TITLE: SENSORS - QUADRATURE ENCODER
@@ -547,6 +388,7 @@ SeeedStudio Grove Demo Code
 - unzip master.zip
 - rm master.zip
 - cd grove.py-master
+- sudo apt install python-pip
 - sudo apt install python3-pip
 - ./install.sh
 - cd grove
@@ -772,6 +614,13 @@ Grove - 10A DC Current Sensor (ACS725)
 - current measuring pins,  5 top left  low side
                            6 top right, high side
 
+Grove - latching relay
+  https://www.seeedstudio.com/Grove-2-Coil-Latching-Relay.html
+  https://wiki.seeedstudio.com/Grove-2-Coil_Latching_Relay/
+  https://www.mouser.com/datasheet/2/744/Seeed_103020010-1217533.pdf
+  Grove - 2-Coil Latching Relay
+     https://www.mouser.com/ProductDetail/Seeed-Studio/103020010?qs=1%252B9yuXKSi8C7XcS%2FsSDTng%3D%3D
+
 ===========================
 TITLE: MOTOR_CTLR - POLOLU SIMPLE MOTOR CONTROLLER
 ===========================
@@ -992,7 +841,8 @@ Reboot, login,
 - make the IP address static in router settings
 - add IP address to /etc/hosts on home computer
     192.168.1.145    robot-ctlr
-    192.168.1.44     robot-intfc
+    192.168.1.44     robot-brain
+    192.168.1.11     robot-test
 
 Upgrade:
 - apt update
@@ -1121,6 +971,10 @@ https://www.raspberrypi.org/forums/viewtopic.php?t=228727
    . set real time
 - also may have exmple of timer code
 
+verify cpus isolated
+  cat /sys/devices/system/cpu/isolated
+  cat /sys/devices/system/cpu/present
+
 https://www.raspberrypi.org/forums/viewtopic.php?f=29&t=216051&p=1599557&sid=2149ef600151289ddf095fdc3ebd69c5#p1599557
     int prio = sched_get_priority_max(SCHED_FIFO);
     struct sched_param param;
@@ -1193,10 +1047,6 @@ find the address of the broadcom
                 fprintf(stderr,"Unknown CPU type\n");
                 exit(1);
         }
-
-verify cpus isolated
-  cat /sys/devices/system/cpu/isolated
-  cat /sys/devices/system/cpu/present
 
 ===========================
 TITLE: RPI - GENERAL TIPS
