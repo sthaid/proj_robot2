@@ -13,7 +13,7 @@ static u8g2_t u8g2;
 static uint8_t u8x8_byte_linux_i2c(u8x8_t * u8x8, uint8_t msg, uint8_t arg_int, void *arg_ptr);
 static uint8_t u8x8_linux_i2c_delay(u8x8_t * u8x8, uint8_t msg, uint8_t arg_int, void *arg_ptr);
 
-// ----------------------------------------------------------
+// -----------------  C LANGUAGE API  -----------------------------------
 
 int SSD1306_oled_init(int dev_addr_arg)
 {
@@ -71,8 +71,6 @@ int SSD1306_oled_drawstr(char *s)
     u8g2_SendBuffer(&u8g2);
     return 0;
 }
-
-// ----------------------------------------------------------
 
 // return 1 for success, 0 for failure
 static uint8_t u8x8_byte_linux_i2c(u8x8_t * u8x8, uint8_t msg, uint8_t arg_int, void *arg_ptr)
@@ -138,3 +136,34 @@ static uint8_t u8x8_linux_i2c_delay(u8x8_t * u8x8, uint8_t msg, uint8_t arg_int,
     i2c_delay_ns(nsec);
     return 1;
 }
+
+// -----------------  C LANGUAGE TEST PROGRAM  ---------------------------
+
+#ifdef TEST
+
+// XXX not tested
+
+#include <stdio.h>
+#include <stdbool.h>
+#include <unistd.h>
+
+int main(int argc, char **argv)
+{
+    if (SSD1306_oled_init(0) < 0) {
+        printf("SSD1306_oled_init failed\n");
+        return 1;
+    }
+
+    while (true) {
+        SSD1306_oled_drawstr("HELLO");
+        sleep(1);
+        SSD1306_oled_drawstr("WORLD");
+        sleep(1);
+    }
+
+    return 0;
+}
+
+#endif
+
+

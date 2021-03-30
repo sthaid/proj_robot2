@@ -4,7 +4,10 @@ LDFLAGS  = ../../devices_i2c/u8g2/libu8g2.a -lstdc++ -lm
 
 TARGETS = MPU9250_imu \
           BMP280_tp \
-          STM32_adc
+          STM32_adc \
+          SSD1306_oled \
+          BME680_tphg \
+          MCP9808_temp
 
 all: $(TARGETS)
 
@@ -36,21 +39,36 @@ OBJ_STM32_adc = STM32_adc.o \
 STM32_adc.o : CPPFLAGS += -I../../devices_i2c/STM32_adc
 STM32_adc: $(OBJ_STM32_adc)
 	$(CC) -o $@ $(OBJ_STM32_adc) -lm -lstdc++
-	
+
+OBJ_SSD1306_oled = SSD1306_oled.o \
+                ../../devices_i2c/i2c/i2c.o \
+                ../../devices_i2c/i2c/I2Cdev.o \
+                ../../devices_i2c/i2c/Wire.o \
+                ../../util/misc.o
+SSD1306_oled.o : CPPFLAGS += -I../../devices_i2c/SSD1306_oled
+SSD1306_oled: $(OBJ_SSD1306_oled)
+	$(CC) -o $@ $(OBJ_SSD1306_oled) ../../devices_i2c/u8g2/libu8g2.a -lm -lstdc++
+
+OBJ_BME680_tphg = BME680_tphg.o \
+                ../../devices_i2c/BME680_tphg/bme680/bme680.cpp \
+                ../../devices_i2c/i2c/i2c.o \
+                ../../devices_i2c/i2c/I2Cdev.o \
+                ../../devices_i2c/i2c/Wire.o \
+                ../../util/misc.o
+BME680_tphg.o : CPPFLAGS += -I../../devices_i2c/BME680_tphg
+BME680_tphg: $(OBJ_BME680_tphg)
+	$(CC) -o $@ $(OBJ_BME680_tphg) ../../devices_i2c/u8g2/libu8g2.a -lm -lstdc++
+
+OBJ_MCP9808_temp = MCP9808_temp.o \
+                ../../devices_i2c/i2c/i2c.o \
+                ../../devices_i2c/i2c/I2Cdev.o \
+                ../../devices_i2c/i2c/Wire.o \
+                ../../util/misc.o
+MCP9808_temp.o : CPPFLAGS += -I../../devices_i2c/MCP9808_temp
+MCP9808_temp: $(OBJ_MCP9808_temp)
+	$(CC) -o $@ $(OBJ_MCP9808_temp) -lm -lstdc++
+
 clean:
 	rm -f $(TARGETS) *.o
 	find ../../devices_i2c/ -name \*.o -exec rm {} \;
 	find ../../util/ -name \*.o -exec rm {} \;
-
-# xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-
-OLD_SRC      = \
-           ../../devices_i2c/MCP9808_temp/MCP9808_temp.c \
-           ../../devices_i2c/SSD1306_oled/SSD1306_oled.c \
-           ../../devices_i2c/BME680_tphg/BME680_tphg.c \
-           ../../devices_i2c/BME680_tphg/bme680/bme680.cpp \
-           ../../devices_i2c/i2c/i2c.c \
-           ../../devices_i2c/i2c/I2Cdev.cpp \
-           ../../devices_i2c/i2c/Wire.cpp \
-           ../../util/misc.c
-

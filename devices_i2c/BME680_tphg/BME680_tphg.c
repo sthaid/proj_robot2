@@ -14,7 +14,7 @@ static int8_t bme680_i2c_read(uint8_t addr, uint8_t reg_addr, uint8_t * reg_data
 static int8_t bme680_i2c_write(uint8_t addr, uint8_t reg_addr, uint8_t * reg_data, uint16_t len);
 static void bme680_delay_ms(uint32_t ms);
 
-// ------------------------------------------------------------
+// -----------------  C LANGUAGE API  -----------------------------------
 
 int BME680_tphg_init(int dev_addr_arg)
 {
@@ -128,8 +128,6 @@ int BME680_tphg_read(double *temperature, double *pressure, double *humidity, do
     return 0;
 }
 
-// ------------------------------------------------------------
-
 static int8_t bme680_i2c_read(uint8_t dev_addr, uint8_t reg_addr, uint8_t * reg_data, uint16_t len)
 {
     return i2c_read(dev_addr, reg_addr, reg_data, len);
@@ -144,3 +142,35 @@ static void bme680_delay_ms(uint32_t ms)
 {
     i2c_delay_ns(ms*1000000);
 }
+
+// -----------------  C LANGUAGE TEST PROGRAM  ---------------------------
+
+#ifdef TEST
+
+// XXX not tested
+
+#include <stdio.h>
+#include <unistd.h>
+
+int main(int argc, char **argv)
+{
+    double temperature, pressure, humidity;
+
+    if (BME680_tphg_init(0) < 0) {
+        printf("BME680_tphg_init failed\n");
+        return 1;
+    }
+
+    while (true) {
+        BME680_tphg_read(&temperature, &pressure, &humidity, NULL);
+        printf("%0.1f C   %0.0f Pa   %0.2f inch-Hg   %0.1f %%\n", 
+                temperature, 
+                pressure, pressure/3386,
+                humidity);
+        sleep(1);
+    }
+
+    return 0;
+}
+
+#endif

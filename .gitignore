@@ -6,6 +6,9 @@ tests/gpio/gpio_test
 tests/i2c/MPU9250_imu
 tests/i2c/BMP280_tp
 tests/i2c/STM32_adc
+tests/i2c/BME680_tphg
+tests/i2c/MCP9808_temp
+tests/i2c/SSD1306_oled
 tests/relay/relay_test
 tests/realtime/user_mode/rt_gpio_test
 tests/realtime/module/Module.symvers

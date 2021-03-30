@@ -11,7 +11,7 @@
 
 static int dev_addr;
 
-// ---------------------------------------------------------
+// -----------------  C LANGUAGE API  -----------------------------------
 
 int MCP9808_temp_init(int dev_addr_arg)
 {
@@ -46,3 +46,34 @@ int MCP9808_temp_read(double *degc)
 
     return 0;
 }
+
+// -----------------  C LANGUAGE TEST PROGRAM  ---------------------------
+
+#ifdef TEST
+
+// XXX not tested
+
+#include <stdio.h>
+#include <stdbool.h>
+#include <unistd.h>
+
+int main(int argc, char **argv)
+{
+    double temperature;
+
+    if (MCP9808_temp_init(0) < 0) {
+        printf("MCP9808_temp_init failed\n");
+        return 1;
+    }
+
+    while (true) {
+        MCP9808_temp_read(&temperature);
+        printf("Temperature: %0.1f\n", temperature);
+        sleep(1);
+    }
+
+    return 0;
+}
+
+#endif
+
