@@ -402,7 +402,7 @@ static void curses_runtime(void (*update_display)(int maxy, int maxx), int (*inp
         // get window size, and print whenever it changes
         getmaxyx(window, maxy, maxx);
         if (maxy != maxy_last || maxx != maxx_last) {
-            INFO("maxy=%d maxx=%d\n", maxy, maxx);
+            //INFO("maxy=%d maxx=%d\n", maxy, maxx);
             maxy_last = maxy;
             maxx_last = maxx;
         }

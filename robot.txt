@@ -5,11 +5,6 @@ TITLE: INTRO - TODO
 front wheel,
 - make 1 inch spacer, and mount to spacer
 
-tune proximity sensor
-- adjust software sensitivity, make this a param
-- the prox sensor on right is 20"
-                  on left is 24"
-
 gpio init should always init the outputs and relay disabled
 
 dbg
@@ -71,6 +66,13 @@ button
   Grove - Button SKU 101020003
   Grove - Dual Button
      SKU 111020103
+
+tune proximity sensor
+- adjust software sensitivity, make this a param
+- not totally sure they are that much different, but ...
+   - the prox sensor on right is 20"
+                     on left is 24"
+
 
 ===========================
 TITLE: INTRO - ROBOT CAPABILITY IDEAS
