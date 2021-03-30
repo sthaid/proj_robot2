@@ -141,8 +141,6 @@ static uint8_t u8x8_linux_i2c_delay(u8x8_t * u8x8, uint8_t msg, uint8_t arg_int,
 
 #ifdef TEST
 
-// XXX not tested
-
 #include <stdio.h>
 #include <stdbool.h>
 #include <unistd.h>
