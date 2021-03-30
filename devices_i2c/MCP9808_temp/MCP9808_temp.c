@@ -51,8 +51,6 @@ int MCP9808_temp_read(double *degc)
 
 #ifdef TEST
 
-// XXX not tested
-
 #include <stdio.h>
 #include <stdbool.h>
 #include <unistd.h>

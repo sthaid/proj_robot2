@@ -147,8 +147,6 @@ static void bme680_delay_ms(uint32_t ms)
 
 #ifdef TEST
 
-// XXX not tested
-
 #include <stdio.h>
 #include <unistd.h>
 
