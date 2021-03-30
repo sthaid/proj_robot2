@@ -4,6 +4,8 @@
 
 tests/gpio/gpio_test
 tests/i2c/MPU9250_imu
+tests/i2c/BMP280_tp
+tests/i2c/STM32_adc
 tests/relay/relay_test
 tests/realtime/user_mode/rt_gpio_test
 tests/realtime/module/Module.symvers
