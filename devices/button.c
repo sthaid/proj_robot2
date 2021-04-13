@@ -22,7 +22,7 @@ static void *button_thread(void *cx);
 
 // -----------------  API  ---------------------------------------------
 
-int button_init(int num_buttons, ...)   // int gpio_pin, ...
+int button_init(int max_info_arg, ...)   // int gpio_pin, ...
 {
     static pthread_t tid;
     va_list ap;
@@ -40,12 +40,12 @@ int button_init(int num_buttons, ...)   // int gpio_pin, ...
     }
 
     // save hardware info
-    va_start(ap, num_buttons);
-    for (int i = 0; i < num_buttons; i++) {
+    va_start(ap, max_info_arg);
+    for (int i = 0; i < max_info_arg; i++) {
         int gpio_pin = va_arg(ap, int);
         info_tbl[i].gpio = gpio_pin;
     }
-    max_info = num_buttons;
+    max_info = max_info_arg;
     va_end(ap);
 
     // create the thread to process the button gpio sig values, and to
