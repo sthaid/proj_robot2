@@ -21,7 +21,8 @@ extern "C" {
 #define PAGE_SIZE 4096L
 #define ROUND_UP(x,n) (((uint64_t)(x) + ((uint64_t)(n) - 1)) & ~((uint64_t)(n) - 1))  // x must be pwr 2
 
-#define IS_BIT_SET(n,pos) (((n) >> (pos)) & 1)
+#define IS_BIT_SET(n,pos) ((((n) >> (pos)) & 1) == 1)
+#define IS_BIT_CLR(n,pos) ((((n) >> (pos)) & 1) == 0)
 // XXX others isclr, setbit, clrbit
 
 // -----------------  LOGGING  -----------------------------------
