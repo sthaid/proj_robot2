@@ -5,8 +5,10 @@
 extern "C" {
 #endif
 
-int current_init(void);
-int current_read(int adc_chan, double *current);
+#include <stdarg.h>
+
+int current_init(int max_info, ...);
+int current_read(int id, double *current);
 
 #ifdef __cplusplus
 }
