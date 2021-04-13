@@ -1,0 +1,1 @@
+../devices/digital/proximity.h
