@@ -100,7 +100,7 @@ double MPU9250_imu_mag_to_heading(int mx, int my, int mx_cal, int my_cal)
 {
     double heading;
 
-    heading = atan2(mx-mx_cal, my-my_cal) * (180 / M_PI);
+    heading = atan2(-(my-my_cal), mx-mx_cal) * (180 / M_PI);
     if (heading < 0) heading += 360;
     return heading;
 }
@@ -178,7 +178,7 @@ int main(int argc, char **argv)
         int ax, ay, az;
         double axd, ayd, azd, a_total_squared;
 
-        #define ACCEL_ALERT 2.0
+        #define ACCEL_ALERT 1.3
 
         // wait for time to increment to the begining of the next second
         time_last = time(NULL);
