@@ -109,12 +109,19 @@ static inline void gpio_write(int pin, int value)
 
 // -----------------  GPIO: INIT & EXIT  ------------------
 
-static inline int gpio_init(int init)
+static inline int gpio_init(void)
 {
 #ifndef __KERNEL__
     int fd, rc;
     int okay;
+#endif
 
+    // if already initialized the return success
+    if (gpio_regs) {
+        return 0;
+    }
+
+#ifndef __KERNEL__
     // verify bcm version
     rc = system("grep BCM2711 /proc/cpuinfo > /dev/null");
     okay = WIFEXITED(rc) && WEXITSTATUS(rc) == 0;
@@ -143,19 +150,16 @@ static inline int gpio_init(int init)
     gpio_regs = ioremap(GPIO_BASE_ADDR, 0x1000);
 #endif
 
-    // if init is requested then all GPIO in range 0..31 that are FUNC_IN or FUNC_OUT
+    // GPIO in range 0..31 that are FUNC_IN or FUNC_OUT
     // are initialized to: FUNC_IN, PULL_DOWN, and output set to 0
-    if (init) {
-        int pin, func;
-        for (pin = 0; pin < 32; pin++) {
-            func = get_gpio_func(pin);
-            if (func == FUNC_IN || func == FUNC_OUT) {
-                if (func == FUNC_OUT) {
-                    set_gpio_func(pin, FUNC_IN);
-                }
-                set_gpio_pull(pin, PULL_DOWN);
-                gpio_write(pin, 0);
+    for (int pin = 0; pin < 32; pin++) {
+        int func = get_gpio_func(pin);
+        if (func == FUNC_IN || func == FUNC_OUT) {
+            if (func == FUNC_OUT) {
+                set_gpio_func(pin, FUNC_IN);
             }
+            set_gpio_pull(pin, PULL_DOWN);
+            gpio_write(pin, 0);
         }
     }
 

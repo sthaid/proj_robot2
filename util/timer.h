@@ -32,7 +32,14 @@ static inline int timer_init(void)
 #ifndef __KERNEL__
     int fd, rc;
     int okay;
+#endif
 
+    // if already initialized then return success
+    if (timer_regs) {
+        return 0;
+    }
+
+#ifndef __KERNEL__
     // verify bcm version
     rc = system("grep BCM2711 /proc/cpuinfo > /dev/null");
     okay = WIFEXITED(rc) && WEXITSTATUS(rc) == 0;
