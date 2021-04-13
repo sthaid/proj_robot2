@@ -16,7 +16,7 @@ static struct info_s {
     bool last_state;
     bool pressed;
 } info_tbl[10];
-int max_info;
+static int max_info;
 
 static void *button_thread(void *cx);
 

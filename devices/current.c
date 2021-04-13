@@ -12,7 +12,7 @@
 static struct info_s {
     int adc_chan;
 } info_tbl[10];
-int max_info;
+static int max_info;
 
 // -----------------  API  --------------------------------------
 
