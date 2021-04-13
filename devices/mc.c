@@ -36,11 +36,11 @@
 //
 
 static struct info_s {
-    char *devname;
+    char devname[100];   // for example: "/dev/ttyACM0"
     int fd;
-} info_tbl[] = {
-        { "/dev/ttyACM0", -1 },
-                    };
+    int error_status_last;
+} info_tbl[10];
+static int max_info;
 
 //
 // prototypes
@@ -58,27 +58,33 @@ static unsigned char crc(unsigned char message[], unsigned char length);
 
 // -----------------  INIT API  --------------------------------------------
 
-int mc_init(void)
+int mc_init(int max_info_arg, ...)  // char *devname, ...
 {
     static pthread_t tid;
     int id, error_status;
+    va_list ap;
 
-    // sanity check MAX_MC, which is defined in mc.h
-    if (MAX_MC != (sizeof(info_tbl) / sizeof(struct info_s))) {
-        FATAL("define MAX_MC is incorrect\n");
-    }
-
-    // sanity check that mc_init has not already been called
+    // check that mc_init has not already been called
     if (tid) {
         ERROR("already initialized\n");
         return -1;
     }
 
+    // save hardware info
+    va_start(ap, max_info_arg);
+    for (int i = 0; i < max_info_arg; i++) {
+        strcpy(info_tbl[i].devname, va_arg(ap, char*));
+        info_tbl[i].fd = -1;
+        info_tbl[i].error_status_last = 1;  // Safe Start Violation
+    }
+    max_info = max_info_arg;
+    va_end(ap);
+
     // init crc table
     crc_init();
 
     // open the motor ctlrs
-    for (id = 0; id < MAX_MC; id++) {
+    for (id = 0; id < max_info; id++) {
         struct info_s * info = &info_tbl[id];
 
         // open usb serial devname
@@ -235,30 +241,26 @@ int mc_get_fw_ver(int id, int *product_id, int *fw_ver_maj_bcd, int *fw_ver_min_
 // XXX need a way to propogate failure info
 static void *monitor_thread(void *cx)
 {
-    int  id;
+    int  id, error_status, curr_limit_cnt;
     bool stop_all_motors;
-    int  error_status, error_status_last[MAX_MC];
-    int curr_limit_cnt;
-
-    for (id = 0; id < MAX_MC; id++) {
-        error_status_last[id] = 1;  // Safe Start Violation
-    }
 
     while (true) {
         stop_all_motors = false;
-        for (id = 0; id < MAX_MC; id++) {
+        for (id = 0; id < max_info; id++) {
+            struct info_s * info = &info_tbl[id];
+
             // get error status 
             error_status = -1;
             mc_status(id, &error_status);
 
             // if not okay now, and was okay last time then stop all motors
-            if (error_status != 0 && error_status_last[id] == 0) {
+            if (error_status != 0 && info->error_status_last == 0) {
                 ERROR("stop_all_motors, id=%d error_status=0x%x\n", id, error_status);
                 stop_all_motors = true;
-                error_status_last[id] = error_status;
+                info->error_status_last = error_status;
                 break;
             }
-            error_status_last[id] = error_status;
+            info->error_status_last = error_status;
 
             // check for active current limitting; if so then stop all motors
             // Variable description:
@@ -276,7 +278,7 @@ static void *monitor_thread(void *cx)
 
         // if something has gone wrong then stop all motors
         if (stop_all_motors) {
-            for (id = 0; id < MAX_MC; id++) {
+            for (id = 0; id < max_info; id++) {
                 mc_stop(id);
             }
         }

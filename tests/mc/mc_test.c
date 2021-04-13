@@ -1,5 +1,4 @@
-// XXX 
-// add more cmds
+// XXX  add more cmds
 
 #include <stdio.h>
 #include <string.h>
@@ -8,20 +7,22 @@
 #include <pthread.h>
 #include <curses.h>
 
-#include <misc.h>
+#include <config_hw.h>
 #include <mc.h>
-#include <gpio.h>
-#include <timer.h>
 #include <encoder.h>
+#include <misc.h>
 
 //
 // defines
 //
 
-#define MAX_LOGMSG_STRS 128
+#define MAX_MC 2
 
 #define COLOR_PAIR_RED   1
 #define COLOR_PAIR_CYAN  2
+
+#define MAX_LOGMSG_STRS 128
+#define LOG_FILENAME "mc_test.log"
 
 //
 // typedefs
@@ -65,37 +66,31 @@ static void curses_runtime(void (*update_display)(int maxy, int maxx), int (*inp
 
 // -----------------  MAIN  -------------------------------
 
-#define LOG_FILENAME "mc_test.log"
-
 int main(int argc, char **argv)
 {
     pthread_t tid;
 
-    // create thread to read the tail of logfile and copy
-    // the new lines added to the logfile to logmsgs array
+    // init logging
+    // - create thread to read the tail of logfile and copy
+    //   the new lines added to the logfile to logmsgs array
+    // - init logging to LOG_FILENAME
     pthread_create(&tid, NULL, logfile_monitor_thread, NULL);
     while (logfile_monitor_thread_running == false) {
         usleep(1000);
     }
-
-    // initialize
     if (logmsg_init(LOG_FILENAME) < 0) {
         fprintf(stderr, "FATAL: logmsg_init failed, %s\n", strerror(errno));
         return 1;
     }
-    if (gpio_init(true) < 0) {
-        fprintf(stderr, "FATAL: gpio_init failed\n");
-        return 1;
-    }
-    if (timer_init() < 0) {
-        fprintf(stderr, "FATAL: timer_init failed\n");
-        return 1;
-    }
-    if (encoder_init() < 0) {
+
+    // initialize encoder and motor-ctlr
+    if (encoder_init(2, ENCODER_GPIO_LEFT_B, ENCODER_GPIO_LEFT_A,
+                        ENCODER_GPIO_RIGHT_B, ENCODER_GPIO_RIGHT_A))
+    {
         fprintf(stderr, "FATAL: encoder_init failed\n");
         return 1;
     }
-    if (mc_init() < 0) {
+    if (mc_init(MAX_MC, LEFT_MOTOR, RIGHT_MOTOR) < 0) {
         fprintf(stderr, "FATAL: mc_init failed\n");
         return 1;
     }
@@ -139,6 +134,7 @@ static void *logfile_monitor_thread(void *cx)
     }
 }
 
+// XXX comments
 // --------------------------------------------------------
 
 static void update_display(int maxy, int maxx)
@@ -146,7 +142,7 @@ static void update_display(int maxy, int maxx)
     // display alert status for 5 secs
     // row 0
     if ((alert_msg_time_us != 0) &&
-        (timer_get() - alert_msg_time_us < 5000000))
+        (microsec_timer() - alert_msg_time_us < 5000000))
     {
         attron(COLOR_PAIR(COLOR_PAIR_RED));
         mvprintw(0, 40, "%s", alert_msg);
@@ -211,7 +207,7 @@ static void update_display(int maxy, int maxx)
 
     // display cmdline
     // row maxy-1
-    if ((timer_get() % 1000000) > 500000) {
+    if ((microsec_timer() % 1000000) > 500000) {
         mvprintw(maxy-1, 0, "> %s", cmdline);
     } else {
         mvprintw(maxy-1, 0, "> %s_", cmdline);
@@ -365,7 +361,7 @@ static void display_alert(char *fmt, ...)
 
     INFO("ALERT: %s\n", alert_msg);
 
-    alert_msg_time_us = timer_get();
+    alert_msg_time_us = microsec_timer();
 }
 
 // -----------------  CURSES WRAPPER  ----------------------------------------

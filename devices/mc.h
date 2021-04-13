@@ -1,7 +1,11 @@
 #ifndef __MC_H__
 #define __MC_H__
 
-#define MAX_MC 1
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#include <stdarg.h>
 
 //
 // defines: variable identifiers
@@ -63,7 +67,7 @@
 // prototypes
 //
 
-int mc_init(void);
+int mc_init(int max_info, ...);
 
 int mc_enable(int id);
 int mc_status(int id, int *error_status);
@@ -78,5 +82,9 @@ int mc_set_motor_limit(int id, int limit_id, int value);
 int mc_set_current_limit(int id, int milli_amps);
 
 int mc_get_fw_ver(int id, int *product_id, int *fw_ver_maj_bcd, int *fw_ver_min_bcd);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

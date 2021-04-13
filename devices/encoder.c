@@ -6,7 +6,6 @@
 #include <string.h>
 #include <errno.h>
 
-#include <config_hw.h>
 #include <encoder.h>
 #include <gpio.h>
 #include <timer.h>
@@ -39,15 +38,15 @@ static struct info_s {
     unsigned int gpio_a;
     unsigned int gpio_b;
     unsigned int errors;
+    unsigned int last_val;
     int          pos_offset;  // xxx 64bit
     unsigned int tail;
     struct history_s {
         int pos;  // xxx 64bit
         uint64_t time;
     } history[MAX_HISTORY];
-} info_tbl[] = {
-    { ENCODER0_GPIO_A, ENCODER0_GPIO_B, },
-                };
+} info_tbl[10];
+static int max_info;
 
 static unsigned int poll_rate;   // units = persec
 
@@ -59,18 +58,32 @@ static void *encoder_thread(void *cx);
 
 // -----------------  API  ----------------------------------------
 
-int encoder_init(void)
+int encoder_init(int max_info_arg, ...)  // int gpio_a, int gpio_b, ...
 {
     static pthread_t tid;
+    va_list ap;
 
-    // sanity check MAX_ENCODER, which is defined in encoder.h
-    if (MAX_ENCODER != (sizeof(info_tbl) / sizeof(struct info_s))) {
-        FATAL("define MAX_ENCODER is incorrect\n");
+    // if already initialized then return success
+    if (tid) {
+        return 0;
     }
 
-    // sanity check that encoder_init has not already been called
-    if (tid) {
-        ERROR("already initialized\n");
+    // save hardware info
+    va_start(ap, max_info_arg);
+    for (int i = 0; i < max_info_arg; i++) {
+        info_tbl[i].gpio_a = va_arg(ap, int);
+        info_tbl[i].gpio_b = va_arg(ap, int);
+    }
+    max_info = max_info_arg;
+    va_end(ap);
+
+    // init gpio and timer functions
+    if (gpio_init() < 0) {
+        ERROR("gpio_init failed\n");
+        return -1;
+    }
+    if (timer_init() < 0) {
+        ERROR("timer_init failed\n");
         return -1;
     }
 
@@ -161,7 +174,7 @@ void encoder_pos_reset(int id)
 
 static void *encoder_thread(void *cx)
 {
-    int val, last_val[MAX_ENCODER], x, rc, id;
+    int val, x, rc, id;
     unsigned int gpio_all;
     struct timespec ts;
     struct sched_param param;
@@ -190,9 +203,9 @@ static void *encoder_thread(void *cx)
 
     // init
     gpio_all = gpio_read_all();
-    for (id = 0; id < MAX_ENCODER; id++) {
+    for (id = 0; id < max_info; id++) {
         struct info_s * info = &info_tbl[id];
-        last_val[id] = (IS_BIT_SET(gpio_all,info->gpio_a) << 1) | IS_BIT_SET(gpio_all,info->gpio_b);
+        info->last_val = (IS_BIT_SET(gpio_all,info->gpio_a) << 1) | IS_BIT_SET(gpio_all,info->gpio_b);
     }
 
     // loop forever
@@ -201,7 +214,7 @@ static void *encoder_thread(void *cx)
         gpio_all = gpio_read_all();
 
         // loop over encoders
-        for (id = 0; id < MAX_ENCODER; id++) {
+        for (id = 0; id < max_info; id++) {
             struct info_s * info = &info_tbl[id];
             struct history_s * hist = info->history;
 
@@ -211,8 +224,8 @@ static void *encoder_thread(void *cx)
             // - x == 2         error, encoder bits out of sequence
             //                  probably because the encoder values were not read quickly enough
             val = (IS_BIT_SET(gpio_all,info->gpio_a) << 1) | IS_BIT_SET(gpio_all,info->gpio_b);
-            x = encoder_tbl[last_val[id]][val];
-            last_val[id] = val;
+            x = encoder_tbl[info->last_val][val];
+            info->last_val = val;
 
             // process the 'x'
             if (x == 0) {
