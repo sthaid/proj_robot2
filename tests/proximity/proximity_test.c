@@ -1,11 +1,13 @@
 #include <stdio.h>
 #include <signal.h>
 #include <string.h>
+#include <unistd.h>
 
-#include <gpio.h>
-#include <timer.h>
+#include <config_hw.h>
 #include <proximity.h>
 #include <misc.h>
+
+#define MAX_PROXIMITY 2
 
 bool sig_rcvd;
 
@@ -16,7 +18,7 @@ void sig_hndlr(int sig)
 
 int main(int argc, char **argv)
 {
-    int id, sum, poll_rate;
+    int id, sum, poll_rate, rc;
     bool sense;
     struct sigaction act;
     bool alert;
@@ -27,9 +29,14 @@ int main(int argc, char **argv)
     act.sa_handler = sig_hndlr;
     sigaction(SIGINT, &act, NULL);
 
-    if (gpio_init(true) < 0) exit(1);
-    if (timer_init() < 0) exit(1);
-    if (proximity_init() < 0) exit(1);
+    printf("calling proximity_init\n");
+    rc = proximity_init(MAX_PROXIMITY, 
+                        PROXIMITY_FRONT_GPIO_SIG, PROXIMITY_FRONT_GPIO_ENABLE,
+                        PROXIMITY_REAR_GPIO_SIG,  PROXIMITY_REAR_GPIO_ENABLE);
+    if (rc < 0) {
+        printf("ERROR: proximity_init failed\n");
+        return 1;
+    }
 
     printf("enabling proximity sensors\n\n");
     for (id = 0; id < MAX_PROXIMITY; id++) {

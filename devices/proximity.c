@@ -7,7 +7,6 @@
 #include <string.h>
 #include <errno.h>
 
-#include <config_hw.h>
 #include <proximity.h>
 #include <gpio.h>
 #include <timer.h>
@@ -31,11 +30,8 @@ static struct info_s {
     int sig[MAX_SIG];
     int tail;
     int sum;
-} info_tbl[] = { 
-        { PROXIMITY_FRONT_GPIO_SIG, PROXIMITY_FRONT_GPIO_ENABLE },
-        { PROXIMITY_REAR_GPIO_SIG,  PROXIMITY_REAR_GPIO_ENABLE },
-                           };
-
+} info_tbl[10];
+static int max_info;   // XXX check that all static
 static int poll_rate;
 
 //
@@ -46,15 +42,11 @@ static void *proximity_thread(void *cx);
 
 // -----------------  API  ---------------------------------------------
 
-int proximity_init(void)
+int proximity_init(int max_info_arg, ...)  // int gpio_sig, int gpio_enable
 {
     static pthread_t tid;
     int id;
-
-    // sanity check MAX_PROXIMITY, which is defined in proximity.h
-    if (MAX_PROXIMITY != (sizeof(info_tbl) / sizeof(struct info_s))) {
-        FATAL("define MAX_PROXIMITY is incorrect\n");
-    }
+    va_list ap;
 
     // sanity check that proximity_init has not already been called
     if (tid) {
@@ -62,8 +54,27 @@ int proximity_init(void)
         return -1;
     }
 
+    // init timer and gpio functions
+    if (gpio_init() < 0) {
+        ERROR("gpio_init failed\n");
+        return -1;
+    }
+    if (timer_init() < 0) {
+        ERROR("timer_init failed\n");
+        return -1;
+    }
+
+    // save hardware info
+    va_start(ap, max_info_arg);
+    for (int i = 0; i < max_info_arg; i++) {
+        info_tbl[i].gpio_sig = va_arg(ap, int);
+        info_tbl[i].gpio_enable = va_arg(ap, int);
+    }
+    max_info = max_info_arg;
+    va_end(ap);
+
     // set GPIO_ENABLE to output, and disable the IR LED
-    for (id = 0; id < MAX_PROXIMITY; id++) {
+    for (id = 0; id < max_info; id++) {
         struct info_s * info = &info_tbl[id];
         set_gpio_func(info->gpio_enable, FUNC_OUT);
         gpio_write(info->gpio_enable, 0);
@@ -71,7 +82,7 @@ int proximity_init(void)
 
     // create the thread to process the proximity gpio sig values, and to
     // keep track of accumulated shaft position
-    pthread_create(&tid, NULL,*proximity_thread, NULL);
+    pthread_create(&tid, NULL, proximity_thread, NULL);
 
     // success
     return 0;
@@ -82,7 +93,7 @@ bool proximity_check(int id, int *sum_arg, int *poll_rate_arg)
     struct info_s * info = &info_tbl[id];
     int sum;
 
-    if (id < 0 || id >= MAX_PROXIMITY) {
+    if (id < 0 || id >= max_info) {
         FATAL("invalid id %d\n", id);
     }
 
@@ -142,7 +153,7 @@ static void *proximity_thread(void *cx)
         gpio_all = gpio_read_all();
 
         // loop over proximity sensors
-        for (id = 0; id < MAX_PROXIMITY; id++) {
+        for (id = 0; id < max_info; id++) {
             struct info_s * info = &info_tbl[id];
             int sig, new_tail;
 
