@@ -20,3 +20,4 @@ tests/proximity/proximity_test
 tests/mc/mc_test
 tests/mc/mc_test.log
 tests/current/current_test
+tests/button/button_test
