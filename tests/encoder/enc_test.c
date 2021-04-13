@@ -1,22 +1,24 @@
 #include <stdio.h>
+#include <unistd.h>
 
-#include <gpio.h>
-#include <timer.h>
+#include <config_hw.h>
 #include <encoder.h>
-#include <misc.h>
 
 int main(int argc, char **argv)
 {
     int id;
     int position, speed, errors, poll_rate;
 
-    if (gpio_init(true) < 0) exit(1);
-    if (timer_init() < 0) exit(1);
-    if (encoder_init() < 0) exit(1);
+    if (encoder_init(2, ENCODER_GPIO_LEFT_B, ENCODER_GPIO_LEFT_A,
+                        ENCODER_GPIO_RIGHT_B, ENCODER_GPIO_RIGHT_A))
+    {
+        printf("encoder_init failed\n");
+        return 1;
+    }
 
-    while (true) {
+    while (1) {
         sleep(1);
-        for (id = 0; id < MAX_ENCODER; id++) {
+        for (id = 0; id < 2; id++) {
             encoder_get_ex(0, &position, &speed, &errors, &poll_rate);
             printf("ID %d : POS %d   SPEED %d   ERRORS %d  POLL_RATE %d\n", 
                    id, position, speed, errors, poll_rate);
