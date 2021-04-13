@@ -90,6 +90,8 @@ void gpiotest_exit(void)
 // result: good square wave, with some jitter
 static void gpiotest_proc(void)
 {
+// XXX careful here too,  make OSCILSCOPE_GPIO output for testing
+
     // configure gpio 26 as an output
     set_gpio_func(26,FUNC_OUT);
 

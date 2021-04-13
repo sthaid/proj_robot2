@@ -43,9 +43,10 @@ int main(int argc, char **argv)
 
     rc = timer_init();
     if (rc < 0) exit(1);
-    rc = gpio_init(true);
+    rc = gpio_init();
     if (rc < 0) exit(1);
 
+// XXX be careful with this pgm
     set_gpio_func(26, FUNC_OUT);
 
     // create test thread
