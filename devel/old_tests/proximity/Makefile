@@ -4,7 +4,7 @@ LDFLAGS  = -lpthread
 
 TARGET   = proximity_test
 SRC      = proximity_test.c \
-           ../../../common/devices/digital/proximity.c \
+           ../../../common/devices/proximity.c \
            ../../../common//util/misc.c
 
 OBJ := $(SRC:.c=.o)

@@ -4,8 +4,8 @@ LDFLAGS  = -lpthread -lcurses
 
 TARGET   = mc_test
 SRC      = mc_test.c \
-           ../../../common/devices/usb/mc.c \
-           ../../../common/devices/digital/encoder.c \
+           ../../../common/devices/mc.c \
+           ../../../common/devices/encoder.c \
            ../../../common//util/misc.c
 
 OBJ := $(SRC:.c=.o)

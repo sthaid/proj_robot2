@@ -1,13 +1,13 @@
 SUBDIRS = button \
           current \
           encoder \
-          gpio \
-          i2c \
           mc \
           proximity \
-          realtime/user_mode \
-          realtime/module \
-          relay 
+          relay \
+          zz_other/i2c \
+          zz_other/gpio \
+          zz_other/realtime/user_mode \
+          zz_other/realtime/module 
   
 .PHONY: build clean
 

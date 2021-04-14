@@ -4,7 +4,7 @@ LDFLAGS  = -lpthread
 
 TARGET   = button_test
 SRC      = button_test.c \
-           ../../../common/devices/digital/button.c \
+           ../../../common/devices/button.c \
            ../../../common//util/misc.c
 
 OBJ := $(SRC:.c=.o)

@@ -1,1 +1,1 @@
-../devices/usb/mc.h
+../devices/mc.h

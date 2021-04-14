@@ -4,6 +4,7 @@
 
 #include <unistd.h>
 #include <stdbool.h>
+#include <pthread.h>
 
 #include <current.h>
 #include <STM32_adc.h>
@@ -11,18 +12,21 @@
 
 static struct info_s {
     int adc_chan;
+    double current;
 } info_tbl[10];
 static int max_info;
+
+static void * current_thread(void *cx);
 
 // -----------------  API  --------------------------------------
 
 int current_init(int max_info_arg, ...)  // int adc_chan, ...
 {
-    static bool initialized;
+    static pthread_t tid;
     va_list ap;
 
     // check if already initialized
-    if (initialized) {
+    if (tid) {
         ERROR("already initialized\n");
         return -1;
     }
@@ -41,28 +45,48 @@ int current_init(int max_info_arg, ...)  // int adc_chan, ...
     max_info = max_info_arg;
     va_end(ap);
 
-    // set initialized flag
-    initialized = true;
+    // create thread
+    pthread_create(&tid, NULL, current_thread, NULL);
 
     // return success
     return 0;
 }
 
-int current_read(int id, double *current)
+int current_read_unsmoothed(int id, double *current)
 {
-    int n;
-    double v_sum, v_avg, v;
+    double v;
 
-    v_sum = 0;
-    for (n = 0; n < 200; n++) {
-        STM32_adc_read(info_tbl[id].adc_chan, &v);
-        v_sum += v;
-        usleep(2000);
-    }
-    v_avg = v_sum / n;
-
-    *current = (v_avg - 0.322) * (1. / .264);
+    STM32_adc_read(info_tbl[id].adc_chan, &v);
+    *current = (v - 0.322) * (1. / .264);
 
     return 0;
+}
+
+int current_read(int id, double *current)
+{
+    *current = info_tbl[id].current;
+
+    return 0;
+}
+
+// -----------------  THREAD-------------------------------------
+
+static void * current_thread(void *cx)
+{
+    int id;
+    double current;
+
+    while (true) {
+        for (id = 0; id < max_info; id++) {
+            current_read_unsmoothed(id, &current);
+
+            info_tbl[id].current = 0.975 * info_tbl[id].current + 
+                                   0.025 * current;
+
+            usleep(20000);   // 20 ms
+        }
+    }
+
+    return NULL;
 }
 

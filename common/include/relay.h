@@ -1,1 +1,1 @@
-../devices/digital/relay.h
+../devices/relay.h

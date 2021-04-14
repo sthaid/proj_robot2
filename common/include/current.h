@@ -1,1 +1,1 @@
-../devices/analog/current.h
+../devices/current.h

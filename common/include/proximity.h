@@ -1,1 +1,1 @@
-../devices/digital/proximity.h
+../devices/proximity.h

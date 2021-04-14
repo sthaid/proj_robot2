@@ -1,1 +1,1 @@
-../devices/digital/button.h
+../devices/button.h

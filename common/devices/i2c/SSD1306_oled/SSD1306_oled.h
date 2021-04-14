@@ -6,7 +6,7 @@ extern "C" {
 #endif
 
 int SSD1306_oled_init(int dev_addr_arg);
-int SSD1306_oled_drawstr(char *s);
+int SSD1306_oled_drawstr(int x, int y, char *s);
 
 #ifdef __cplusplus
 }

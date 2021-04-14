@@ -4,7 +4,7 @@ LDFLAGS  = -lpthread
 
 TARGET   = enc_test
 SRC      = enc_test.c \
-           ../../../common/devices/digital/encoder.c \
+           ../../../common/devices/encoder.c \
            ../../../common//util/misc.c
 
 OBJ := $(SRC:.c=.o)

@@ -4,7 +4,7 @@ LDFLAGS  =
 
 TARGET   = relay_test
 SRC      = relay_test.c \
-           ../../../common/devices/digital/relay.c \
+           ../../../common/devices/relay.c \
            ../../../common/util/misc.c
 
 

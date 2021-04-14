@@ -1,3 +1,6 @@
+// XXX where is the u8g2 doc
+// https://github.com/olikraus/u8g2/wiki/u8g2reference
+
 #include <string.h>
 
 #include "SSD1306_oled.h"
@@ -47,7 +50,7 @@ int SSD1306_oled_init(int dev_addr_arg)
     // defines the font to be used by subsequent drawing instruction
     u8g2_SetFont(&u8g2, u8g2_font_logisoso32_tf);
 
-    // set font reference ascent and descent (was in the sample code, but 0not needed)
+    // set font reference ascent and descent (was in the sample code, but not needed)
     //u8g2_SetFontRefHeightText(&u8g2);
 
     // set reference position to the top of the font; y=0 is top of font
@@ -64,10 +67,10 @@ int SSD1306_oled_init(int dev_addr_arg)
     return 0;
 }
 
-int SSD1306_oled_drawstr(char *s)
+int SSD1306_oled_drawstr(int x, int y, char *s)
 {
     u8g2_ClearBuffer(&u8g2);
-    u8g2_DrawStr(&u8g2, 0, 0, s);
+    u8g2_DrawStr(&u8g2, x, y, s);
     u8g2_SendBuffer(&u8g2);
     return 0;
 }
@@ -153,9 +156,9 @@ int main(int argc, char **argv)
     }
 
     while (true) {
-        SSD1306_oled_drawstr("HELLO");
+        SSD1306_oled_drawstr(0, 0, "HELLO");
         sleep(1);
-        SSD1306_oled_drawstr("WORLD");
+        SSD1306_oled_drawstr(0, 0, "WORLD");
         sleep(1);
     }
 
@@ -163,5 +166,3 @@ int main(int argc, char **argv)
 }
 
 #endif
-
-

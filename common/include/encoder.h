@@ -1,1 +1,1 @@
-../devices/digital/encoder.h
+../devices/encoder.h
