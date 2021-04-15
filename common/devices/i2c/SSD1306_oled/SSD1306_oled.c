@@ -10,8 +10,7 @@
 
 #define SSD1306_OLED_DEFAULT_ADDR  0x3c
 
-static int dev_addr;
-static u8g2_t u8g2;
+static u8g2_t *u8g2_tbl[256];
 
 static uint8_t u8x8_byte_linux_i2c(u8x8_t * u8x8, uint8_t msg, uint8_t arg_int, void *arg_ptr);
 static uint8_t u8x8_linux_i2c_delay(u8x8_t * u8x8, uint8_t msg, uint8_t arg_int, void *arg_ptr);
@@ -20,60 +19,69 @@ static uint8_t u8x8_linux_i2c_delay(u8x8_t * u8x8, uint8_t msg, uint8_t arg_int,
 
 int SSD1306_oled_init(int dev_addr_arg)
 {
-    // set dev_addr
-    dev_addr = (dev_addr_arg == 0 ? SSD1306_OLED_DEFAULT_ADDR : dev_addr_arg);
+    int dev_addr;
+    u8g2_t *u8g2;
 
     // init i2c
     if (i2c_init() < 0) {
         return -1;
     }
 
+    // determine  dev_addr, and allocate u8g2
+    dev_addr = (dev_addr_arg == 0 ? SSD1306_OLED_DEFAULT_ADDR : dev_addr_arg);
+    u8g2 = u8g2_tbl[dev_addr] = calloc(1, sizeof(u8g2_t));
+
     // call setup constructor
     u8g2_Setup_ssd1306_i2c_128x32_univision_f(
-        &u8g2,
+        u8g2,
         U8G2_R0,
         u8x8_byte_linux_i2c,
         u8x8_linux_i2c_delay);
 
     // set the i2c address of the display
-    u8g2_SetI2CAddress(&u8g2, dev_addr);
+    u8g2_SetI2CAddress(u8g2, dev_addr);
 
     // reset and configure the display
-    u8g2_InitDisplay(&u8g2);
+    u8g2_InitDisplay(u8g2);
 
     // de-activate power-save; becaue if activated nothing is displayed
-    u8g2_SetPowerSave(&u8g2, 0);
+    u8g2_SetPowerSave(u8g2, 0);
 
     // clears the memory frame buffer
-    u8g2_ClearBuffer(&u8g2);
+    u8g2_ClearBuffer(u8g2);
 
     // defines the font to be used by subsequent drawing instruction
-    u8g2_SetFont(&u8g2, u8g2_font_logisoso32_tf);
+    u8g2_SetFont(u8g2, u8g2_font_logisoso32_tf);
 
     // set font reference ascent and descent (was in the sample code, but not needed)
-    //u8g2_SetFontRefHeightText(&u8g2);
+    //u8g2_SetFontRefHeightText(u8g2);
 
     // set reference position to the top of the font; y=0 is top of font
-    u8g2_SetFontPosTop(&u8g2);
+    u8g2_SetFontPosTop(u8g2);
 
     // draw string; setting the initial string to be displayed prior to subsequent
     // calls to ssd1306_oled_u8g2_drawstr
-    u8g2_DrawStr(&u8g2, 0, 0, "  ---  ");
+    u8g2_DrawStr(u8g2, 0, 0, "  ---  ");
 
     // send the contents of the memory frame buffer to the display
-    u8g2_SendBuffer(&u8g2);
+    u8g2_SendBuffer(u8g2);
 
     // success
     return 0;
 }
 
-int SSD1306_oled_drawstr(int x, int y, char *s)
+int SSD1306_oled_drawstr(int dev_addr_arg, int x, int y, char *s)
 {
-    u8g2_ClearBuffer(&u8g2);
-    u8g2_DrawStr(&u8g2, x, y, s);
-    u8g2_SendBuffer(&u8g2);
+    int dev_addr = (dev_addr_arg == 0 ? SSD1306_OLED_DEFAULT_ADDR : dev_addr_arg);
+    u8g2_t *u8g2 = u8g2_tbl[dev_addr];
+
+    u8g2_ClearBuffer(u8g2);
+    u8g2_DrawStr(u8g2, x, y, s);
+    u8g2_SendBuffer(u8g2);
     return 0;
 }
+
+// -----------------  PRIVATE ROUTINES  -----------------------------------
 
 // return 1 for success, 0 for failure
 static uint8_t u8x8_byte_linux_i2c(u8x8_t * u8x8, uint8_t msg, uint8_t arg_int, void *arg_ptr)
@@ -156,9 +164,9 @@ int main(int argc, char **argv)
     }
 
     while (true) {
-        SSD1306_oled_drawstr(0, 0, "HELLO");
+        SSD1306_oled_drawstr(0, 0,0, "HELLO");
         sleep(1);
-        SSD1306_oled_drawstr(0, 0, "WORLD");
+        SSD1306_oled_drawstr(0, 0,0, "WORLD");
         sleep(1);
     }
 
