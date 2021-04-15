@@ -18,12 +18,13 @@ void sig_hndlr(int sig)
 
 int main(int argc, char **argv)
 {
-    int id, sum, poll_rate, rc;
+    int id, poll_rate, rc;
     bool sense;
     struct sigaction act;
     bool alert;
     char *p;
     char str[200];
+    double avg_sig;
 
     memset(&act, 0, sizeof(act));
     act.sa_handler = sig_hndlr;
@@ -48,11 +49,11 @@ int main(int argc, char **argv)
         p = str;
         alert = false;
         for (id = 0; id < MAX_PROXIMITY; id++) {
-            sense = proximity_check(id, &sum, &poll_rate);
+            sense = proximity_check(id, &avg_sig, &poll_rate);
             if (sense) alert = true;
-            p += sprintf(p, "%9s-%02d -- ",
+            p += sprintf(p, "%9s %5.3f -- ",
                     sense ? "   DETECT" : "UN_DETECT",
-                    sum);
+                    avg_sig);
         }
         sprintf(p, "POLL_RATE %d /sec %s",
                 poll_rate,

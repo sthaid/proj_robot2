@@ -16,10 +16,6 @@
 // defines
 //
 
-// when polling at 0.1 ms intervals then MAX_SIG of 64
-// yields a 6.4 ms sensor averaging interval
-#define MAX_SIG  64
-
 //
 // variables
 //
@@ -27,11 +23,9 @@
 static struct info_s {
     int gpio_sig;
     int gpio_enable;
-    int sig[MAX_SIG];
-    int tail;
-    int sum;
+    double avg_sig;
 } info_tbl[10];
-static int max_info;   // XXX check that all static
+static int max_info;
 static int poll_rate;
 
 //
@@ -88,21 +82,14 @@ int proximity_init(int max_info_arg, ...)  // int gpio_sig, int gpio_enable
     return 0;
 }
 
-bool proximity_check(int id, int *sum_arg, int *poll_rate_arg)
+bool proximity_check(int id, double *avg_sig_arg, int *poll_rate_arg)
 {
     struct info_s * info = &info_tbl[id];
-    int sum;
 
-    if (id < 0 || id >= max_info) {
-        FATAL("invalid id %d\n", id);
-    }
-
-    sum = info->sum;
-
-    if (sum_arg) *sum_arg = sum;
+    if (avg_sig_arg) *avg_sig_arg = info->avg_sig;
     if (poll_rate_arg) *poll_rate_arg = poll_rate;
-    
-    return sum > MAX_SIG/8;
+
+    return info->avg_sig > 0.1;
 }
 
 void proximity_enable(int id)
@@ -155,13 +142,13 @@ static void *proximity_thread(void *cx)
         // loop over proximity sensors
         for (id = 0; id < max_info; id++) {
             struct info_s * info = &info_tbl[id];
-            int sig, new_tail;
 
-            sig = ((gpio_all >> info->gpio_sig) & 1) ? 0 : 1;
-            new_tail = (info->tail+1) % MAX_SIG;
-            info->sum += (sig - info->sig[new_tail]);
-            info->sig[new_tail] = sig;
-            info->tail = new_tail;
+            int sig = ((gpio_all >> info->gpio_sig) & 1) ? 0 : 1;
+            if (sig == 0) {
+                info->avg_sig = 0.99 * info->avg_sig;
+            } else {
+                info->avg_sig = 0.99 * info->avg_sig + 0.01;
+            }
         }
 
         // used to confirm poll rate
