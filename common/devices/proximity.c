@@ -23,6 +23,7 @@
 static struct info_s {
     int gpio_sig;
     int gpio_enable;
+    bool enabled;
     double avg_sig;
 } info_tbl[10];
 static int max_info;
@@ -33,6 +34,7 @@ static int poll_rate;
 //
 
 static void *proximity_thread(void *cx);
+static bool all_disabled(void);
 
 // -----------------  API  ---------------------------------------------
 
@@ -97,6 +99,7 @@ void proximity_enable(int id)
     struct info_s * info = &info_tbl[id];
 
     gpio_write(info->gpio_enable, 1);
+    info->enabled = true;
 }
 
 void proximity_disable(int id)
@@ -104,6 +107,7 @@ void proximity_disable(int id)
     struct info_s * info = &info_tbl[id];
 
     gpio_write(info->gpio_enable, 0);
+    info->enabled = false;
 }
 
 // -----------------  THREAD--------------------------------------------
@@ -136,6 +140,17 @@ static void *proximity_thread(void *cx)
 
     // loop forever
     while (true) {
+        // if all proximity sensors are disabled then
+        // relatively long sleep and continue; 
+        // purpose is to save power
+        if (all_disabled()) {
+            for (int id = 0; id < max_info; id++) {
+                info_tbl[id].avg_sig = 0;
+            }
+            usleep(2000);
+            continue;
+        }
+
         // read all gpio pins
         gpio_all = gpio_read_all();
 
@@ -167,4 +182,15 @@ static void *proximity_thread(void *cx)
     }
 
     return NULL;
+}
+
+static bool all_disabled(void)
+{
+    for (int id = 0; id < max_info; id++) {
+        struct info_s *info = &info_tbl[id];
+        if (info->enabled == true) {
+            return false;
+        }
+    }
+    return true;
 }

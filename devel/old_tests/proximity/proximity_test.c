@@ -39,6 +39,9 @@ int main(int argc, char **argv)
         return 1;
     }
 
+    printf("sleep 10 secs\n");
+    sleep(10);
+
     printf("enabling proximity sensors\n\n");
     for (id = 0; id < MAX_PROXIMITY; id++) {
         proximity_enable(id);
