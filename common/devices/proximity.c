@@ -147,7 +147,7 @@ static void *proximity_thread(void *cx)
             for (int id = 0; id < max_info; id++) {
                 info_tbl[id].avg_sig = 0;
             }
-            usleep(2000);
+            usleep(10000);
             continue;
         }
 

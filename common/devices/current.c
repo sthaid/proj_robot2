@@ -80,10 +80,10 @@ static void * current_thread(void *cx)
         for (id = 0; id < max_info; id++) {
             current_read_unsmoothed(id, &current);
 
-            info_tbl[id].current = 0.975 * info_tbl[id].current + 
-                                   0.025 * current;
+            info_tbl[id].current = 0.98 * info_tbl[id].current + 
+                                   0.02 * current;
 
-            usleep(20000);   // 20 ms
+            usleep(10000);   // 10 ms
         }
     }
 

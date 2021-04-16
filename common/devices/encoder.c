@@ -172,6 +172,7 @@ void encoder_pos_reset(int id)
 
 // -----------------  ENCODER THREAD  -----------------------------
 
+// XXX add enable ctrl
 static void *encoder_thread(void *cx)
 {
     int val, x, rc, id;

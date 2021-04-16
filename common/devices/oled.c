@@ -97,7 +97,7 @@ static void * oled_thread(void *cx)
                 x->next = false;
                 break;
             }
-            usleep(10000);
+            usleep(100000);  // 100 ms
         }
 
         // set stridx for next string
