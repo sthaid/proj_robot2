@@ -1,6 +1,7 @@
 SUBDIRS = button \
           current \
           encoder \
+          env \
           mc \
           proximity \
           relay \
