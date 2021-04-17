@@ -18,13 +18,8 @@ void sig_hndlr(int sig)
 
 int main(int argc, char **argv)
 {
-    int id, poll_rate, rc;
-    bool sense;
+    int id, rc, count=0;
     struct sigaction act;
-    bool alert;
-    char *p;
-    char str[200];
-    double avg_sig;
 
     memset(&act, 0, sizeof(act));
     act.sa_handler = sig_hndlr;
@@ -49,20 +44,31 @@ int main(int argc, char **argv)
 
     printf("polling proximity sensors ...\n");
     while (!sig_rcvd) {
-        p = str;
-        alert = false;
-        for (id = 0; id < MAX_PROXIMITY; id++) {
-            sense = proximity_check(id, &avg_sig, &poll_rate);
-            if (sense) alert = true;
-            p += sprintf(p, "%9s %5.3f -- ",
-                    sense ? "   DETECT" : "UN_DETECT",
-                    avg_sig);
+        // print poll_rate every 10 seconds
+        if ((++count % 1000) == 0) {
+            int poll_rate;
+            proximity_get_poll_rate(&poll_rate);
+            if (poll_rate) {
+                printf("poll interval = %d us\n", 1000000/poll_rate);
+            } else {
+                printf("proximity sensor polling is disabled\n");
+            }
         }
-        sprintf(p, "POLL_RATE %d /sec %s",
-                poll_rate,
-                alert ? "\a" : "");
-        printf("%s\n", str);
-        usleep(100000);
+
+        // check both sensors for proximity alert, and
+        // print when detected
+        for (id = 0; id < MAX_PROXIMITY; id++) {
+            bool alert;
+            double sig;
+
+            proximity_check(id, &alert, &sig);
+            if (alert) {
+                printf("ALERT %d, sig=%0.2f\a\n", id, sig);
+            }
+        }
+
+        // sleep 10 ms
+        usleep(10000);
     }
 
     printf("\n\ndisabling proximity sensors\n");
