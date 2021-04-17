@@ -95,9 +95,16 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    // enable all mc
+    // enable encoders
+    for (int id = 0; id < 2; id++) {
+        encoder_enable(id);
+    }
+
+    // enable all mc, and set accel limit
     for (int id = 0; id < MAX_MC; id++) {
         mc_enable(id);
+        mc_set_motor_limit(id, MTRLIM_MAX_ACCEL_FWD_AND_REV, 1);
+        mc_set_motor_limit(id, MTRLIM_MAX_DECEL_FWD_AND_REV, 1);
     }
 
     // runtime using curses
@@ -152,10 +159,10 @@ static void update_display(int maxy, int maxx)
     // loop over all motor-ctlrs and display their variable values
     // rows: 1..4
     //             xxxxxxxxx xxxxxxxxx xxxxxxxxx xxxxxxxxx xxxxxxxxx xxxxxxxxx xxxxxxxxx xxxxxxxxx xxxxxxxxx xxxxxxxxx xxxxxxxxx xxxxxxxxx
-    mvprintw(1,0, "  ERRSTAT  TGTSPEED CURRSPEED MAX_ACCEL MAX_DECEL       VIN   CURRENT CURRLIMIT   ENC_POS ENC_SPEED  ENC_ERRS ENC_POLLR");
+    mvprintw(1,0, "  ERRSTAT  TGTSPEED CURRSPEED MAX_ACCEL MAX_DECEL       VIN   CURRENT CURRLIMIT   ENC_POS ENC_SPEED  ENC_ERRS  ENC_POLL");
     for (int id = 0; id < MAX_MC; id++) {
         int errstat, tgtspeed, currspeed, maxaccel, maxdecel, vin, current, currlimit;
-        int enc_pos, enc_speed, enc_errs, enc_pollr;
+        int enc_pos, enc_speed, enc_errs, enc_poll_intvl_us;
 
         errstat   = 0x9999;
         tgtspeed  = 9999;
@@ -168,7 +175,7 @@ static void update_display(int maxy, int maxx)
         enc_pos   = 9999;
         enc_speed = 9999;
         enc_errs  = 9999;
-        enc_pollr = 9999;
+        enc_poll_intvl_us = 9999;
 
         mc_get_variable(id, VAR_ERROR_STATUS, &errstat);
         mc_get_variable(id, VAR_TARGET_SPEED, &tgtspeed);
@@ -179,14 +186,17 @@ static void update_display(int maxy, int maxx)
         mc_get_variable(id, VAR_CURRENT, &current);
         mc_get_variable(id, VAR_CURRENT_LIMITTING_OCCUR_CNT, &currlimit);
 
-        encoder_get_ex(id, &enc_pos, &enc_speed, &enc_errs, &enc_pollr);
+        encoder_get_position(id, &enc_pos);
+        encoder_get_speed(id, &enc_speed);
+        encoder_get_errors(id, &enc_errs);
+        encoder_get_poll_intvl_us(&enc_poll_intvl_us);
 
         mvprintw(3+id,0, "%9d %9d %9d %9d %9d %9d %9d %9d %9d %9d %9d %9d",
                 errstat,
                 tgtspeed, currspeed,
                 maxaccel, maxdecel,
                 vin, current, currlimit,
-                enc_pos, enc_speed, enc_errs, enc_pollr);
+                enc_pos, enc_speed, enc_errs, enc_poll_intvl_us);
     }
 
     // display the logfile msgs

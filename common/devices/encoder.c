@@ -38,6 +38,8 @@ static int encoder_tbl[][4] =
 static struct info_s {
     unsigned int gpio_a;
     unsigned int gpio_b;
+    bool         enabled;
+    bool         was_disabled;
     unsigned int errors;
     unsigned int last_val;
     int          pos_offset;  // xxx 64bit
@@ -56,6 +58,7 @@ static unsigned int poll_rate;   // units = persec
 //
 
 static void *encoder_thread(void *cx);
+static bool all_disabled(void);
 
 // -----------------  API  ----------------------------------------
 
@@ -69,11 +72,12 @@ int encoder_init(int max_info_arg, ...)  // int gpio_a, int gpio_b, ...
         return 0;
     }
 
-    // save hardware info
+    // save hardware info, and init non-zero fields of info_tbl
     va_start(ap, max_info_arg);
     for (int i = 0; i < max_info_arg; i++) {
         info_tbl[i].gpio_a = va_arg(ap, int);
         info_tbl[i].gpio_b = va_arg(ap, int);
+        info_tbl[i].was_disabled = true;
     }
     max_info = max_info_arg;
     va_end(ap);
@@ -115,6 +119,12 @@ void encoder_get_speed(int id, int *speed)
     unsigned int       start, end, idx;
     uint64_t           time_now, time_desired;
 
+    // don't try to get the speed if the encoder is not enabled
+    if (info->enabled == false) {
+        *speed = 0;
+        return;
+    }
+
     // find a history entry that is 20 ms earlier than time_now,
     // use binary search; this entry will be used to calculate the speed
     time_now = timer_get();
@@ -146,20 +156,9 @@ void encoder_get_speed(int id, int *speed)
              (signed)(time_now - HIST(idx).time);
 }
 
-void encoder_get_ex(int id, int *position, int *speed, int *errors, int *poll_rate_arg)
+void encoder_get_errors(int id, int *errors)
 {
-    if (position) {
-        encoder_get_position(id, position);
-    }
-    if (speed) {
-        encoder_get_speed(id, speed);
-    }
-    if (errors != NULL) {
-        *errors = info_tbl[id].errors;
-    }
-    if (poll_rate_arg != NULL) {
-        *poll_rate_arg = poll_rate;
-    }
+    *errors = info_tbl[id].errors;
 }
 
 void encoder_pos_reset(int id)
@@ -171,9 +170,27 @@ void encoder_pos_reset(int id)
     info->pos_offset = HIST(tail).pos;
 }    
 
+void encoder_enable(int id)
+{
+    info_tbl[id].enabled = true;
+}
+
+void encoder_disable(int id)
+{
+    info_tbl[id].enabled = false;
+    info_tbl[id].was_disabled = true;
+}
+
+// debug routine
+void encoder_get_poll_intvl_us(int *poll_intvl_us)
+{
+    int lcl_poll_rate = poll_rate;
+
+    *poll_intvl_us = (lcl_poll_rate > 0 ? 1000000 / lcl_poll_rate : -1);
+}
+
 // -----------------  ENCODER THREAD  -----------------------------
 
-// XXX add enable ctrl
 static void *encoder_thread(void *cx)
 {
     int val, x, rc, id;
@@ -203,15 +220,17 @@ static void *encoder_thread(void *cx)
         FATAL("sched_setscheduler, %s\n", strerror(errno));
     }
 
-    // init
-    gpio_all = gpio_read_all();
-    for (id = 0; id < max_info; id++) {
-        struct info_s * info = &info_tbl[id];
-        info->last_val = (IS_BIT_SET(gpio_all,info->gpio_a) << 1) | IS_BIT_SET(gpio_all,info->gpio_b);
-    }
-
     // loop forever
     while (true) {
+        // if all encoder sensors are disabled then
+        // relatively long sleep and continue; 
+        // purpose is to save power
+        if (all_disabled()) {
+            poll_rate = 0;
+            usleep(10000);
+            continue;
+        }
+
         // read all gpio pins
         gpio_all = gpio_read_all();
 
@@ -219,6 +238,13 @@ static void *encoder_thread(void *cx)
         for (id = 0; id < max_info; id++) {
             struct info_s * info = &info_tbl[id];
             struct history_s * hist = info->history;
+
+            // if this encoder was_disabled then get it's last value
+            if (info->was_disabled) {
+                info->last_val = (IS_BIT_SET(gpio_all,info->gpio_a) << 1) | 
+                                  IS_BIT_SET(gpio_all,info->gpio_b);
+                info->was_disabled = false;
+            }
 
             // determine whether encoder indicates one of the following:
             // - x == 0         no change
@@ -268,4 +294,15 @@ static void *encoder_thread(void *cx)
     }
 
     return NULL;
+}
+
+static bool all_disabled(void)
+{
+    for (int id = 0; id < max_info; id++) {
+        struct info_s *info = &info_tbl[id];
+        if (info->enabled == true) {
+            return false;
+        }
+    }
+    return true;
 }

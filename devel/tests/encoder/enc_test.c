@@ -6,9 +6,9 @@
 
 int main(int argc, char **argv)
 {
-    int id;
-    int position, speed, errors, poll_rate;
+    int id, count=0;
 
+    // init encoders
     if (encoder_init(2, ENCODER_GPIO_LEFT_B, ENCODER_GPIO_LEFT_A,
                         ENCODER_GPIO_RIGHT_B, ENCODER_GPIO_RIGHT_A))
     {
@@ -16,14 +16,39 @@ int main(int argc, char **argv)
         return 1;
     }
 
+    // sleep 10 secs
+    printf("sleep for 10 secs\n");
+    sleep(10);
+
+    // enable encoders
+    printf("enable encoders\n");
+    for (id = 0; id < 2; id++) {
+        encoder_enable(id);
+    }
+
+    // read encoder values once per sec
+    printf("read encoder values once per sec\n"); 
     while (1) {
-        sleep(1);
+        // every 10 secs get the poll intvl
+        if ((++count % 10) == 0) {
+            int poll_intvl_us;
+            encoder_get_poll_intvl_us(&poll_intvl_us);
+            printf("POLL_INTVL_US = %d\n", poll_intvl_us);
+            printf("\n");
+        }
+
+        // read both encoders, and print their values
         for (id = 0; id < 2; id++) {
-            encoder_get_ex(0, &position, &speed, &errors, &poll_rate);
-            printf("ID %d : POS %d   SPEED %d   ERRORS %d  POLL_RATE %d\n", 
-                   id, position, speed, errors, poll_rate);
+            int position, speed, errors;
+            encoder_get_position(id, &position);
+            encoder_get_speed(id, &speed);
+            encoder_get_errors(id, &errors);
+            printf("ID %d : POS %d   SPEED %d   ERRORS %d\n", id, position, speed, errors);
         }
         printf("\n");
+
+        // sleep 1 sec
+        sleep(1);
     }
 
     return 0;
