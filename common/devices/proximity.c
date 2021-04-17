@@ -115,9 +115,11 @@ void proximity_set_alert_limit(double alert_limit_arg)
 }
 
 // debug routine
-void proximity_get_poll_rate(int *poll_rate_arg)
+void proximity_get_poll_intvl_us(int *poll_intvl_us)
 {
-    *poll_rate_arg = poll_rate;
+    int lcl_poll_rate = poll_rate;
+
+    *poll_intvl_us = (lcl_poll_rate > 0 ? 1000000 / lcl_poll_rate : -1);
 }
 
 // -----------------  THREAD--------------------------------------------
