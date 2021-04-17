@@ -8,16 +8,16 @@
 #include <MPU9250_imu.h>
 #include <misc.h>
 
-#define ACCEL_ALERT 1.3   // XXX param
-
 // defines
-
-#define MAG_CAL_FILENAME "MPU9250_imu_magnetometer.cal"
 
 // variables
 
 static int mx_cal, my_cal, mz_cal;
 static int mx, my, mz;
+
+static bool accel_alert;
+static double accel_alert_value;
+static double accel_alert_limit = DEFAULT_ACCEL_ALERT_LIMIT;
 
 // prototypes
 
@@ -44,13 +44,13 @@ int imu_init(int dev_addr)  // multiple instances not supported
     }
 
     // read magnetometer calibratin file
-    FILE *fp = fopen(MAG_CAL_FILENAME, "r");
+    FILE *fp = fopen(MAGNETOMETER_CAL_FILENAME, "r");
     if (fp == NULL) {
-        ERROR("failed to open %s\n", MAG_CAL_FILENAME);
+        ERROR("failed to open %s\n", MAGNETOMETER_CAL_FILENAME);
         return -1;
     }
     if (fscanf(fp, "%d %d %d", &mx_cal, &my_cal, &mz_cal) != 3) {
-        ERROR("%s invalid format\n", MAG_CAL_FILENAME);
+        ERROR("%s invalid format\n", MAGNETOMETER_CAL_FILENAME);
         return -1;
     }
     fclose(fp);
@@ -72,6 +72,20 @@ void imu_read_magnetometer(double *heading_arg)
     if (heading < 0) heading += 360;
 
     *heading_arg = heading;
+}
+
+void imu_set_accel_alert_limit(double accel_alert_limit_arg)
+{
+    accel_alert_limit = accel_alert_limit_arg;
+}
+
+void imu_check_accel_alert(bool *accel_alert_arg, double *accel_alert_value_arg)
+{
+    *accel_alert_arg = accel_alert;
+    *accel_alert_value_arg = accel_alert_value;
+
+    accel_alert_value = 0;
+    accel_alert = 0;
 }
 
 // -----------------  THREAD-------------------------------------
@@ -97,31 +111,37 @@ static void * accelerometer_thread(void *cx)
 {
     int ax, ay, az;
     double axd, ayd, azd;
-    double a_total_squared;
-    uint64_t t_last_print = microsec_timer();
-    uint64_t t_now;
+    double accel_total_squared;
+    uint64_t t_now, t_last_print=microsec_timer();
 
     while (true) {
+        // read raw acceleromter values from i2c device
         MPU9250_imu_get_acceleration(&ax, &ay, &az);
 
+        // convert raw values to g units
         axd = (double)(ax-1200) / 16384;
         ayd = (double)(ay-1200) / 16384;
         azd = (double)(az-1200) / 16384;
-        a_total_squared = axd*axd + ayd*ayd + azd*azd;
+        accel_total_squared = axd*axd + ayd*ayd + azd*azd;
 
+        // debug print every 10 secs
         t_now = microsec_timer();
-        if (t_now - t_last_print > 1000000) {
-            INFO("accel = %0.1f\n", sqrt(a_total_squared));
+        if (t_now - t_last_print > 10000000) {
+            INFO("accel = %0.2f  (%0.2f %0.2f %0.2f)\n", 
+                  sqrt(accel_total_squared), axd, ayd, azd);
             t_last_print = t_now;
         }
 
-        if (a_total_squared > (ACCEL_ALERT*ACCEL_ALERT)) {
+        // if large accel detected then set the accel_alert flag
+        if (accel_total_squared > (accel_alert_limit * accel_alert_limit)) {
+            accel_alert = true;
+            accel_alert_value = sqrt(accel_total_squared);
             INFO("\aALERT: ax,ay,az = %5.2f %5.2f %5.2f  total = %5.2f\n",
-                   axd, ayd, azd, sqrt(a_total_squared));
-            // XXX pass this up
+                   axd, ayd, azd, accel_alert_value);
         }
 
-        usleep(10000);  // 10 ms
+        // sleep 10 ms
+        usleep(10000);
     }
 
     return NULL;
