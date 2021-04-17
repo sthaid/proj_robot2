@@ -5,8 +5,6 @@
 extern "C" {
 #endif
 
-#include <stdarg.h>
-
 #define BUTTON_STATE_RELEASED 1
 #define BUTTON_STATE_PRESSED  2
 

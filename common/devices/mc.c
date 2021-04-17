@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <stdbool.h>
+#include <stdarg.h>
 #include <string.h>
 #include <errno.h>
 #include <unistd.h>

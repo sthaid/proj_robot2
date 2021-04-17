@@ -5,8 +5,6 @@
 extern "C" {
 #endif
 
-#include <stdarg.h>
-
 int encoder_init(int max_info, ...);
 void encoder_get_position(int id, int *position);
 void encoder_get_speed(int id, int *speed);

@@ -5,7 +5,6 @@
 extern "C" {
 #endif
 
-//#include <stdarg.h>
 #include <stdbool.h>
 
 #define DEFAULT_PROXIMITY_ALERT_LIMIT  0.1

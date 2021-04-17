@@ -5,8 +5,6 @@
 extern "C" {
 #endif
 
-#include <stdarg.h>
-
 int relay_init(int max_info, ...);  // int gpio_pin, ...
 void relay_ctrl(int id, bool enable);
 

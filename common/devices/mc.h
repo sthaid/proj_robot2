@@ -5,8 +5,6 @@
 extern "C" {
 #endif
 
-#include <stdarg.h>
-
 //
 // defines: variable identifiers
 //

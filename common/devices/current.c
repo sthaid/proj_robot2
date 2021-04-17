@@ -4,6 +4,7 @@
 
 #include <unistd.h>
 #include <stdbool.h>
+#include <stdarg.h>
 #include <pthread.h>
 
 #include <current.h>
