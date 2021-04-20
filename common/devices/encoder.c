@@ -227,7 +227,7 @@ static void *encoder_thread(void *cx)
         // purpose is to save power
         if (all_disabled()) {
             poll_rate = 0;
-            usleep(10000);
+            usleep(10000);  // 10 ms
             continue;
         }
 

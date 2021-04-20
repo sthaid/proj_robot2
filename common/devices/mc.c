@@ -93,7 +93,7 @@
 
 #define SET_STATE(_state, _reason_str) \
     do { \
-        INFO("state=%s reason=%s\n", MC_STATE_STR(_state), _reason_str); \
+        /*INFO("state=%s reason=%s\n", MC_STATE_STR(_state), _reason_str);*/ \
         status.state = (_state); \
         strncpy(status.reason_str, _reason_str, sizeof(status.reason_str)-1); \
         status.reason_str[sizeof(status.reason_str)-1] = '\0'; \
@@ -224,6 +224,8 @@ int mc_enable_all(void)
     // init some info_tbl[] fields
     for (id = 0; id < max_info; id++) {
         info_tbl[id].target_speed = 0;
+        status.target_speed[id] = 0;
+
         info_tbl[id].accel = 0;
         info_tbl[id].decel = 0;
     }
@@ -263,6 +265,7 @@ int mc_set_speed(int id, int speed)
     // keep track of the requested speed, so that the monitor_thread
     // can determine all motors are stopped and set state to quiesced
     x->target_speed = speed;
+    status.target_speed[id] = speed;
 
     // ensure that the motor limit accel/decel variables are set
     if (x->accel != normal_accel) {
@@ -302,6 +305,7 @@ int mc_set_speed_all(int speed0, ...)
         int speed = (id == 0 ? speed0 : va_arg(ap, int));
 
         x->target_speed = speed;
+        status.target_speed[id] = speed;
 
         if (x->accel != normal_accel) {
             mc_set_motor_limit(id, MTRLIM_MAX_ACCEL_FWD_AND_REV, normal_accel);
@@ -331,6 +335,7 @@ void mc_emergency_stop_all(char *reason_str)
         struct info_s *x = &info_tbl[id];
 
         x->target_speed = 0;
+        status.target_speed[id] = 0;
 
         if (x->decel != emer_stop_decel) {
             mc_set_motor_limit(id, MTRLIM_MAX_DECEL_FWD_AND_REV, emer_stop_decel);
@@ -357,6 +362,11 @@ void mc_set_accel(int normal_accel_arg, int emer_stop_decel_arg)
 mc_status_t *mc_get_status(void)
 {
     return &status;
+}
+
+void mc_debug_mode(bool enable)
+{
+    status.debug_mode_enabled = enable;
 }
 
 // -----------------  MONITOR THREAD  --------------------------------------
@@ -460,6 +470,20 @@ static void *monitor_thread(void *cx)
             }
         } else {
             FATAL("invalid state %d\n", status.state);
+        }
+
+        // if debug_mode_enabled then fill in the status.debug_mode_mtr_vars struct
+        if (status.debug_mode_enabled) {
+            for (int id = 0; id < max_info; id++) {
+                struct debug_mode_mtr_vars_s *x = &status.debug_mode_mtr_vars[id];
+                mc_get_variable(id, VAR_ERROR_STATUS, &x->error_status);
+                mc_get_variable(id, VAR_TARGET_SPEED, &x->target_speed);
+                mc_get_variable(id, VAR_CURRENT_SPEED, &x->current_speed);
+                mc_get_variable(id, VAR_MAX_ACCEL_FORWARD, &x->max_accel);
+                mc_get_variable(id, VAR_MAX_DECEL_FORWARD, &x->max_decel);
+                mc_get_variable(id, VAR_INPUT_VOLTAGE, &x->input_voltage);
+                mc_get_variable(id, VAR_CURRENT, &x->current);
+            }
         }
 
         // sleep for 100 ms

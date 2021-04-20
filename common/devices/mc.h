@@ -28,6 +28,17 @@ typedef struct {
     char reason_str[80];   // the reason for entering 'state'
     double voltage;
     double current;
+    int target_speed[10];
+    bool debug_mode_enabled;
+    struct debug_mode_mtr_vars_s {
+        int error_status;
+        int target_speed;
+        int current_speed;
+        int max_accel;
+        int max_decel;
+        int input_voltage;
+        int current;
+    } debug_mode_mtr_vars[10];
 } mc_status_t;
 
 int mc_init(int max_info_arg, ...);  // char *devname, ...
@@ -37,6 +48,11 @@ int mc_set_speed_all(int speed0, ...);
 void mc_emergency_stop_all(char *reason_str);
 void mc_set_accel(int normal_accel_arg, int emer_stop_accel_arg);
 mc_status_t *mc_get_status(void);
+
+// Enabling debug_mode will cause the debug_mode_mtr_vars to be 
+// read at 100 ms interval, even when in MC_STATE_QUIESCED or 
+// MC_STATE_ERROR. This increases power usage.
+void mc_debug_mode(bool enable);
 
 #ifdef __cplusplus
 }
