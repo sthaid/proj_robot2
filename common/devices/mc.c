@@ -330,6 +330,8 @@ void mc_emergency_stop_all(char *reason_str)
     // acquire mutex
     pthread_mutex_lock(&mutex);
 
+// XXX if already in error state then just return
+
     // stop all motors
     for (int id = 0; id < max_info; id++) {
         struct info_s *x = &info_tbl[id];
@@ -347,7 +349,7 @@ void mc_emergency_stop_all(char *reason_str)
 
     // set state to MC_STATE_ERROR
     SET_STATE(MC_STATE_ERROR, reason_str);
-    status.current = 0;
+    status.motors_current = 0;
 
     // release mutex
     pthread_mutex_unlock(&mutex);
@@ -413,7 +415,7 @@ static void *monitor_thread(void *cx)
             if (any_mc_error_indication(reason_str,sizeof(reason_str))) {
                 mc_emergency_stop_all(reason_str);
                 status.voltage = voltage;
-                status.current = 0;
+                status.motors_current = 0;
                 continue;
             }
 
@@ -425,14 +427,14 @@ static void *monitor_thread(void *cx)
             if (quiesce_count > 100) {
                 SET_STATE(MC_STATE_QUIESCED, "all-motors-speed-0");
                 status.voltage = voltage;
-                status.current = 0;
+                status.motors_current = 0;
                 continue;
             }
 
             // remain in the running state,
             // publish the voltage and current status
             status.voltage = voltage;
-            status.current = 0.9 * status.current + 0.1 * total_current;
+            status.motors_current = 0.9 * status.motors_current + 0.1 * total_current;
         } else if (status.state == MC_STATE_QUIESCED) {
             uint64_t time_now;
 
@@ -504,7 +506,7 @@ static bool any_mc_error_indication(char *reason_str, int reason_str_size)
                      "id=%d error_status=0x%x", id, x->vars.error_status);
             return true;
         }
-        if (x->vars.curr_limit_cnt) {
+        if (x->vars.curr_limit_cnt > 20) { // XXX check this 20
             snprintf(reason_str, reason_str_size, 
                      "id=%d curr_limit_cnt=%d", id, x->vars.curr_limit_cnt);
             return true;

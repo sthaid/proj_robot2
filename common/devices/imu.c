@@ -10,6 +10,8 @@
 
 // defines
 
+//#define DEBUG_ACCEL
+
 // variables
 
 static int mx_cal, my_cal, mz_cal;
@@ -112,7 +114,9 @@ static void * accelerometer_thread(void *cx)
     int ax, ay, az;
     double axd, ayd, azd;
     double accel_total_squared;
+#ifdef DEBUG_ACCEL
     uint64_t t_now, t_last_print=microsec_timer();
+#endif
 
     while (true) {
         // read raw acceleromter values from i2c device
@@ -124,6 +128,7 @@ static void * accelerometer_thread(void *cx)
         azd = (double)(az-1200) / 16384;
         accel_total_squared = axd*axd + ayd*ayd + azd*azd;
 
+#ifdef DEBUG_ACCEL
         // debug print every 10 secs
         t_now = microsec_timer();
         if (t_now - t_last_print > 10000000) {
@@ -131,6 +136,7 @@ static void * accelerometer_thread(void *cx)
                   sqrt(accel_total_squared), axd, ayd, azd);
             t_last_print = t_now;
         }
+#endif
 
         // if large accel detected then set the accel_alert flag
         if (accel_total_squared > (accel_alert_limit * accel_alert_limit)) {

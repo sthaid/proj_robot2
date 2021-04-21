@@ -15,7 +15,7 @@ int imu_init(int dev_addr);  // multiple instances not supported
 void imu_read_magnetometer(double *heading);
 
 void imu_set_accel_alert_limit(double accel_alert_limit);
-void imu_check_accel_alert(bool *accel_alert_arg, double *accel_alert_value_arg);
+void imu_check_accel_alert(bool *accel_alert, double *accel_alert_value);
 
 #ifdef __cplusplus
 }

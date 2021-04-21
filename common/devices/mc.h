@@ -27,7 +27,7 @@ typedef struct {
     int state;
     char reason_str[80];   // the reason for entering 'state'
     double voltage;
-    double current;
+    double motors_current;
     int target_speed[10];
     bool debug_mode_enabled;
     struct debug_mode_mtr_vars_s {
@@ -41,12 +41,12 @@ typedef struct {
     } debug_mode_mtr_vars[10];
 } mc_status_t;
 
-int mc_init(int max_info_arg, ...);  // char *devname, ...
+int mc_init(int max_info, ...);  // char *devname, ...
 int mc_enable_all(void);
 int mc_set_speed(int id, int speed);
 int mc_set_speed_all(int speed0, ...);
 void mc_emergency_stop_all(char *reason_str);
-void mc_set_accel(int normal_accel_arg, int emer_stop_accel_arg);
+void mc_set_accel(int normal_accel, int emer_stop_accel);
 mc_status_t *mc_get_status(void);
 
 // Enabling debug_mode will cause the debug_mode_mtr_vars to be 
