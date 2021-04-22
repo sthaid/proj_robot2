@@ -5,9 +5,13 @@
 extern "C" {
 #endif
 
-int current_init(int max_info, ...);
-int current_read_unsmoothed(int id, double *current);
-int current_read(int id, double *current);
+// Notes:
+// - current_init varargs: int adc_chan, ...
+
+int current_init(int max_info, ...);    // returns -1 on error, else 0
+
+double current_read_smoothed(int id);
+double current_read_unsmoothed(int id);
 
 #ifdef __cplusplus
 }

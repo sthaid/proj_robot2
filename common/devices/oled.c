@@ -9,7 +9,7 @@
 #include <misc.h>
 
 #define MAX_STR 8
-#define MAX_STRLEN 20
+#define MAX_STRLEN 8
 
 static struct info_s {
     int dev_addr;
@@ -66,7 +66,12 @@ int oled_init(int max_info_arg, ...)   // int dev_addr, ...
 
 void oled_set_str(int id, int stridx, char *str)
 {
-    strncpy(info_tbl[id].str[stridx], str, MAX_STRLEN);
+    if (stridx < 0 || stridx >= MAX_STR) {
+        ERROR("stridx %d\n", stridx);
+        return;
+    }
+
+    strncpy(info_tbl[id].str[stridx], str, MAX_STRLEN-1);
     info_tbl[id].str[stridx][MAX_STRLEN-1] = '\0';
 }
 
@@ -78,6 +83,27 @@ void oled_set_intvl_us(int id, unsigned int intvl_us)
 void oled_set_next(int id)
 {
     info_tbl[id].next = true;
+}
+
+void oled_get_strs(int id, int *max, char *strs[])
+{
+    int max_caller_strs = *max;
+    int stridx;
+
+    if (max_caller_strs <= 0) {
+        ERROR("max_caller_strs = %d\n", max_caller_strs);
+        return;
+    }
+
+    *max = 0;
+    for (stridx = 0; stridx < MAX_STR; stridx++) {
+        if (info_tbl[id].str[stridx][0] != '\0') {
+            strs[(*max)++] = info_tbl[id].str[stridx];
+            if (*max == max_caller_strs) {
+                return;
+            }
+        }
+    }
 }
 
 // -----------------  THREAD-------------------------------------

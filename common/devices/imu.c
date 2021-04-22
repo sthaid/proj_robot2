@@ -66,14 +66,13 @@ int imu_init(int dev_addr)  // multiple instances not supported
     return 0;
 }
 
-void imu_read_magnetometer(double *heading_arg)
+double imu_read_magnetometer(void)
 {
     double heading;
 
     heading = atan2(-(my-my_cal), mx-mx_cal) * (180 / M_PI);
     if (heading < 0) heading += 360;
-
-    *heading_arg = heading;
+    return heading;
 }
 
 void imu_set_accel_alert_limit(double accel_alert_limit_arg)
@@ -81,13 +80,24 @@ void imu_set_accel_alert_limit(double accel_alert_limit_arg)
     accel_alert_limit = accel_alert_limit_arg;
 }
 
-void imu_check_accel_alert(bool *accel_alert_arg, double *accel_alert_value_arg)
+double imu_get_accel_alert_limit(void)
 {
-    *accel_alert_arg = accel_alert;
-    *accel_alert_value_arg = accel_alert_value;
+    return accel_alert_limit;
+}
+
+bool imu_check_accel_alert(double *accel_alert_value_arg)
+{
+    bool ret;
+
+    ret = accel_alert;
+    if (accel_alert_value_arg) {
+        *accel_alert_value_arg = accel_alert_value;
+    }
 
     accel_alert_value = 0;
     accel_alert = 0;
+
+    return ret;
 }
 
 // -----------------  THREAD-------------------------------------
@@ -142,8 +152,8 @@ static void * accelerometer_thread(void *cx)
         if (accel_total_squared > (accel_alert_limit * accel_alert_limit)) {
             accel_alert = true;
             accel_alert_value = sqrt(accel_total_squared);
-            INFO("\aALERT: ax,ay,az = %5.2f %5.2f %5.2f  total = %5.2f\n",
-                   axd, ayd, azd, accel_alert_value);
+            INFO("ALERT: ax,ay,az = %5.2f %5.2f %5.2f  total = %5.2f\n",
+                 axd, ayd, azd, accel_alert_value);
         }
 
         // sleep 10 ms

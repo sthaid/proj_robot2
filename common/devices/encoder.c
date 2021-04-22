@@ -100,18 +100,43 @@ int encoder_init(int max_info_arg, ...)  // int gpio_a, int gpio_b, ...
     return 0;
 }
 
-void encoder_get_position(int id, int *position)
+void encoder_enable(int id)
+{
+    info_tbl[id].enabled = true;
+}
+
+void encoder_disable(int id)
+{
+    info_tbl[id].enabled = false;
+    info_tbl[id].was_disabled = true;
+}
+
+void encoder_pos_reset(int id)
 {
     struct info_s    * info = &info_tbl[id];
     struct history_s * hist = info->history;
     unsigned int       tail = info->tail;
 
-    #define HIST(n) (hist[(n) % MAX_HISTORY])   // xxx use inline routine
+    #define HIST(n) (hist[(n) % MAX_HISTORY])
 
-    *position = HIST(tail).pos - info->pos_offset;
+    info->pos_offset = HIST(tail).pos;
+}    
+
+bool encoder_get_enabled(int id)
+{
+    return info_tbl[id].enabled;
 }
 
-void encoder_get_speed(int id, int *speed)
+int encoder_get_position(int id)
+{
+    struct info_s    * info = &info_tbl[id];
+    struct history_s * hist = info->history;
+    unsigned int       tail = info->tail;
+
+    return HIST(tail).pos - info->pos_offset;
+}
+
+int encoder_get_speed(int id)
 {
     struct info_s    * info = &info_tbl[id];
     struct history_s * hist = info->history;
@@ -121,8 +146,7 @@ void encoder_get_speed(int id, int *speed)
 
     // don't try to get the speed if the encoder is not enabled
     if (info->enabled == false) {
-        *speed = 0;
-        return;
+        return 0;
     }
 
     // find a history entry that is 20 ms earlier than time_now,
@@ -152,41 +176,20 @@ void encoder_get_speed(int id, int *speed)
     }
 
     // return speed
-    *speed = (int64_t)1000000 * (HIST(tail).pos - HIST(idx).pos) / 
-             (signed)(time_now - HIST(idx).time);
+    return (int64_t)1000000 * (HIST(tail).pos - HIST(idx).pos) / 
+           (signed)(time_now - HIST(idx).time);
 }
 
-void encoder_get_errors(int id, int *errors)
+int encoder_get_errors(int id)
 {
-    *errors = info_tbl[id].errors;
+    return info_tbl[id].errors;
 }
 
-void encoder_pos_reset(int id)
-{
-    struct info_s    * info = &info_tbl[id];
-    struct history_s * hist = info->history;
-    unsigned int       tail = info->tail;
-
-    info->pos_offset = HIST(tail).pos;
-}    
-
-void encoder_enable(int id)
-{
-    info_tbl[id].enabled = true;
-}
-
-void encoder_disable(int id)
-{
-    info_tbl[id].enabled = false;
-    info_tbl[id].was_disabled = true;
-}
-
-// debug routine
-void encoder_get_poll_intvl_us(int *poll_intvl_us)
+int encoder_get_poll_intvl_us(void)
 {
     int lcl_poll_rate = poll_rate;
 
-    *poll_intvl_us = (lcl_poll_rate > 0 ? 1000000 / lcl_poll_rate : -1);
+    return (lcl_poll_rate > 0 ? 1000000 / lcl_poll_rate : -1);
 }
 
 // -----------------  ENCODER THREAD  -----------------------------
@@ -227,6 +230,8 @@ static void *encoder_thread(void *cx)
         // purpose is to save power
         if (all_disabled()) {
             poll_rate = 0;
+            poll_count_t_last = timer_get();
+            poll_count = 0;
             usleep(10000);  // 10 ms
             continue;
         }
@@ -260,7 +265,7 @@ static void *encoder_thread(void *cx)
                 continue;
             } else if (x == 2) {
                 info->errors++;
-                WARN("encoder %d sequence error\n", id);  // xxx comment this out
+                //WARN("encoder %d sequence error\n", id);
             } else {
                 // add entry to history array for this encoder, the
                 // encoder's position and current time are added; 

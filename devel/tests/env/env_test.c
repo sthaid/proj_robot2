@@ -17,7 +17,8 @@ int main(int argc, char **argv)
 
     while (1) {
         sleep(1);
-        env_read(&temperature, &pressure);
+        temperature = env_read_temperature();
+        pressure = env_read_pressure();
         printf("temp=%0.1f C  pressure=%0.0f Pascal (%0.2f in Hg)\n", 
               temperature, pressure, PASCAL_TO_INHG(pressure));
     }

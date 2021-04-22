@@ -69,13 +69,13 @@ int button_init(int max_info_arg, ...)   // int gpio_pin, ...
     return 0;
 }
 
-void button_get_current_state(int id, int *state)
+int button_get_current_state(int id)
 {
     // return the current state of the specified button
     if (gpio_read(info_tbl[id].gpio)) {
-        *state = BUTTON_STATE_RELEASED;
+        return BUTTON_STATE_RELEASED;
     } else {
-        *state = BUTTON_STATE_PRESSED;
+        return BUTTON_STATE_PRESSED;
     }
 }
 
@@ -100,15 +100,17 @@ static void *button_thread(void *cx)
     int rc, id;
     unsigned int gpio_all;
     struct sched_param param;
-    cpu_set_t cpu_set;
 
+#if 0
     // set affinity to cpu 3
+    cpu_set_t cpu_set;
     CPU_ZERO(&cpu_set);
     CPU_SET(3, &cpu_set);
     rc = sched_setaffinity(0,sizeof(cpu_set_t),&cpu_set);
     if (rc < 0) {
         FATAL("sched_setaffinity, %s\n", strerror(errno));
     }
+#endif
 
     // set realtime priority
     memset(&param, 0, sizeof(param));

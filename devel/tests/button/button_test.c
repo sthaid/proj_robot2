@@ -30,7 +30,7 @@ int main(int argc, char **argv)
             bool alert = false;
             for (int id = 0; id < MAX_BUTTON; id++) {
                 int state;
-                button_get_current_state(id, &state);
+                state = button_get_current_state(id);
                 printf("%10s ", BUTTON_STATE_STR(state));
                 if (state == BUTTON_STATE_PRESSED) {
                     alert = true;

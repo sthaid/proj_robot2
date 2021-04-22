@@ -10,12 +10,17 @@ extern "C" {
 
 #include <stdbool.h>
 
-int imu_init(int dev_addr);  // multiple instances not supported
+// Notes: 
+// - multiple instances not supported
+// - imu_check_accel_alert, accel_alert_value arg is optional
 
-void imu_read_magnetometer(double *heading);
+int imu_init(int dev_addr);  // return -1 on error, else 0
 
+double imu_read_magnetometer(void);
+
+bool imu_check_accel_alert( double *accel_alert_value);
 void imu_set_accel_alert_limit(double accel_alert_limit);
-void imu_check_accel_alert(bool *accel_alert, double *accel_alert_value);
+double imu_get_accel_alert_limit(void);
 
 #ifdef __cplusplus
 }

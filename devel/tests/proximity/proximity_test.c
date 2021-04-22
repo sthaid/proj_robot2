@@ -46,9 +46,7 @@ int main(int argc, char **argv)
     while (!sig_rcvd) {
         // print poll_intvl_us every 10 seconds
         if ((++count % 1000) == 0) {
-            int poll_intvl_us;
-            proximity_get_poll_intvl_us(&poll_intvl_us);
-            printf("poll interval = %d us\n", poll_intvl_us);
+            printf("poll interval = %d us\n", proximity_get_poll_intvl_us());
         }
 
         // check both sensors for proximity alert, and
@@ -57,7 +55,7 @@ int main(int argc, char **argv)
             bool alert;
             double sig;
 
-            proximity_check(id, &alert, &sig);
+            alert = proximity_check(id, &sig);
             if (alert) {
                 printf("ALERT %d, sig=%0.2f\a\n", id, sig);
             }

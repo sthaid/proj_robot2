@@ -32,18 +32,18 @@ int main(int argc, char **argv)
         // every 10 secs get the poll intvl
         if ((++count % 10) == 0) {
             int poll_intvl_us;
-            encoder_get_poll_intvl_us(&poll_intvl_us);
+            poll_intvl_us = encoder_get_poll_intvl_us();
             printf("POLL_INTVL_US = %d\n", poll_intvl_us);
             printf("\n");
         }
 
         // read both encoders, and print their values
         for (id = 0; id < 2; id++) {
-            int position, speed, errors;
-            encoder_get_position(id, &position);
-            encoder_get_speed(id, &speed);
-            encoder_get_errors(id, &errors);
-            printf("ID %d : POS %d   SPEED %d   ERRORS %d\n", id, position, speed, errors);
+            printf("ID %d : POS %d   SPEED %d   ERRORS %d\n", 
+                   id,
+                   encoder_get_position(id),
+                   encoder_get_speed(id),
+                   encoder_get_errors(id));
         }
         printf("\n");
 

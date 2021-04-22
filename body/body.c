@@ -32,6 +32,9 @@
 #define MAX_LOGMSG_STRS 128
 #define LOG_FILENAME "mc_test.log"
 
+#define PASCAL_TO_INHG(pa)          ((pa) * 0.0002953)
+#define CENTIGRADE_TO_FAHRENHEIT(c) ((c) * 1.8 + 32.)
+
 //
 // typedefs
 //
@@ -50,6 +53,8 @@ static uint64_t alert_msg_time_us;
 static char     logmsg_strs[MAX_LOGMSG_STRS][200];
 static int      logmsg_strs_tail;
 static bool     logfile_monitor_thread_running;
+
+static bool     mc_debug_mode_enabled;
 
 //
 // prototypes
@@ -87,36 +92,53 @@ int main(int argc, char **argv)
 
 static void init_devices(void)
 {
-    // XXX check rc,  exit on error
+    // xxx check rc,  exit on error
     gpio_init();
     timer_init();
     mc_init(2, LEFT_MOTOR, RIGHT_MOTOR);
     encoder_init(2, ENCODER_GPIO_LEFT_B, ENCODER_GPIO_LEFT_A,
                     ENCODER_GPIO_RIGHT_B, ENCODER_GPIO_RIGHT_A);
     proximity_init(2, PROXIMITY_FRONT_GPIO_SIG, PROXIMITY_FRONT_GPIO_ENABLE,
-                    PROXIMITY_REAR_GPIO_SIG,  PROXIMITY_REAR_GPIO_ENABLE);
+                      PROXIMITY_REAR_GPIO_SIG,  PROXIMITY_REAR_GPIO_ENABLE);
     button_init(2, BUTTON_LEFT, BUTTON_RIGHT);
     current_init(1, CURRENT_ADC_CHAN);
     oled_init(1, 0);
     env_init(0);
     imu_init(0);
+
+#if 0 // xxx
+    // enable capabilities
+    proximity_enable(0);   // front
+    proximity_enable(1);   // rear
+    encoder_enable(0);     // left
+    encoder_enable(1);     // right
+    mc_debug_mode(true);
+    mc_debug_mode_enabled = true;
+#endif
+
+#if 1 // xxx
+    // oled test
+    oled_set_str(0, 0, "idx0abcdefg");
+    oled_set_str(0, 5, "idx5abcdefg");
+    oled_set_str(0, 7, "idx7777777777777");
+#endif
 }
 
 static void init_logging(void)
 {
     pthread_t tid;
 
+    // init logging to LOG_FILENAME
+    if (logmsg_init(LOG_FILENAME) < 0) {
+        fprintf(stderr, "FATAL: logmsg_init failed, %s\n", strerror(errno));
+        exit(1);;
+    }
+
     // create thread to read the tail of logfile and copy
     // the new lines added to the logfile to logmsgs array
     pthread_create(&tid, NULL, logfile_monitor_thread, NULL);
     while (logfile_monitor_thread_running == false) {
         usleep(1000);
-    }
-
-    // init logging to LOG_FILENAME
-    if (logmsg_init(LOG_FILENAME) < 0) {
-        fprintf(stderr, "FATAL: logmsg_init failed, %s\n", strerror(errno));
-        exit(1);;
     }
 }
 
@@ -126,7 +148,6 @@ static void *logfile_monitor_thread(void *cx)
     char s[200];
 
     // open the LOG_FILENAME for reading and seek to end
-    // XXX this failed if file not exists
     fp = fopen(LOG_FILENAME, "r");
     if (fp == NULL) {
         fprintf(stderr, "FATAL: failed to open %s for reading, %s\n", 
@@ -136,11 +157,12 @@ static void *logfile_monitor_thread(void *cx)
     fseek(fp, 0, SEEK_END);
     logfile_monitor_thread_running = true;
 
-    // loop forever reading from LOG_FILENAME and saving output to XXX
+    // loop forever reading from LOG_FILENAME and saving output to 
+    // logmsg_strs[] circular array of strings
     while (true) {
         if (fgets(s, sizeof(s), fp) != NULL) {
             int new_tail = logmsg_strs_tail + 1;
-            strncpy(logmsg_strs[new_tail], s, sizeof(logmsg_strs[new_tail%MAX_LOGMSG_STRS]));
+            strncpy(logmsg_strs[new_tail%MAX_LOGMSG_STRS], s, sizeof(logmsg_strs[0]));
             __sync_synchronize();
             logmsg_strs_tail = new_tail;
             continue;
@@ -152,19 +174,121 @@ static void *logfile_monitor_thread(void *cx)
 
 // -----------------  CURSES UPDATE_DISPLAY  -------------------------------
 
-// XXX use curses alert (beep) routine
-
 static void update_display(int maxy, int maxx)
 {
     mc_status_t *mcs = mc_get_status();
     double electronics_current, motors_current, total_current;
+    int id;
 
-    current_read(0, &electronics_current);
+    // display voltage and current
+    // row 0
+    electronics_current = current_read_smoothed(0);
     motors_current = mcs->motors_current;
     total_current = electronics_current + motors_current;
     mvprintw(0, 0,
              "VOLTAGE = %-5.2f - CURRENT = %-4.2f  (%4.2f + %4.2f)",
              mcs->voltage, total_current, electronics_current, motors_current);
+
+    // display motor ctlr values
+    // rows 2-5
+    mvprintw(2, 0,
+             "MOTORS: %s Reason=%s   EncPollIntvlUs=%d",
+            MC_STATE_STR(mcs->state), mcs->reason_str, encoder_get_poll_intvl_us());
+    if (mc_debug_mode_enabled) {
+        mvprintw(3,0, 
+             "      Target   Ena Position Speed Errors   ErrStat Target Current Accel Voltage Current");
+    } else {
+        mvprintw(3,0, 
+             "      Target   Ena Position Speed Errors");
+    }
+    for (id = 0; id < 2; id++) {
+        if (mc_debug_mode_enabled) {
+            struct debug_mode_mtr_vars_s *x = &mcs->debug_mode_mtr_vars[id];
+            mvprintw(4+id, 0, 
+                     "  %c - %6d   %3d %8d %5d %6d    0x%4.4x %6d %7d %2d %2d %7.2f %7.2f",
+                     (id == 0 ? 'L' : 'R'), mcs->target_speed[id],
+                     encoder_get_enabled(id),
+                     encoder_get_position(id),
+                     encoder_get_speed(id),
+                     encoder_get_errors(id),
+                     x->error_status, x->target_speed, x->current_speed, 
+                     x->max_accel, x->max_decel,
+                     x->input_voltage/1000., x->current/1000.);
+        } else {
+            mvprintw(4+id, 0, 
+                     "  %c - %6d   %3d %8d %5d %6d",
+                     (id == 0 ? 'L' : 'R'), mcs->target_speed[id],
+                     encoder_get_enabled(id),
+                     encoder_get_position(id),
+                     encoder_get_speed(id),
+                     encoder_get_errors(id));
+        }
+    }
+
+    // display proximity sensor values
+    // rows 7-9
+    mvprintw(7, 0,
+             "PROXIMITY:  AlertSigLimit=%4.2f  PollIntvlUs=%d",
+             proximity_get_alert_limit(), proximity_get_poll_intvl_us());
+    for (id = 0; id < 2; id++) {
+        double proximity_avg_sig;
+        bool proximity_alert;
+
+        proximity_alert = proximity_check(id, &proximity_avg_sig);
+        mvprintw(8+id, 0,
+                 "  %c - Enabled=%d  Alert=%d  Sig=%4.2f",
+                 (id == 0 ? 'F' : 'R'),
+                 proximity_get_enabled(id),
+                 proximity_alert,
+                 proximity_avg_sig);
+        if (proximity_alert) {
+            beep();
+        }
+    }
+
+    // display IMU values
+    // row 11
+    static double last_accel_alert_value;
+    static int    accel_alert_count;
+    double accel_alert_value;
+    if (imu_check_accel_alert(&accel_alert_value)) {
+        last_accel_alert_value = accel_alert_value;
+        accel_alert_count++;
+        beep();
+    }
+    mvprintw(11, 0,
+        "IMU:  Heading=%3.0f - Accel AlertCount=%d LastAlertValue=%4.2f AlertLimit=%4.2f",
+        imu_read_magnetometer(),
+        accel_alert_count, last_accel_alert_value,
+        imu_get_accel_alert_limit());
+
+    // display ENV values
+    // row 13
+    double temperature, pressure;
+    temperature = env_read_temperature();
+    pressure = env_read_pressure();
+    mvprintw(13, 0, 
+        "ENV:  %4.1f C  %0.0f Pa - %4.1f F  %5.2f in Hg",
+        temperature, pressure, 
+        CENTIGRADE_TO_FAHRENHEIT(temperature),
+        PASCAL_TO_INHG(pressure));
+
+    // button values
+    // row 15
+    mvprintw(15, 0, 
+        "BTNS: %d  %d",
+        button_get_current_state(0),
+        button_get_current_state(1));
+
+    // oled strings
+    // row 17
+    int i, max=10;
+    char *strs[10];
+    oled_get_strs(0, &max, strs);
+    mvprintw(17, 0, "OLED:");
+    for (i = 0; i < max; i++) {
+        mvprintw(17, 6+10*i, strs[i]);
+    }
 
     // display the logfile msgs
     // rows 19..maxy-5
@@ -172,7 +296,7 @@ static void update_display(int maxy, int maxx)
     int tail = logmsg_strs_tail;
     for (int i = 0; i < num_rows; i++) {
         int idx = i + tail - num_rows + 1;
-        if (idx < 0) continue;
+        if (idx <= 0) continue;
         char *str = logmsg_strs[idx%MAX_LOGMSG_STRS];
         bool is_error_str = (strstr(str, "ERROR") != NULL);
         if (is_error_str) attron(COLOR_PAIR(COLOR_PAIR_RED));
@@ -190,13 +314,8 @@ static void update_display(int maxy, int maxx)
         attroff(COLOR_PAIR(COLOR_PAIR_RED));
     }
 
-    // display cmdline XXX can we leave the cursor here
-    // - row maxy-1
-    if ((microsec_timer() % 1000000) > 500000) {
-        mvprintw(maxy-1, 0, "> %s", cmdline);
-    } else {
-        mvprintw(maxy-1, 0, "> %s_", cmdline);
-    }
+    // display cmdline
+    mvprintw(maxy-1, 0, "> %s", cmdline);
 }
 
 static void display_alert(char *fmt, ...)
@@ -214,7 +333,7 @@ static void display_alert(char *fmt, ...)
 
 static int input_handler(int input_char)
 {
-    // XXX comment
+    // process input_char
     if (input_char == '\n') {
         if (process_cmdline() == -1) {
             return -1;  // return -1, terminates pgm
@@ -303,9 +422,7 @@ static void curses_runtime(void (*update_display)(int maxy, int maxx), int (*inp
         // update the display
         update_display(maxy, maxx);
 
-        // put the cursor back to the origin, and
         // refresh display
-        move(0,0);  // XXX maybe move this to handler 
         refresh();
 
         // process character inputs
@@ -321,168 +438,3 @@ static void curses_runtime(void (*update_display)(int maxy, int maxx), int (*inp
         }
     }
 }
-
-#if 0
-
-static bool     test_thread_is_running;
-
-    // enable encoders
-    for (int id = 0; id < 2; id++) {
-        encoder_enable(id);
-    }
-
-static void update_display(int maxy, int maxx)
-{
-
-    // loop over all motor-ctlrs and display their variable values
-    // rows: 1..4
-    //             xxxxxxxxx xxxxxxxxx xxxxxxxxx xxxxxxxxx xxxxxxxxx xxxxxxxxx xxxxxxxxx xxxxxxxxx xxxxxxxxx xxxxxxxxx xxxxxxxxx xxxxxxxxx
-    mvprintw(1,0, "  ERRSTAT  TGTSPEED CURRSPEED MAX_ACCEL MAX_DECEL       VIN   CURRENT CURRLIMIT   ENC_POS ENC_SPEED  ENC_ERRS  ENC_POLL");
-    for (int id = 0; id < MAX_MC; id++) {
-        int enc_pos, enc_speed, enc_errs, enc_poll_intvl_us;
-
-        errstat   = 0x9999;
-        tgtspeed  = 9999;
-        currspeed = 9999;
-        maxaccel  = 9999;
-        maxdecel  = 9999;
-        vin       = 9999;
-        current   = 9999;
-        currlimit = 9999;
-        enc_pos   = 9999;
-        enc_speed = 9999;
-        enc_errs  = 9999;
-        enc_poll_intvl_us = 9999;
-
-#if 0
-        mc_get_variable(id, VAR_ERROR_STATUS, &errstat);
-        mc_get_variable(id, VAR_TARGET_SPEED, &tgtspeed);
-        mc_get_variable(id, VAR_CURRENT_SPEED, &currspeed);
-        mc_get_variable(id, VAR_MAX_ACCEL_FORWARD, &maxaccel);
-        mc_get_variable(id, VAR_MAX_DECEL_FORWARD, &maxdecel);
-        mc_get_variable(id, VAR_INPUT_VOLTAGE, &vin);
-        mc_get_variable(id, VAR_CURRENT, &current);
-        mc_get_variable(id, VAR_CURRENT_LIMITTING_OCCUR_CNT, &currlimit);
-#endif
-
-        encoder_get_position(id, &enc_pos);
-        encoder_get_speed(id, &enc_speed);
-        encoder_get_errors(id, &enc_errs);
-        encoder_get_poll_intvl_us(&enc_poll_intvl_us);
-
-        mvprintw(3+id,0, "%9d %9d %9d %9d %9d %9d %9d %9d %9d %9d %9d %9d",
-                errstat,
-                tgtspeed, currspeed,
-                maxaccel, maxdecel,
-                vin, current, currlimit,
-                enc_pos, enc_speed, enc_errs, enc_poll_intvl_us);
-    }
-
-
-    // display test thread status
-    // row mayx-2
-    if (test_thread_is_running) {
-        mvprintw(maxy-2, 0, "Test Thread Is Running");
-    }
-}
-
-    char cmd[100];
-    int  arg1, arg2, arg3;
-    int  cnt;
-
-    #define CHECK_SSCANF_CNT(num_expected_cnt, usage) \
-        do { \
-            if (cnt-1 != (num_expected_cnt)) { \
-                ERROR("USAGE: %s %s\n", cmd, usage); \
-                return 0; \
-            } \
-        } while (0)
-
-
-    INFO("CMD: %s\n", cmdline);
-
-    if (strcmp(cmd, "enable") == 0) {
-        CHECK_SSCANF_CNT(1, "id");
-        int id = arg1;
-        mc_enable(id);
-    } else if (strcmp(cmd, "speed") == 0) {
-        CHECK_SSCANF_CNT(2, "id speed");
-        int id = arg1;
-        int speed = arg2;
-        mc_speed(id, speed);
-    } else if (strcmp(cmd, "accel") == 0) {
-        CHECK_SSCANF_CNT(2, "id accel");
-        int id = arg1;
-        int accel = arg2;
-        mc_set_motor_limit(id, MTRLIM_MAX_ACCEL_FWD_AND_REV, accel);
-        mc_set_motor_limit(id, MTRLIM_MAX_DECEL_FWD_AND_REV, accel);
-    } else if (strcmp(cmd, "enc_reset") == 0) {
-        CHECK_SSCANF_CNT(1, "id");
-        int id = arg1;
-        encoder_pos_reset(id);
-    } else if (strcmp(cmd, "stop") == 0) {
-        CHECK_SSCANF_CNT(1, "id");
-        int id = arg1;
-        mc_stop(id);
-    } else if (strcmp(cmd, "test") == 0) {
-        CHECK_SSCANF_CNT(3, "id encoder_distance mtr_ctlr_speed");
-        pthread_t tid;
-        test_thread_cx_t *cx = malloc(sizeof(test_thread_cx_t));
-        cx->id = arg1;
-        cx->encoder_distance = arg2;
-        cx->mtr_ctlr_speed = arg3;
-        test_thread_is_running = true;
-        pthread_create(&tid, NULL, test_thread, cx);
-    return 0;
-
-}
-
-static void * test_thread(void *cx_arg)
-{
-    test_thread_cx_t *cx = cx_arg;
-    int id       = cx->id;                // mc id
-    int distance = cx->encoder_distance;  // encoder distance
-    int speed    = cx->mtr_ctlr_speed;    // mc speed
-    int pos_at_end_of_accel;
-    int p;
-
-    // free cx_arg
-    free(cx_arg);
-
-    // reset encode position
-    encoder_pos_reset(id);
-
-    // set desired speed
-    mc_speed(id, speed);
-
-    // delay for the acceleration interval, and
-    // get the encoder position  XXX assumes accel = 1
-    usleep(speed*1000);
-    encoder_get_position(0, &pos_at_end_of_accel);
-    INFO("xxx pos at end of accel %d\n", pos_at_end_of_accel);
-    // XXX need to poll here for short distances
-
-    // wait for position to be 'distance - pos_at_end_of_accel'
-    while (true) {
-        encoder_get_position(0, &p);
-        if (p > distance - pos_at_end_of_accel - 650) {
-            break;
-        }
-        usleep(1000);
-    }
-
-    // set speed to 0
-    INFO("pos at begining of decel %d\n", p);
-    mc_speed(id, 0);
-
-    // XXX could wait for speed 0, and print deviation
-
-    // test thread is done
-    test_thread_is_running = false;
-    return NULL;
-}
-
-// display alert on top line of window 
-
-
-#endif

@@ -5,7 +5,7 @@
 extern "C" {
 #endif
 
-int relay_init(int max_info, ...);  // int gpio_pin, ...
+int relay_init(int max_info, ...);  // returns -1 on error, else 0
 void relay_ctrl(int id, bool enable);
 
 #ifdef __cplusplus

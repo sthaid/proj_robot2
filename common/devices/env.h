@@ -5,8 +5,12 @@
 extern "C" {
 #endif
 
-int env_init(int dev_addr);  // multiple instances not supported
-int env_read(double *temperature, double *pressure);   // args are optional
+// Note: multiple instances not supported
+
+int env_init(int dev_addr);  // return -1 on error, else 0
+
+double env_read_temperature(void);
+double env_read_pressure(void);
 
 #ifdef __cplusplus
 }

@@ -36,16 +36,14 @@ int env_init(int dev_addr)  // multiple instances not supported
     return 0;
 }
 
-int env_read(double *temperature_arg, double *pressure_arg)
+double env_read_temperature(void)
 {
-    if (temperature_arg) {
-        *temperature_arg = temperature;
-    }
-    if (pressure_arg) {
-        *pressure_arg = pressure;
-    }
+    return temperature;
+}
 
-    return 0;
+double env_read_pressure(void)
+{
+    return pressure;
 }
 
 // -----------------  THREAD-------------------------------------

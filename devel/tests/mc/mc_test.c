@@ -87,7 +87,7 @@ void *get_status_thread(void *cx)
                    "        %d: errstat=0x%04x tgt=%-4d curr=%-4d max_accel=%-2d max_decel=%-2d v=%5.2f A=%4.2f\n"
                    "        %d: errstat=0x%04x tgt=%-4d curr=%-4d max_accel=%-2d max_decel=%-2d v=%5.2f A=%4.2f\n"
                    "\n",
-                   MC_STATE_STR(status->state), status->reason_str, status->voltage, status->current,
+                   MC_STATE_STR(status->state), status->reason_str, status->voltage, status->motors_current,
                      status->target_speed[0], status->target_speed[1],
                    0, mr0->error_status, mr0->target_speed, mr0->current_speed, mr0->max_accel, mr0->max_decel, 
                       mr0->input_voltage/1000., mr0->current/1000.,
@@ -95,7 +95,7 @@ void *get_status_thread(void *cx)
                       mr1->input_voltage/1000., mr1->current/1000.);
         } else {
             printf("STATUS: %s %s V=%-5.2f A=%-4.2f TGT_SPEED=%d,%d\n\n",
-                   MC_STATE_STR(status->state), status->reason_str, status->voltage, status->current,
+                   MC_STATE_STR(status->state), status->reason_str, status->voltage, status->motors_current,
                      status->target_speed[0], status->target_speed[1]);
         }
         sleep(1);

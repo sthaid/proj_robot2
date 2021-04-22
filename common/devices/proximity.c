@@ -88,12 +88,13 @@ int proximity_init(int max_info_arg, ...)  // int gpio_sig, int gpio_enable
     return 0;
 }
 
-void proximity_check(int id, bool *alert, double *avg_sig_arg)
+bool proximity_check(int id, double *avg_sig_arg)
 {
     if (avg_sig_arg) {
         *avg_sig_arg = info_tbl[id].avg_sig;
     }
-    *alert =info_tbl[id].avg_sig > alert_limit;
+
+    return info_tbl[id].avg_sig > alert_limit;
 }
 
 void proximity_enable(int id)
@@ -108,18 +109,26 @@ void proximity_disable(int id)
     info_tbl[id].enabled = false;
 }
 
-// alert_limit applies to all proximity sensors
 void proximity_set_alert_limit(double alert_limit_arg)
 {
+    // alert_limit applies to all proximity sensors
     alert_limit = alert_limit_arg;
 }
 
-// debug routine
-void proximity_get_poll_intvl_us(int *poll_intvl_us)
+bool proximity_get_enabled(int id)
+{
+    return info_tbl[id].enabled;
+}
+
+double proximity_get_alert_limit(void)
+{
+    return alert_limit;
+}
+
+int proximity_get_poll_intvl_us(void)
 {
     int lcl_poll_rate = poll_rate;
-
-    *poll_intvl_us = (lcl_poll_rate > 0 ? 1000000 / lcl_poll_rate : -1);
+    return (lcl_poll_rate > 0 ? 1000000 / lcl_poll_rate : -1);
 }
 
 // -----------------  THREAD--------------------------------------------
@@ -129,17 +138,19 @@ static void *proximity_thread(void *cx)
     int rc, id;
     unsigned int gpio_all;
     struct sched_param param;
-    cpu_set_t cpu_set;
     int poll_count=0;
     uint64_t t_now, t_last=timer_get();
 
+#if 0
     // set affinity to cpu 3
+    cpu_set_t cpu_set;
     CPU_ZERO(&cpu_set);
     CPU_SET(3, &cpu_set);
     rc = sched_setaffinity(0,sizeof(cpu_set_t),&cpu_set);
     if (rc < 0) {
         FATAL("sched_setaffinity, %s\n", strerror(errno));
     }
+#endif
 
     // set realtime priority
     memset(&param, 0, sizeof(param));

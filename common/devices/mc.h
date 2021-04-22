@@ -41,17 +41,20 @@ typedef struct {
     } debug_mode_mtr_vars[10];
 } mc_status_t;
 
-int mc_init(int max_info, ...);  // char *devname, ...
+// Notes:
+// - call to mc_set_speed_all must supply speeds for all instances
+// - Enabling debug_mode will cause the debug_mode_mtr_vars to be 
+//   read at 100 ms interval, even when in MC_STATE_QUIESCED or 
+//   MC_STATE_ERROR. This increases power usage.
+
+int mc_init(int max_info, ...);  // these return -1 on error, else 0
 int mc_enable_all(void);
 int mc_set_speed(int id, int speed);
 int mc_set_speed_all(int speed0, ...);
+
 void mc_emergency_stop_all(char *reason_str);
 void mc_set_accel(int normal_accel, int emer_stop_accel);
 mc_status_t *mc_get_status(void);
-
-// Enabling debug_mode will cause the debug_mode_mtr_vars to be 
-// read at 100 ms interval, even when in MC_STATE_QUIESCED or 
-// MC_STATE_ERROR. This increases power usage.
 void mc_debug_mode(bool enable);
 
 #ifdef __cplusplus

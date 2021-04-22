@@ -15,7 +15,7 @@ int main(int argc, char **argv)
 
     while (1) {
         sleep(1);
-        current_read(0, &current);
+        current = current_read_smoothed(0);
         printf("current = %5.2f A\n", current);
     }
 

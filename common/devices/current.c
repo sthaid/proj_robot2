@@ -53,21 +53,17 @@ int current_init(int max_info_arg, ...)  // int adc_chan, ...
     return 0;
 }
 
-int current_read_unsmoothed(int id, double *current)
+double current_read_unsmoothed(int id)
 {
     double v;
 
     STM32_adc_read(info_tbl[id].adc_chan, &v);
-    *current = (v - 0.322) * (1. / .264);
-
-    return 0;
+    return (v - 0.322) * (1. / .264);
 }
 
-int current_read(int id, double *current)
+double current_read_smoothed(int id)
 {
-    *current = info_tbl[id].current;
-
-    return 0;
+    return info_tbl[id].current;
 }
 
 // -----------------  THREAD-------------------------------------
@@ -79,7 +75,7 @@ static void * current_thread(void *cx)
 
     while (true) {
         for (id = 0; id < max_info; id++) {
-            current_read_unsmoothed(id, &current);
+            current = current_read_unsmoothed(id);
 
             info_tbl[id].current = 0.98 * info_tbl[id].current + 
                                    0.02 * current;
