@@ -5,8 +5,8 @@
 extern "C" {
 #endif
 
-#define BUTTON_STATE_RELEASED 1
-#define BUTTON_STATE_PRESSED  2
+#define BUTTON_STATE_RELEASED 0
+#define BUTTON_STATE_PRESSED  1
 
 #define BUTTON_STATE_STR(_state) \
     ((_state) == BUTTON_STATE_PRESSED  ? "PRESSED" : \

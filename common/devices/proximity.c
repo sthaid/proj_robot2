@@ -170,6 +170,8 @@ static void *proximity_thread(void *cx)
                 info_tbl[id].avg_sig = 0;
             }
             poll_rate = 0;
+            t_last = timer_get();;
+            poll_count = 0;
             usleep(10000);
             continue;
         }

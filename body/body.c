@@ -106,7 +106,7 @@ static void init_devices(void)
     env_init(0);
     imu_init(0);
 
-#if 0 // xxx
+#if 1 // xxx
     // enable capabilities
     proximity_enable(0);   // front
     proximity_enable(1);   // rear
