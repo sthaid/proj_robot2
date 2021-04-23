@@ -8,7 +8,6 @@ devel/tests/encoder/enc_test
 devel/tests/env/env_test
 devel/tests/imu/imu_test
 devel/tests/mc/mc_test
-devel/tests/mc/mc_test.log
 devel/tests/oled/oled_test
 devel/tests/proximity/proximity_test
 devel/tests/relay/relay_test
@@ -27,3 +26,4 @@ devel/tests/zz_other/realtime/module/rt_gpio_test_module.mod
 devel/tests/zz_other/realtime/module/rt_gpio_test_module.mod.c
 
 body/body
+body/mc_test.log

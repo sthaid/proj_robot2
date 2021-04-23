@@ -3,7 +3,8 @@ CPPFLAGS = -Wall -g -O2 -I../common/include -Iinclude
 LDFLAGS  = ../common/devices/i2c/u8g2/libu8g2.a -lpthread -lm -lcurses -lstdc++
 
 TARGET   = body
-SRC      = body.c \
+SRC      = main.c \
+           oled_ctlr.c \
            ../common/devices/mc.c \
            ../common/devices/encoder.c \
            ../common/devices/proximity.c \

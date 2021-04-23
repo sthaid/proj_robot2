@@ -12,24 +12,21 @@
 #include <gpio.h>
 #include <misc.h>
 
-// defines
-
-#define MAX_EVLIST 4
-
+//
 // variables
+//
 
 static struct info_s {
     int gpio;
     bool last_state;
     uint64_t pressed_time_us;
+    button_cb_t cb;
 } info_tbl[10];
 static int max_info;
 
-static button_event_t evlist[MAX_EVLIST];
-static int evlist_head;
-static int evlist_tail;
-
+//
 // prototypes
+//
 
 static void *button_thread(void *cx);
 
@@ -69,28 +66,14 @@ int button_init(int max_info_arg, ...)   // int gpio_pin, ...
     return 0;
 }
 
-int button_get_current_state(int id)
+bool button_is_pressed(int id)
 {
-    // return the current state of the specified button
-    if (gpio_read(info_tbl[id].gpio)) {
-        return BUTTON_STATE_RELEASED;
-    } else {
-        return BUTTON_STATE_PRESSED;
-    }
+    return gpio_read(info_tbl[id].gpio) == 0;
 }
 
-int button_get_event(button_event_t *ev)
+void button_register_cb(int id, button_cb_t cb)
 {
-    // if no events in list then return -1
-    if (evlist_head == evlist_tail) {
-        memset(ev, 0, sizeof(button_event_t));
-        return -1;
-    }
-
-    // return the oldest event
-    *ev = evlist[evlist_head];
-    evlist_head = (evlist_head + 1) % MAX_EVLIST;
-    return 0;
+    info_tbl[id].cb = cb;
 }
 
 // -----------------  THREAD--------------------------------------------
@@ -126,32 +109,31 @@ static void *button_thread(void *cx)
         gpio_all = gpio_read_all();
 
         // loop over defined buttons, and determine if the button has 
-        // just been pressed or released
+        // just been pressed or released, and make appropriate callback
         for (id = 0; id < max_info; id++) {
             struct info_s *x = &info_tbl[id];
             bool curr_state;
 
             curr_state = IS_BIT_CLR(gpio_all, x->gpio);
             if (curr_state != x->last_state) {
-                if ((evlist_tail+1) % MAX_EVLIST == evlist_head) {
-                    ERROR("button evlist is full\n");
-                } else {
-                    button_event_t *ev = &evlist[evlist_tail];
-                    ev->id = id;
-                    ev->state = (curr_state ? BUTTON_STATE_PRESSED : BUTTON_STATE_RELEASED);
-                    ev->pressed_duration_us = 0;
-                    if (ev->state == BUTTON_STATE_PRESSED) {
-                        x->pressed_time_us = microsec_timer();
-                    } else {
-                        if (x->pressed_time_us != 0) {
-                            ev->pressed_duration_us = microsec_timer() - x->pressed_time_us;
-                            x->pressed_time_us = 0;
-                        }
+                if (curr_state) {
+                    // button has just been pressed
+                    if (x->cb != NULL) {
+                        x->cb(id, true, 0);
                     }
-                    __sync_synchronize();
-                    evlist_tail = (evlist_tail+1) % MAX_EVLIST;
+                    x->pressed_time_us = microsec_timer();
+                } else {
+                    // button has just been released
+                    uint64_t duration_us = (x->pressed_time_us != 0 
+                                            ? microsec_timer() - x->pressed_time_us 
+                                            : 0);
+                    if (x->cb != NULL) {
+                        x->cb(id, false, duration_us);
+                    }
+                    x->pressed_time_us = 0;
                 }
             }
+
             x->last_state = curr_state;
         }
 

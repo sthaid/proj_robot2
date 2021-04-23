@@ -1,26 +1,4 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <stdbool.h>
-#include <stdint.h>
-#include <unistd.h>
-#include <string.h>
-#include <errno.h>
-#include <pthread.h>
-#include <curses.h>
-
-#include <body.h>
-#include <misc.h>
-
-#include <gpio.h>
-#include <timer.h>
-#include <mc.h>
-#include <encoder.h>
-#include <proximity.h>
-#include <button.h>
-#include <current.h>
-#include <oled.h>
-#include <env.h>
-#include <imu.h>
+#include "common.h"
 
 //
 // defines
@@ -31,9 +9,6 @@
 
 #define MAX_LOGMSG_STRS 128
 #define LOG_FILENAME "mc_test.log"
-
-#define PASCAL_TO_INHG(pa)          ((pa) * 0.0002953)
-#define CENTIGRADE_TO_FAHRENHEIT(c) ((c) * 1.8 + 32.)
 
 //
 // typedefs
@@ -116,12 +91,7 @@ static void init_devices(void)
     mc_debug_mode_enabled = true;
 #endif
 
-#if 1 // xxx
-    // oled test
-    oled_set_str(0, 0, "idx0abcdefg");
-    oled_set_str(0, 5, "idx5abcdefg");
-    oled_set_str(0, 7, "idx7777777777777");
-#endif
+    oled_ctlr_init();
 }
 
 static void init_logging(void)
@@ -265,8 +235,8 @@ static void update_display(int maxy, int maxx)
     // display ENV values
     // row 13
     double temperature, pressure;
-    temperature = env_read_temperature();
-    pressure = env_read_pressure();
+    temperature = env_read_temperature_degc();
+    pressure = env_read_pressure_pascal();
     mvprintw(13, 0, 
         "ENV:  %4.1f C  %0.0f Pa - %4.1f F  %5.2f in Hg",
         temperature, pressure, 
@@ -277,17 +247,17 @@ static void update_display(int maxy, int maxx)
     // row 15
     mvprintw(15, 0, 
         "BTNS: %d  %d",
-        button_get_current_state(0),
-        button_get_current_state(1));
+        button_is_pressed(0),
+        button_is_pressed(1));
 
     // oled strings
     // row 17
-    int i, max=10;
-    char *strs[10];
-    oled_get_strs(0, &max, strs);
+    int i;
+    oled_strs_t *strs;
+    strs = oled_get_strs();
     mvprintw(17, 0, "OLED:");
-    for (i = 0; i < max; i++) {
-        mvprintw(17, 6+10*i, strs[i]);
+    for (i = 0; i < MAX_OLED_STR; i++) {
+        mvprintw(17, 6+10*i, (*strs)[i]);
     }
 
     // display the logfile msgs
