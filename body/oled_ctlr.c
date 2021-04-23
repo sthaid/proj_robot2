@@ -48,7 +48,7 @@ static void *oled_ctlr_thread(void *cx)
 {
     int   count=0, count_last_oled_advance=0;
     char *str_to_display;
-    char  str_currently_displayed[MAX_OLED_STR_SIZE];
+    char  str_currently_displayed[MAX_OLED_STR_SIZE] = "";
 
     while (true) {
         // update oled_str array once per second
