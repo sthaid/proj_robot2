@@ -1,7 +1,3 @@
-// XXX full review
-// XXX check rc for all these calls
-// XXX cleanup commentes in here
-
 #include <stdio.h>
 #include <stdint.h>
 #include <stdbool.h>
@@ -93,10 +89,11 @@
 
 #define SET_STATE(_state, _reason_str) \
     do { \
-        /*INFO("state=%s reason=%s\n", MC_STATE_STR(_state), _reason_str);*/ \
-        status.state = (_state); \
-        strncpy(status.reason_str, _reason_str, sizeof(status.reason_str)-1); \
-        status.reason_str[sizeof(status.reason_str)-1] = '\0'; \
+        if ((_state) != status.state) { \
+            status.state = (_state); \
+            strncpy(status.reason_str, _reason_str, sizeof(status.reason_str)-1); \
+            status.reason_str[sizeof(status.reason_str)-1] = '\0'; \
+        } \
     } while (0)
 
 //
@@ -214,11 +211,11 @@ int mc_enable_all(void)
     // acquire mutex
     pthread_mutex_lock(&mutex);
 
-    // verify state is MC_STATE_ERROR
-    if (status.state != MC_STATE_ERROR) {
-        ERROR("state must be MC_STATE_ERROR\n");
+    // if state is MC_STATE_RUNNING or QUIESCED then
+    // there is no need to enable
+    if (status.state == MC_STATE_RUNNING || status.state == MC_STATE_QUIESCED) {
         pthread_mutex_unlock(&mutex);
-        return -1;
+        return 0;
     }
 
     // init some info_tbl[] fields
@@ -330,7 +327,11 @@ void mc_emergency_stop_all(char *reason_str)
     // acquire mutex
     pthread_mutex_lock(&mutex);
 
-// XXX if already in error state then just return
+    // if already in error state just return
+    if (status.state == MC_STATE_ERROR) {
+        pthread_mutex_unlock(&mutex);
+        return;
+    }
 
     // stop all motors
     for (int id = 0; id < max_info; id++) {
@@ -425,7 +426,9 @@ static void *monitor_thread(void *cx)
             // endif
             quiesce_count = (all_mc_target_speed_zero() ? quiesce_count+1 : 0);
             if (quiesce_count > 100) {
+                pthread_mutex_lock(&mutex);
                 SET_STATE(MC_STATE_QUIESCED, "all-motors-speed-0");
+                pthread_mutex_unlock(&mutex);
                 status.voltage = voltage;
                 status.motors_current = 0;
                 continue;
@@ -452,7 +455,9 @@ static void *monitor_thread(void *cx)
             // if one or more motor has non zero speed then
             // set state to MC_STATE_RUNNING
             if (all_mc_target_speed_zero() == false) {
+                pthread_mutex_lock(&mutex);
                 SET_STATE(MC_STATE_RUNNING, "un-quiesce");
+                pthread_mutex_unlock(&mutex);
             }
 
         } else if (status.state == MC_STATE_ERROR) {
@@ -625,10 +630,10 @@ static int issue_cmd(int id, unsigned char *cmd, int cmdlen, unsigned char *resp
     int rc;
     char err_str[100];
 
-    static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+    static pthread_mutex_t issue_cmd_mutex = PTHREAD_MUTEX_INITIALIZER;
 
-    // acquire mutex
-    pthread_mutex_lock(&mutex);
+    // acquire issue_cmd_mutex
+    pthread_mutex_lock(&issue_cmd_mutex);
 
     // copy cmd to lcl_cmd, and append crc byte, and send
     memcpy(lcl_cmd, cmd, cmdlen);
@@ -654,8 +659,8 @@ static int issue_cmd(int id, unsigned char *cmd, int cmdlen, unsigned char *resp
         memcpy(resp, lcl_resp, resplen);
     }
 
-    // release mutex
-    pthread_mutex_unlock(&mutex);
+    // release issue_cmd_mutex
+    pthread_mutex_unlock(&issue_cmd_mutex);
 
     // return success
     return 0;
@@ -663,7 +668,7 @@ static int issue_cmd(int id, unsigned char *cmd, int cmdlen, unsigned char *resp
 err:
     // print and return error
     ERROR("id=%d cmd=%s - %s\n", id, CMD_STR(cmd[0]), err_str);
-    pthread_mutex_unlock(&mutex);
+    pthread_mutex_unlock(&issue_cmd_mutex);
     return -1;
 }
 
