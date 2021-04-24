@@ -23,8 +23,6 @@
 // defines
 //
 
-#define MAX_HISTORY 4096  // suggest using pwr of 2
-
 //
 // variables
 //
@@ -36,18 +34,14 @@ static int encoder_tbl[][4] =
       {  2, +1, -1,  0 } };
 
 static struct info_s {
-    unsigned int gpio_a;
-    unsigned int gpio_b;
-    bool         enabled;
-    bool         was_disabled;
-    unsigned int errors;
-    unsigned int last_val;
-    int          pos_offset;  // xxx 64bit
-    unsigned int tail;
-    struct history_s {
-        int pos;  // xxx 64bit
-        uint64_t time;
-    } history[MAX_HISTORY];
+    int  gpio_a;
+    int  gpio_b;
+    bool enabled;
+    bool was_disabled;
+    int  last_val;
+    int  pos;
+    int  pos_offset;
+    int  errors;
 } info_tbl[10];
 static int max_info;
 
@@ -111,15 +105,9 @@ void encoder_disable(int id)
     info_tbl[id].was_disabled = true;
 }
 
-void encoder_pos_reset(int id)
+void encoder_reset(int id)
 {
-    struct info_s    * info = &info_tbl[id];
-    struct history_s * hist = info->history;
-    unsigned int       tail = info->tail;
-
-    #define HIST(n) (hist[(n) % MAX_HISTORY])
-
-    info->pos_offset = HIST(tail).pos;
+    info_tbl[id].pos_offset = info_tbl[id].pos;
 }    
 
 bool encoder_get_enabled(int id)
@@ -129,55 +117,13 @@ bool encoder_get_enabled(int id)
 
 int encoder_get_position(int id)
 {
-    struct info_s    * info = &info_tbl[id];
-    struct history_s * hist = info->history;
-    unsigned int       tail = info->tail;
-
-    return HIST(tail).pos - info->pos_offset;
+    return info_tbl[id].pos - info_tbl[id].pos_offset;
 }
 
+// XXX maybe keep this, but simpler
 int encoder_get_speed(int id)
 {
-    struct info_s    * info = &info_tbl[id];
-    struct history_s * hist = info->history;
-    unsigned int       tail = info->tail;
-    unsigned int       start, end, idx;
-    uint64_t           time_now, time_desired;
-
-    // don't try to get the speed if the encoder is not enabled
-    if (info->enabled == false) {
-        return 0;
-    }
-
-    // find a history entry that is 20 ms earlier than time_now,
-    // use binary search; this entry will be used to calculate the speed
-    time_now = timer_get();
-    time_desired = time_now - 20000;   // 20 ms earlier than now
-
-    end = tail;
-    start = (end >= 200 ? end - 200 : 0);
-
-    while (true) {
-        if (start == end) {
-            idx = start;
-            break;
-        }
-        idx = (start + end) / 2;
-        if ((HIST(idx).time < time_desired) && (HIST(idx+1).time >= time_desired)) {
-            break;
-        } else if (HIST(idx).time < time_desired) {
-            start = idx + 1;
-        } else {
-            end = idx - 1;
-            if (end < start) {
-                end = start;
-            }
-        }
-    }
-
-    // return speed
-    return (int64_t)1000000 * (HIST(tail).pos - HIST(idx).pos) / 
-           (signed)(time_now - HIST(idx).time);
+    return 0;  // xxx del
 }
 
 int encoder_get_errors(int id)
@@ -242,7 +188,6 @@ static void *encoder_thread(void *cx)
         // loop over encoders
         for (id = 0; id < max_info; id++) {
             struct info_s * info = &info_tbl[id];
-            struct history_s * hist = info->history;
 
             // if this encoder was_disabled then get it's last value
             if (info->was_disabled) {
@@ -261,21 +206,10 @@ static void *encoder_thread(void *cx)
             info->last_val = val;
 
             // process the 'x'
-            if (x == 0) {
-                continue;
-            } else if (x == 2) {
+            if (x == 2) {
                 info->errors++;
-                //WARN("encoder %d sequence error\n", id);
             } else {
-                // add entry to history array for this encoder, the
-                // encoder's position and current time are added; 
-                // this information is used by encoder_get() to determine the speed
-                unsigned int tail = info->tail;
-                unsigned int new_tail = tail + 1;
-                HIST(new_tail).pos = HIST(tail).pos + x;
-                HIST(new_tail).time = timer_get();
-                __sync_synchronize();
-                info->tail = new_tail;
+                info->pos += x;
             }
         }
 
@@ -292,7 +226,7 @@ static void *encoder_thread(void *cx)
             }
         }
 
-        // sleep for 10 us
+        // sleep for 10 us xxx or 20
         ts.tv_sec = 0;
         ts.tv_nsec = 10000;  //  10 us
         nanosleep(&ts, NULL);

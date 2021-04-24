@@ -14,11 +14,11 @@ int encoder_init(int max_info, ...);   // return -1 on error, else 0
 
 void encoder_enable(int id);
 void encoder_disable(int id);
-void encoder_pos_reset(int id);
+void encoder_reset(int id);
 
 bool encoder_get_enabled(int id);     // these return values
 int encoder_get_position(int id);
-int encoder_get_speed(int id);
+int encoder_get_speed(int id); //xxx del ?
 int encoder_get_errors(int id);
 int encoder_get_poll_intvl_us(void);
 
