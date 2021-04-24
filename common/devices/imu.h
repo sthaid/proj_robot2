@@ -5,7 +5,7 @@
 extern "C" {
 #endif
 
-#define DEFAULT_ACCEL_ALERT_LIMIT 1.3
+#define DEFAULT_ACCEL_ALERT_LIMIT 2.0
 #define MAGNETOMETER_CAL_FILENAME "imu_magnetometer.cal"
 
 #include <stdbool.h>

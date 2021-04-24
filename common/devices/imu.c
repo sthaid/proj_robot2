@@ -133,10 +133,12 @@ static void * accelerometer_thread(void *cx)
         MPU9250_imu_get_acceleration(&ax, &ay, &az);
 
         // convert raw values to g units
+        // note: XXX do not include z accel for now, 
+        //       further investigation needed
         axd = (double)(ax-1200) / 16384;
         ayd = (double)(ay-1200) / 16384;
         azd = (double)(az-1200) / 16384;
-        accel_total_squared = axd*axd + ayd*ayd + azd*azd;
+        accel_total_squared = axd*axd + ayd*ayd;
 
 #ifdef DEBUG_ACCEL
         // debug print every 10 secs
