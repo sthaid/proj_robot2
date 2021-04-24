@@ -17,7 +17,7 @@
 //
 
 // default accel/decel settings
-#define DEFAULT_NORMAL_ACCEL      1
+#define DEFAULT_NORMAL_ACCEL      3
 #define DEFAULT_EMER_STOP_DECEL  10
 
 // convert mtr ctlr cmd value to string
@@ -437,7 +437,7 @@ static void *monitor_thread(void *cx)
             // remain in the running state,
             // publish the voltage and current status
             status.voltage = voltage;
-            status.motors_current = 0.9 * status.motors_current + 0.1 * total_current;
+            status.motors_current = total_current;
         } else if (status.state == MC_STATE_QUIESCED) {
             uint64_t time_now;
 
