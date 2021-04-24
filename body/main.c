@@ -52,9 +52,11 @@ static void curses_runtime(void (*update_display)(int maxy, int maxx), int (*inp
 
 int main(int argc, char **argv)
 {
-    // init
+    // init xxx maybe just one init routine
     init_logging();
     init_devices();
+    oled_ctlr_init();
+    drive_init();
 
     // runtime using curses
     curses_init();
@@ -80,18 +82,6 @@ static void init_devices(void)
     oled_init(1, 0);
     env_init(0);
     imu_init(0);
-
-#if 1 // xxx
-    // enable capabilities
-    proximity_enable(0);   // front
-    proximity_enable(1);   // rear
-    encoder_enable(0);     // left
-    encoder_enable(1);     // right
-    mc_debug_mode(true);
-    mc_debug_mode_enabled = true;
-#endif
-
-    oled_ctlr_init();
 }
 
 static void init_logging(void)
@@ -334,16 +324,21 @@ static int process_cmdline(void)
         return 0;
     }
 
-    //INFO("cmd: %s\n", cmdline);
-
     if (strcmp(cmd, "q") == 0) {
         return -1;  // terminate pgm
-    } else if (strcmp(cmd, "t1") == 0) {
-        display_alert("alert test");
+    } else if (strcmp(cmd, "go") == 0) {
+        drive_go(1000,1000);
+    } else if (strcmp(cmd, "stop") == 0) {
+        drive_stop();
+    } else if (strcmp(cmd, "mc_debug_on") == 0) {
+        mc_debug_mode(true);
+        mc_debug_mode_enabled = true;
+    } else if (strcmp(cmd, "mc_debug_off") == 0) {
+        mc_debug_mode(false);
+        mc_debug_mode_enabled = false;
     } else if (strcmp(cmd, "mark") == 0) {
-        INFO("----------------------------");
+        INFO("------------------------------------");
     } else {
-        //display_alert("invalid cmd");
         ERROR("invalid cmd '%s'\n", cmdline);
     }
 

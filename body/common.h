@@ -1,24 +1,27 @@
 #ifndef __COMMON_H__
 #define __COMMON_H__
 
-// standard linux
+// standard linux header files
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
 #include <stdint.h>
-#include <unistd.h>
-#include <string.h>
 #include <errno.h>
+#include <string.h>
+#include <unistd.h>
+#include <signal.h>
 #include <pthread.h>
 #include <curses.h>
-#include <misc.h>
 
-// body hardware defs
+// body hardware definitions
 #include <body.h>
 
-// devices
+// utils
 #include <gpio.h>
 #include <timer.h>
+#include <misc.h>
+
+// devices
 #include <mc.h>
 #include <encoder.h>
 #include <proximity.h>
@@ -28,11 +31,16 @@
 #include <env.h>
 #include <imu.h>
 
-// oled_ctlr ...
+// oled_ctlr.c
 #define MAX_OLED_STR       5
 #define MAX_OLED_STR_SIZE  10
 typedef char oled_strs_t[MAX_OLED_STR][MAX_OLED_STR_SIZE];
 int oled_ctlr_init(void);
 oled_strs_t *oled_get_strs(void);
+
+// drive.c
+int drive_init(void);
+void drive_go(int left_speed, int right_speed);
+void drive_stop(void);
 
 #endif

@@ -4,6 +4,7 @@ LDFLAGS  = ../common/devices/i2c/u8g2/libu8g2.a -lpthread -lm -lcurses -lstdc++
 
 TARGET   = body
 SRC      = main.c \
+           drive.c \
            oled_ctlr.c \
            ../common/devices/mc.c \
            ../common/devices/encoder.c \
