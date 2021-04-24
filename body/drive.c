@@ -50,7 +50,7 @@ void drive_go(int left_speed, int right_speed)
 
     mc_enable_all();
 
-    mc_set_speed_all(1000,1000);
+    mc_set_speed_all(left_speed, right_speed);
 }
 
 void drive_stop(void)

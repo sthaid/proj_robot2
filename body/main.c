@@ -54,10 +54,19 @@ int main(int argc, char **argv)
     // init
     initialize();
 
+    // XXX temp
+    encoder_enable(0);
+    encoder_enable(1);
+    mc_debug_mode(true);
+    mc_debug_mode_enabled = true;
+
     // invoke the curses user interface
     curses_init();
     curses_runtime(update_display, input_handler);
     curses_exit();
+
+    // stop motors
+    mc_emergency_stop_all("program-term");
 
     // done
     return 0;
@@ -321,19 +330,40 @@ static int input_handler(int input_char)
 
 static int process_cmdline(void)
 {
-    int cnt;
-    char cmd[100];
+    int cnt, argc;
+    char cmd[100], arg1[100], arg2[100], arg3[100], arg4[100];
 
     cmd[0] = '\0';
-    cnt = sscanf(cmdline, "%s", cmd);
+    cnt = sscanf(cmdline, "%s %s %s %s %s", cmd, arg1, arg2, arg3, arg4);
     if (cnt == 0 || cmd[0] == '\0') {
         return 0;
     }
+    argc = cnt - 1;
+
+    INFO("cmd: %s\n", cmdline);
 
     if (strcmp(cmd, "q") == 0) {
         return -1;  // terminate pgm
     } else if (strcmp(cmd, "go") == 0) {
-        drive_go(1000,1000);
+        int left, right;
+        if (argc == 0) {
+            left = right = 1000;
+        } else if (argc == 1) {
+            if (sscanf(arg1, "%d", &left) != 1 || left < -3200 || left > 3200) {
+                ERROR("invalid cmd '%s'\n", cmdline);
+                return 0;
+            }
+            right = left;
+        } else {
+            if ((sscanf(arg1, "%d", &left) != 1 || left < -32000 || left > 3200) ||
+                (sscanf(arg2, "%d", &right) != 1 || right < -32000 || right > 3200))
+            {
+                ERROR("invalid cmd '%s'\n", cmdline);
+                return 0;
+            }
+        }
+        INFO("left=%d right=%d\n", left, right);
+        drive_go(left, right);
     } else if (strcmp(cmd, "stop") == 0) {
         drive_stop();
     } else if (strcmp(cmd, "mc_debug_on") == 0) {
