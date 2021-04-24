@@ -35,8 +35,7 @@ static bool     mc_debug_mode_enabled;
 // prototypes
 //
 
-static void init_devices(void);
-static void init_logging(void);
+static void initialize(void);
 static void *logfile_monitor_thread(void *cx);
 
 static void update_display(int maxy, int maxx);
@@ -52,13 +51,10 @@ static void curses_runtime(void (*update_display)(int maxy, int maxx), int (*inp
 
 int main(int argc, char **argv)
 {
-    // init xxx maybe just one init routine
-    init_logging();
-    init_devices();
-    oled_ctlr_init();
-    drive_init();
+    // init
+    initialize();
 
-    // runtime using curses
+    // invoke the curses user interface
     curses_init();
     curses_runtime(update_display, input_handler);
     curses_exit();
@@ -67,26 +63,18 @@ int main(int argc, char **argv)
     return 0;
 }
 
-static void init_devices(void)
-{
-    // xxx check rc,  exit on error
-    gpio_init();
-    timer_init();
-    mc_init(2, LEFT_MOTOR, RIGHT_MOTOR);
-    encoder_init(2, ENCODER_GPIO_LEFT_B, ENCODER_GPIO_LEFT_A,
-                    ENCODER_GPIO_RIGHT_B, ENCODER_GPIO_RIGHT_A);
-    proximity_init(2, PROXIMITY_FRONT_GPIO_SIG, PROXIMITY_FRONT_GPIO_ENABLE,
-                      PROXIMITY_REAR_GPIO_SIG,  PROXIMITY_REAR_GPIO_ENABLE);
-    button_init(2, BUTTON_LEFT, BUTTON_RIGHT);
-    current_init(1, CURRENT_ADC_CHAN);
-    oled_init(1, 0);
-    env_init(0);
-    imu_init(0);
-}
-
-static void init_logging(void)
+static void initialize(void)
 {
     pthread_t tid;
+
+    #define CALL(routine,args) \
+        do { \
+            int rc = routine args; \
+            if (rc < 0) { \
+                fprintf(stderr, "FATAL: %s failed\n", #routine); \
+                exit(1); \
+            } \
+        } while (0)
 
     // init logging to LOG_FILENAME
     if (logmsg_init(LOG_FILENAME) < 0) {
@@ -100,6 +88,24 @@ static void init_logging(void)
     while (logfile_monitor_thread_running == false) {
         usleep(1000);
     }
+
+    // init devices
+    CALL(gpio_init, ());
+    CALL(timer_init, ());
+    CALL(mc_init, (2, LEFT_MOTOR, RIGHT_MOTOR));
+    CALL(encoder_init, (2, ENCODER_GPIO_LEFT_B, ENCODER_GPIO_LEFT_A,
+                           ENCODER_GPIO_RIGHT_B, ENCODER_GPIO_RIGHT_A));
+    CALL(proximity_init, (2, PROXIMITY_FRONT_GPIO_SIG, PROXIMITY_FRONT_GPIO_ENABLE,
+                             PROXIMITY_REAR_GPIO_SIG,  PROXIMITY_REAR_GPIO_ENABLE));
+    CALL(button_init, (2, BUTTON_LEFT, BUTTON_RIGHT));
+    CALL(current_init, (1, CURRENT_ADC_CHAN));
+    CALL(oled_init, (1, 0));
+    CALL(env_init, (0));
+    CALL(imu_init, (0));
+
+    // init body program functions
+    CALL(oled_ctlr_init, ());
+    CALL(drive_init, ());
 }
 
 static void *logfile_monitor_thread(void *cx)
