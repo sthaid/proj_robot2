@@ -12,7 +12,7 @@
 
 static char oled_strs[MAX_OLED_STR][MAX_OLED_STR_SIZE];
 static int  oled_stridx;
-static int  oled_advance_intvl_ms = DEFAULT_OLED_ADVANCE_INTVL_MS;
+static int  oled_advance_intvl_ms;
 static bool oled_button_advance_req;
 
 //
