@@ -23,6 +23,8 @@
 // defines
 //
 
+#define MAX_HISTORY 1024
+
 //
 // variables
 //
@@ -42,6 +44,11 @@ static struct info_s {
     int  pos;
     int  pos_offset;
     int  errors;
+    struct history_s {
+        int pos;
+        uint64_t time;
+    } history[MAX_HISTORY];
+    int history_tail;
 } info_tbl[10];
 static int max_info;
 
@@ -120,10 +127,26 @@ int encoder_get_position(int id)
     return info_tbl[id].pos - info_tbl[id].pos_offset;
 }
 
-// XXX maybe keep this, but simpler
 int encoder_get_speed(int id)
 {
-    return 0;  // xxx del
+    struct info_s *info = &info_tbl[id];
+    uint64_t time_now = timer_get();
+    struct history_s h;
+    int64_t delta_t;
+    int speed;
+
+    h = info->history[ (info->history_tail+50) % MAX_HISTORY ];
+    if (h.time == 0) {
+        return 0;
+    }
+
+    delta_t = time_now - h.time;
+    if (delta_t > 100000) {
+        return 0;
+    }
+
+    speed = 1000000LL * (info->pos - h.pos) / delta_t;
+    return speed;
 }
 
 int encoder_get_errors(int id)
@@ -147,6 +170,7 @@ static void *encoder_thread(void *cx)
     struct timespec ts;
     struct sched_param param;
     cpu_set_t cpu_set;
+    uint64_t time_now;
 
     static uint64_t poll_count, poll_count_t_last;
 
@@ -182,8 +206,9 @@ static void *encoder_thread(void *cx)
             continue;
         }
 
-        // read all gpio pins
+        // read all gpio pins, and get the time_now
         gpio_all = gpio_read_all();
+        time_now = timer_get();
 
         // loop over encoders
         for (id = 0; id < max_info; id++) {
@@ -211,6 +236,13 @@ static void *encoder_thread(void *cx)
             } else {
                 info->pos += x;
             }
+
+            // save history of position values, used to determine speed
+            int tail = info->history_tail;
+            info->history[tail].pos = info->pos;
+            info->history[tail].time = time_now;
+            __sync_synchronize();
+            info->history_tail = (tail + 1) % MAX_HISTORY;
         }
 
         // this is used to determine the frequency of this code, which 
@@ -218,10 +250,9 @@ static void *encoder_thread(void *cx)
         // however the measured poll_rate is about 47000 per sec
         poll_count++;
         if ((poll_count & 0xfff) == 0) {
-            uint64_t t_now = timer_get();
-            if (t_now > poll_count_t_last + 1000000) {
-                poll_rate = 1000000LL * poll_count / (t_now - poll_count_t_last);
-                poll_count_t_last = t_now;
+            if (time_now > poll_count_t_last + 1000000) {
+                poll_rate = 1000000LL * poll_count / (time_now - poll_count_t_last);
+                poll_count_t_last = time_now;
                 poll_count = 0;
             }
         }
