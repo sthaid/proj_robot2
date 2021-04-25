@@ -17,6 +17,8 @@
 // defines
 //
 
+#define DEFAULT_PROXIMITY_ALERT_LIMIT  0.1
+
 //
 // variables
 //

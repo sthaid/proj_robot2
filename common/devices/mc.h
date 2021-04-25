@@ -6,26 +6,23 @@ extern "C" {
 #endif
 
 // notes regarding accel:
-//    Value    Time_0_to_3200
+// - Value    Time_0_to_3200
 //      1           3200 ms
 //      10           320 ms
-//
-//    Time_0_to_3200 = 3200 / value
+//   Time_0_to_3200 = 3200 / value
+// - The default Speed Update Period is 1 ms,
+//   and is found GUI Motor Settings tab
 
-
-#define MC_STATE_QUIESCED   1
-#define MC_STATE_RUNNING    2
-#define MC_STATE_ERROR      3
+#define MC_STATE_ENABLED   1
+#define MC_STATE_DISABLED  2
 
 #define MC_STATE_STR(_state) \
-    ((_state) == MC_STATE_RUNNING  ? "MC_STATE_RUNNING"  : \
-     (_state) == MC_STATE_ERROR    ? "MC_STATE_ERROR"    : \
-     (_state) == MC_STATE_QUIESCED ? "MC_STATE_QUIESCED" : \
+    ((_state) == MC_STATE_ENABLED  ? "MC_STATE_ENABLED" : \
+     (_state) == MC_STATE_DISABLED ? "MC_STATE_DISABLED" : \
                                      "MC_????")
 
 typedef struct {
     int state;
-    char reason_str[80];   // the reason for entering 'state'
     double voltage;
     double motors_current;
     int target_speed[10];
@@ -49,11 +46,11 @@ typedef struct {
 
 int mc_init(int max_info, ...);  // these return -1 on error, else 0
 int mc_enable_all(void);
+void mc_disable_all(void);
 int mc_set_speed(int id, int speed);
 int mc_set_speed_all(int speed0, ...);
 
-void mc_emergency_stop_all(char *reason_str);
-void mc_set_accel(int normal_accel, int emer_stop_accel);
+void mc_set_accel(int accel, int decel);
 mc_status_t *mc_get_status(void);
 void mc_debug_mode(bool enable);
 

@@ -17,8 +17,7 @@
 //
 
 // default accel/decel settings
-#define DEFAULT_NORMAL_ACCEL      3
-#define DEFAULT_EMER_STOP_DECEL  10
+#define DEFAULT_ACCEL   5
 
 // convert mtr ctlr cmd value to string
 #define CMD_STR(x) \
@@ -87,13 +86,9 @@
 // misc
 #define SECS_TO_US(secs)  ((secs) * 1000000)
 
-#define SET_STATE(_state, _reason_str) \
+#define SET_STATE(_state) \
     do { \
-        if ((_state) != status.state) { \
-            status.state = (_state); \
-            strncpy(status.reason_str, _reason_str, sizeof(status.reason_str)-1); \
-            status.reason_str[sizeof(status.reason_str)-1] = '\0'; \
-        } \
+        status.state = (_state); \
     } while (0)
 
 //
@@ -120,9 +115,9 @@ static struct info_s {
 static int max_info;
 
 static mc_status_t     status;
-static int             normal_accel    = DEFAULT_NORMAL_ACCEL;
-static int             emer_stop_decel = DEFAULT_EMER_STOP_DECEL;
-static pthread_mutex_t mutex           = PTHREAD_MUTEX_INITIALIZER;
+static int             accel  = DEFAULT_ACCEL;
+static int             decel  = DEFAULT_ACCEL;
+static pthread_mutex_t mutex  = PTHREAD_MUTEX_INITIALIZER;
 
 //
 // prototypes
@@ -137,7 +132,6 @@ static int mc_get_fw_ver(int id, int *product_id, int *fw_ver_maj_bcd, int *fw_v
 
 static void *monitor_thread(void *cx);
 static bool any_mc_error_indication(char *reason_str, int reason_str_size);
-static bool all_mc_target_speed_zero(void);
 
 static int issue_cmd(int id, unsigned char *cmd, int cmdlen, unsigned char *resp, int resplen);
 static int open_serial_port(const char * device, uint32_t baud_rate);
@@ -192,8 +186,8 @@ int mc_init(int max_info_arg, ...)  // char *devname, ...
         }
     }
 
-    // initialize mc status.state
-    SET_STATE(MC_STATE_ERROR, "init");
+    // initialize state to DISABLED
+    SET_STATE(MC_STATE_DISABLED);
 
     // create monitor_thread to periodically check status of this mc
     pthread_create(&tid, NULL, monitor_thread, NULL);
@@ -202,7 +196,7 @@ int mc_init(int max_info_arg, ...)  // char *devname, ...
     return 0;
 }
 
-// -----------------  RUN TIME API  ----------------------------------------
+// -----------------  API - ENABLE & DISABLE ROUTINES  ---------------------
 
 int mc_enable_all(void)
 {
@@ -211,32 +205,26 @@ int mc_enable_all(void)
     // acquire mutex
     pthread_mutex_lock(&mutex);
 
-    // if state is MC_STATE_RUNNING or QUIESCED then
-    // there is no need to enable
-    if (status.state == MC_STATE_RUNNING || status.state == MC_STATE_QUIESCED) {
-        pthread_mutex_unlock(&mutex);
-        return 0;
-    }
-
     // init some info_tbl[] fields
     for (id = 0; id < max_info; id++) {
         info_tbl[id].target_speed = 0;
         status.target_speed[id] = 0;
-
-        info_tbl[id].accel = 0;
-        info_tbl[id].decel = 0;
     }
 
     // enable all mtr-ctlrs
     for (id = 0; id < max_info; id++) {
         if (mc_enable(id) < 0) {
+            for (int i = 0; i < id; i++) {
+                mc_stop(i);
+            }
+            SET_STATE(MC_STATE_DISABLED);
             pthread_mutex_unlock(&mutex);
             return -1;
         }
     }
 
-    // all okay, set state to RUNNING and return success
-    SET_STATE(MC_STATE_RUNNING, "enable");
+    // set state to ENABLED
+    SET_STATE(MC_STATE_ENABLED);
 
     // release mutex
     pthread_mutex_unlock(&mutex);
@@ -245,6 +233,36 @@ int mc_enable_all(void)
     return 0;
 }
 
+void mc_disable_all(void)
+{
+    // acquire mutex
+    pthread_mutex_lock(&mutex);
+
+    // stop all motors
+    for (int id = 0; id < max_info; id++) {
+        struct info_s *x = &info_tbl[id];
+
+        x->target_speed = 0;
+        status.target_speed[id] = 0;
+
+        if (x->decel != decel) {
+            mc_set_motor_limit(id, MTRLIM_MAX_DECEL_FWD_AND_REV, decel);
+            x->decel = decel;
+        }
+
+        mc_stop(id);
+    }
+
+    // set state to DISABLED
+    SET_STATE(MC_STATE_DISABLED);
+    status.motors_current = 0;
+
+    // release mutex
+    pthread_mutex_unlock(&mutex);
+}
+
+// -----------------  API - SET SPEED ROUTINES  ----------------------------
+
 int mc_set_speed(int id, int speed)
 {
     struct info_s *x = &info_tbl[id];
@@ -252,9 +270,9 @@ int mc_set_speed(int id, int speed)
     // acquire mutex
     pthread_mutex_lock(&mutex);
 
-    // can't set speed in in MC_STATE_ERROR
-    if (status.state == MC_STATE_ERROR) {
-        ERROR("state must not be MC_STATE_ERROR\n");
+    // must be enabled
+    if (status.state != MC_STATE_ENABLED) {
+        ERROR("state must be MC_STATE_ENABLED\n");
         pthread_mutex_unlock(&mutex);
         return -1;
     }
@@ -265,13 +283,13 @@ int mc_set_speed(int id, int speed)
     status.target_speed[id] = speed;
 
     // ensure that the motor limit accel/decel variables are set
-    if (x->accel != normal_accel) {
-        mc_set_motor_limit(id, MTRLIM_MAX_ACCEL_FWD_AND_REV, normal_accel);
-        x->accel = normal_accel;
+    if (x->accel != accel) {
+        mc_set_motor_limit(id, MTRLIM_MAX_ACCEL_FWD_AND_REV, accel);
+        x->accel = accel;
     } 
-    if (x->decel != normal_accel) {
-        mc_set_motor_limit(id, MTRLIM_MAX_DECEL_FWD_AND_REV, normal_accel);
-        x->decel = normal_accel;
+    if (x->decel != decel) {
+        mc_set_motor_limit(id, MTRLIM_MAX_DECEL_FWD_AND_REV, decel);
+        x->decel = decel;
     } 
 
     // set the motor's speed
@@ -290,8 +308,8 @@ int mc_set_speed_all(int speed0, ...)
 
     pthread_mutex_lock(&mutex);
 
-    if (status.state == MC_STATE_ERROR) {
-        ERROR("state must not be MC_STATE_ERROR\n");
+    if (status.state != MC_STATE_ENABLED) {
+        ERROR("state must be MC_STATE_ENABLED\n");
         pthread_mutex_unlock(&mutex);
         return -1;
     }
@@ -304,13 +322,13 @@ int mc_set_speed_all(int speed0, ...)
         x->target_speed = speed;
         status.target_speed[id] = speed;
 
-        if (x->accel != normal_accel) {
-            mc_set_motor_limit(id, MTRLIM_MAX_ACCEL_FWD_AND_REV, normal_accel);
-            x->accel = normal_accel;
+        if (x->accel != accel) {
+            mc_set_motor_limit(id, MTRLIM_MAX_ACCEL_FWD_AND_REV, accel);
+            x->accel = accel;
         } 
-        if (x->decel != normal_accel) {
-            mc_set_motor_limit(id, MTRLIM_MAX_DECEL_FWD_AND_REV, normal_accel);
-            x->decel = normal_accel;
+        if (x->decel != decel) {
+            mc_set_motor_limit(id, MTRLIM_MAX_DECEL_FWD_AND_REV, decel);
+            x->decel = decel;
         } 
 
         mc_speed(id, speed);
@@ -322,44 +340,12 @@ int mc_set_speed_all(int speed0, ...)
     return 0;
 }
 
-void mc_emergency_stop_all(char *reason_str)
+// -----------------  API - MISC ROUTINES  ---------------------------------
+
+void mc_set_accel(int accel_arg, int decel_arg)
 {
-    // acquire mutex
-    pthread_mutex_lock(&mutex);
-
-    // if already in error state just return
-    if (status.state == MC_STATE_ERROR) {
-        pthread_mutex_unlock(&mutex);
-        return;
-    }
-
-    // stop all motors
-    for (int id = 0; id < max_info; id++) {
-        struct info_s *x = &info_tbl[id];
-
-        x->target_speed = 0;
-        status.target_speed[id] = 0;
-
-        if (x->decel != emer_stop_decel) {
-            mc_set_motor_limit(id, MTRLIM_MAX_DECEL_FWD_AND_REV, emer_stop_decel);
-            x->decel = emer_stop_decel;
-        }
-
-        mc_stop(id);
-    }
-
-    // set state to MC_STATE_ERROR
-    SET_STATE(MC_STATE_ERROR, reason_str);
-    status.motors_current = 0;
-
-    // release mutex
-    pthread_mutex_unlock(&mutex);
-}
-
-void mc_set_accel(int normal_accel_arg, int emer_stop_decel_arg)
-{
-    normal_accel = normal_accel_arg;
-    emer_stop_decel = emer_stop_decel_arg;
+    accel = accel_arg;
+    decel = decel_arg;
 }
 
 mc_status_t *mc_get_status(void)
@@ -379,10 +365,9 @@ static void *monitor_thread(void *cx)
     static uint64_t time_last_status_vin_update;
 
     while (true) {
-        if (status.state == MC_STATE_RUNNING) {
-            static int quiesce_count;
-            double voltage, total_current;
-            char reason_str[80];
+        if (status.state == MC_STATE_ENABLED) {
+            double motors_current;
+            char error_str[80];
             int id;
 
             // read registers for all mtr ctlrs
@@ -403,71 +388,25 @@ static void *monitor_thread(void *cx)
                 x->vars.current        = current;
             }
 
-            // determine voltage and total_current values
-            voltage = info_tbl[0].vars.input_voltage / 1000.;
-            for (total_current = 0, id = 0; id < max_info; id++) {
-                total_current += info_tbl[id].vars.current / 1000.;
+            // determine voltage and total motors current values
+            status.voltage = info_tbl[0].vars.input_voltage / 1000.;
+            for (motors_current = 0, id = 0; id < max_info; id++) {
+                motors_current += info_tbl[id].vars.current / 1000.;
             }
+            status.motors_current = motors_current;
 
             // if registers indicate an error condition then
-            //   emergency stop, this will set state to MC_STATE_ERROR
-            //   continue
+            //   call mc_disable_all, this changes state to DISABLED and 
+            //    sets status.motor_current to 0
             // endif
-            if (any_mc_error_indication(reason_str,sizeof(reason_str))) {
-                mc_emergency_stop_all(reason_str);
-                status.voltage = voltage;
-                status.motors_current = 0;
-                continue;
+            if (any_mc_error_indication(error_str,sizeof(error_str))) {
+                ERROR("motor error: %s\n", error_str);
+                mc_disable_all();
             }
-
-            // if all motors have been set to speed 0 for 10 secs then
-            //   state = MC_STATE_QUIESCED, ...
-            //   continue
-            // endif
-            quiesce_count = (all_mc_target_speed_zero() ? quiesce_count+1 : 0);
-            if (quiesce_count > 100) {
-                pthread_mutex_lock(&mutex);
-                SET_STATE(MC_STATE_QUIESCED, "all-motors-speed-0");
-                pthread_mutex_unlock(&mutex);
-                status.voltage = voltage;
-                status.motors_current = 0;
-                continue;
-            }
-
-            // remain in the running state,
-            // publish the voltage and current status
-            status.voltage = voltage;
-            status.motors_current = total_current;
-        } else if (status.state == MC_STATE_QUIESCED) {
-            uint64_t time_now;
-
-            // update status.voltage every minute
-            time_now = microsec_timer();
-            if ((time_now - time_last_status_vin_update > SECS_TO_US(60)) ||
-                (status.voltage == 0)) 
-            {
-                int mv = 0;
-                mc_get_variable(0, VAR_INPUT_VOLTAGE, &mv);
-                status.voltage = mv / 1000.;
-                time_last_status_vin_update = time_now;
-            }
-
-            // if one or more motor has non zero speed then
-            // set state to MC_STATE_RUNNING
-            if (all_mc_target_speed_zero() == false) {
-                pthread_mutex_lock(&mutex);
-                SET_STATE(MC_STATE_RUNNING, "un-quiesce");
-                pthread_mutex_unlock(&mutex);
-            }
-
-        } else if (status.state == MC_STATE_ERROR) {
-            uint64_t time_now;
-
-            // this state exits when mc_enable_all sets MC_STATE_RUNNING
-
-            // update status.voltage every minute
-            time_now = microsec_timer();
-            if ((time_now - time_last_status_vin_update > SECS_TO_US(60)) ||
+        } else if (status.state == MC_STATE_DISABLED) {
+            // update status.voltage every 10 secs
+            uint64_t time_now = microsec_timer();
+            if ((time_now - time_last_status_vin_update > SECS_TO_US(10)) ||
                 (status.voltage == 0)) 
             {
                 int mv = 0;
@@ -500,37 +439,45 @@ static void *monitor_thread(void *cx)
     return NULL;
 }
 
-static bool any_mc_error_indication(char *reason_str, int reason_str_size)
+static bool any_mc_error_indication(char *error_str, int error_str_size)
 {
-    int id;
+    // Error Status (pg 96) -
+    // - bit 0: Safe start violation
+    // - bit 1: Required channel invalid
+    // - bit 2: Serial Error
+    // - bit 3: Command timeout
+    // - bit 4: Limit/kill switch
+    // - bit 5: Low VIN
+    // - bit 6: High VIN
+    // - bit 7: Over temperature
+    // - bit 8: Motor driver error
+    // - bit 9: ERR line high
+    // 
+    // Current Limiting Occurence Count (pg 103) - 
+    //   The number of 10 ms time periods in which the hardware
+    //   current limit has activated since the last time this 
+    //   variable was cleared. 
+    //   Reading this variable clears it, resetting it to 0.
 
-    for (id = 0; id < max_info; id++) {
+    for (int id = 0; id < max_info; id++) {
         struct info_s *x = &info_tbl[id];
         if (x->vars.error_status) {
-            snprintf(reason_str, reason_str_size, 
+            snprintf(error_str, error_str_size, 
                      "id=%d error_status=0x%x", id, x->vars.error_status);
             return true;
         }
-        if (x->vars.curr_limit_cnt > 20) { // XXX check this 20
-            snprintf(reason_str, reason_str_size, 
+        if (x->vars.curr_limit_cnt > 3) {
+            snprintf(error_str, error_str_size, 
                      "id=%d curr_limit_cnt=%d", id, x->vars.curr_limit_cnt);
             return true;
         }
-    }
-
-    reason_str[0] = '\0';
-    return false;
-}
-
-static bool all_mc_target_speed_zero(void)
-{
-    for (int id = 0; id < max_info; id++) {
-        struct info_s *x = &info_tbl[id];
-        if (x->target_speed != 0) {
-            return false;
+        if (x->vars.curr_limit_cnt > 0) {
+            INFO("XXX id = %d  curr_limit_cnt = %d\n", id, x->vars.curr_limit_cnt);
         }
     }
-    return true;
+
+    error_str[0] = '\0';
+    return false;
 }
 
 // -----------------  PRIVATE: INTFC TO MOTOR CTLR --------------------------
@@ -542,11 +489,13 @@ static int mc_enable(int id)
 
     // exit safe start
     if (issue_cmd(id, cmd, sizeof(cmd), NULL, 0) < 0) {
+        ERROR("motor %d failed to exit safe start\n", id);
         return -1;
     }
 
     // return success if error_status is 0, else failure
     if (mc_get_variable(id, VAR_ERROR_STATUS, &error_status) < 0) {
+        ERROR("motor %d has error_status 0x%x\n", id, error_status);
         return -1;
     }
     return error_status == 0 ? 0 : -1;

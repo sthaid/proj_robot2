@@ -12,11 +12,15 @@
 
 //#define DEBUG_ACCEL
 
+#define DEFAULT_ACCEL_ALERT_LIMIT 2.0
+#define MAGNETOMETER_CAL_FILENAME "imu_magnetometer.cal"
+
 // variables
 
 static int mx_cal, my_cal, mz_cal;
 static int mx, my, mz;
 
+static bool accel_enabled;
 static bool accel_alert;
 static double accel_alert_value;
 static double accel_alert_limit = DEFAULT_ACCEL_ALERT_LIMIT;
@@ -66,6 +70,8 @@ int imu_init(int dev_addr)  // multiple instances not supported
     return 0;
 }
 
+// - - - - - - - - -  MAGNETOMETER   - - - - - - - - - - - - - - 
+
 double imu_read_magnetometer(void)
 {
     double heading;
@@ -73,6 +79,23 @@ double imu_read_magnetometer(void)
     heading = atan2(-(my-my_cal), mx-mx_cal) * (180 / M_PI);
     if (heading < 0) heading += 360;
     return heading;
+}
+
+// - - - - - - - - -  ACCELEROMETER  - - - - - - - - - - - - - - 
+
+void imu_accel_enable(void)
+{
+    accel_enabled = true;
+}
+
+void imu_accel_disable(void)
+{
+    accel_enabled = false;
+}
+
+bool imu_get_accel_enabled(void)
+{
+    return accel_enabled;
 }
 
 void imu_set_accel_alert_limit(double accel_alert_limit_arg)
@@ -129,6 +152,13 @@ static void * accelerometer_thread(void *cx)
 #endif
 
     while (true) {
+        // if accel monitoring is not enabled then delay and continue,
+        // skipping the processing that follows
+        if (!accel_enabled) {
+            usleep(10000);
+            continue;
+        }
+
         // read raw acceleromter values from i2c device
         MPU9250_imu_get_acceleration(&ax, &ay, &az);
 

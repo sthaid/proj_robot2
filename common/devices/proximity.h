@@ -7,8 +7,6 @@ extern "C" {
 
 #include <stdbool.h>
 
-#define DEFAULT_PROXIMITY_ALERT_LIMIT  0.1
-
 // Notes:
 // - proximity_init varargs: int gpio_pin_sig, int gpio_pin_enable, ...
 // - call to proximity_set_alert_limit sets the limit for all proximity sensors

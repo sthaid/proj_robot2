@@ -5,9 +5,6 @@
 extern "C" {
 #endif
 
-#define DEFAULT_ACCEL_ALERT_LIMIT 2.0
-#define MAGNETOMETER_CAL_FILENAME "imu_magnetometer.cal"
-
 #include <stdbool.h>
 
 // Notes: 
@@ -18,9 +15,12 @@ int imu_init(int dev_addr);  // return -1 on error, else 0
 
 double imu_read_magnetometer(void);
 
-bool imu_check_accel_alert( double *accel_alert_value);
+void imu_accel_enable(void);
+void imu_accel_disable(void);
+bool imu_get_accel_enabled(void);
 void imu_set_accel_alert_limit(double accel_alert_limit);
 double imu_get_accel_alert_limit(void);
+bool imu_check_accel_alert( double *accel_alert_value);
 
 #ifdef __cplusplus
 }
