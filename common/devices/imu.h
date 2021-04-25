@@ -20,7 +20,7 @@ void imu_accel_disable(void);
 bool imu_get_accel_enabled(void);
 void imu_set_accel_alert_limit(double accel_alert_limit);
 double imu_get_accel_alert_limit(void);
-bool imu_check_accel_alert( double *accel_alert_value);
+bool imu_check_accel_alert(double *accel_alert_value);
 
 #ifdef __cplusplus
 }

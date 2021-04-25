@@ -143,17 +143,6 @@ static void *proximity_thread(void *cx)
     int poll_count=0;
     uint64_t t_now, t_last=timer_get();
 
-#if 0
-    // set affinity to cpu 3
-    cpu_set_t cpu_set;
-    CPU_ZERO(&cpu_set);
-    CPU_SET(3, &cpu_set);
-    rc = sched_setaffinity(0,sizeof(cpu_set_t),&cpu_set);
-    if (rc < 0) {
-        FATAL("sched_setaffinity, %s\n", strerror(errno));
-    }
-#endif
-
     // set realtime priority
     memset(&param, 0, sizeof(param));
     param.sched_priority = 90;

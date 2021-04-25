@@ -54,19 +54,13 @@ int main(int argc, char **argv)
     // init
     initialize();
 
-    // XXX temp
-    encoder_enable(0);
-    encoder_enable(1);
-    mc_debug_mode(true);
-    mc_debug_mode_enabled = true;
-
     // invoke the curses user interface
     curses_init();
     curses_runtime(update_display, input_handler);
     curses_exit();
 
     // stop motors
-    mc_emergency_stop_all("program-term");
+    mc_disable_all();
 
     // done
     return 0;
@@ -167,8 +161,8 @@ static void update_display(int maxy, int maxx)
     // display motor ctlr values
     // rows 2-5
     mvprintw(2, 0,
-             "MOTORS: %s Reason=%s   EncPollIntvlUs=%d",
-            MC_STATE_STR(mcs->state), mcs->reason_str, encoder_get_poll_intvl_us());
+             "MOTORS: %s   EncPollIntvlUs=%d",
+            MC_STATE_STR(mcs->state), encoder_get_poll_intvl_us());
     if (mc_debug_mode_enabled) {
         mvprintw(3,0, 
              "      Target   Ena Position Speed Errors   ErrStat Target Current Accel Voltage Current");
@@ -232,8 +226,9 @@ static void update_display(int maxy, int maxx)
         beep();
     }
     mvprintw(11, 0,
-        "IMU:  Heading=%3.0f - Accel AlertCount=%d LastAlertValue=%4.2f AlertLimit=%4.2f",
+        "IMU:  Heading=%3.0f - Accel Ena=%d AlertCount=%d LastAlertValue=%4.2f AlertValueLimit=%4.2f",
         imu_read_magnetometer(),
+        imu_get_accel_enabled(),
         accel_alert_count, last_accel_alert_value,
         imu_get_accel_alert_limit());
 
@@ -306,6 +301,7 @@ static void display_alert(char *fmt, ...)
 
 // -----------------  CURSES INPUT_HANDLER  --------------------------------
 
+// xxx add recall command history
 static int input_handler(int input_char)
 {
     // process input_char
@@ -345,27 +341,7 @@ static int process_cmdline(void)
     if (strcmp(cmd, "q") == 0) {
         return -1;  // terminate pgm
     } else if (strcmp(cmd, "go") == 0) {
-        int left, right;
-        if (argc == 0) {
-            left = right = 1000;
-        } else if (argc == 1) {
-            if (sscanf(arg1, "%d", &left) != 1 || left < -3200 || left > 3200) {
-                ERROR("invalid cmd '%s'\n", cmdline);
-                return 0;
-            }
-            right = left;
-        } else {
-            if ((sscanf(arg1, "%d", &left) != 1 || left < -32000 || left > 3200) ||
-                (sscanf(arg2, "%d", &right) != 1 || right < -32000 || right > 3200))
-            {
-                ERROR("invalid cmd '%s'\n", cmdline);
-                return 0;
-            }
-        }
-        INFO("left=%d right=%d\n", left, right);
-        drive_go(left, right);
-    } else if (strcmp(cmd, "stop") == 0) {
-        drive_stop();
+        drive_run();
     } else if (strcmp(cmd, "mc_debug_on") == 0) {
         mc_debug_mode(true);
         mc_debug_mode_enabled = true;

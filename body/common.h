@@ -40,7 +40,6 @@ oled_strs_t *oled_get_strs(void);
 
 // drive.c
 int drive_init(void);
-void drive_go(int left_speed, int right_speed);
-void drive_stop(void);
+void drive_run(void);
 
 #endif

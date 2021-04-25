@@ -12,7 +12,7 @@
 
 //#define DEBUG_ACCEL
 
-#define DEFAULT_ACCEL_ALERT_LIMIT 2.0
+#define DEFAULT_ACCEL_ALERT_LIMIT 1.5
 #define MAGNETOMETER_CAL_FILENAME "imu_magnetometer.cal"
 
 // variables

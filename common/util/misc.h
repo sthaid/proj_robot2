@@ -25,6 +25,8 @@ extern "C" {
 #define IS_BIT_CLR(n,pos) ((((n) >> (pos)) & 1) == 0)
 // XXX others isclr, setbit, clrbit
 
+#define MS2US(ms)  ((ms) * 1000)
+
 // -----------------  LOGGING  -----------------------------------
 
 //#define ENABLE_LOGGING_AT_DEBUG_LEVEL
