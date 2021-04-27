@@ -83,13 +83,19 @@ double imu_read_magnetometer(void)
 
 // - - - - - - - - -  ACCELEROMETER  - - - - - - - - - - - - - - 
 
+// enable ctrl routines 
+
 void imu_accel_enable(void)
 {
+    accel_alert_value = 0;
+    accel_alert = 0;
     accel_enabled = true;
 }
 
 void imu_accel_disable(void)
 {
+    accel_alert_value = 0;
+    accel_alert = 0;
     accel_enabled = false;
 }
 
@@ -97,6 +103,8 @@ bool imu_get_accel_enabled(void)
 {
     return accel_enabled;
 }
+
+// accel_alert_limit set/get routines
 
 void imu_set_accel_alert_limit(double accel_alert_limit_arg)
 {
@@ -107,6 +115,8 @@ double imu_get_accel_alert_limit(void)
 {
     return accel_alert_limit;
 }
+
+// check for accel alert
 
 bool imu_check_accel_alert(double *accel_alert_value_arg)
 {

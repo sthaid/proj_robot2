@@ -12,6 +12,7 @@
 #include <signal.h>
 #include <pthread.h>
 #include <curses.h>
+#include <math.h>
 
 // body hardware definitions
 #include <body.h>
@@ -40,6 +41,13 @@ oled_strs_t *oled_get_strs(void);
 
 // drive.c
 int drive_init(void);
-void drive_run(void);
+void drive_run_cal(void);
+void drive_run_proc(int proc_id);
+
+int drive_fwd(double secs, double mph);
+int drive_stop(void);
+
+extern int (*drive_procs_tbl[])(void);
+
 
 #endif

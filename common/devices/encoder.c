@@ -112,7 +112,7 @@ void encoder_disable(int id)
     info_tbl[id].was_disabled = true;
 }
 
-void encoder_reset(int id)
+void encoder_pos_reset(int id)
 {
     info_tbl[id].pos_offset = info_tbl[id].pos;
 }    

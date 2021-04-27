@@ -4,124 +4,271 @@
 // defines
 //
 
+#define EMER_STOP_THREAD_DISABLED            0
+#define EMER_STOP_THREAD_ENABLED             1
+#define EMER_STOP_THREAD_DISABLED_OCCURRED   2
+
+#define EMER_STOP_OCCURRED (emer_stop_thread_state == EMER_STOP_THREAD_DISABLED_OCCURRED)
+
 //
 // variables
 //
 
 static int (*drive_proc)(void);
 
-static bool emer_stop_button;
-static bool emer_stop_sigint;
-static pthread_t emer_stop_thread_id;
+static struct {
+    int    speed;
+    double left_mph;
+    double right_mph;
+} drive_cal_tbl[32];
+
+static int emer_stop_thread_state;
 
 //
 // prototypes
 //
 
-static int drive_proc_1(void);
+static int drive_cal_file_read(void);
+static int drive_cal_file_write(void);
+static void drive_cal_tbl_print(void);
+static int drive_cal_execute(void);
+static int drive_cal_cvt_mph_to_left_motor_speed(double mph, int *left_mtr_speed);
+static int drive_cal_cvt_mph_to_right_motor_speed(double mph, int *right_mtr_speed);
 
-static int drive_fwd(double secs, int speed);
-static int drive_stop(void);
+static int drive_sleep(uint64_t duration_us);
+
 static void *drive_thread(void *cx);
-
-static int check_emer_stop(bool first_call);
-
-static void emer_stop_button_cb(int id, bool pressed, int pressed_duration_us);
-static void emer_stop_sig_hndlr(int sig);
 static void *emer_stop_thread(void *cx);
+static void emer_stop_button_cb(int id, bool pressed, int pressed_duration_us);
 
 // -----------------  API  --------------------------------------------------
 
 int drive_init(void)
 {
     pthread_t tid;
-    struct sigaction act;
 
-    // init to support triggering an emergency stop via ctrl-c or by button press:
-    // XXX note that when this is running as a service the ctrl-c may no 
-    //     longer be appropriate
-    // - create emer_stop_thread, this thread is signalled when a ctrl-c or 
-    //   button press, when signalled this thread will call mc_disable_all
-    pthread_create(&emer_stop_thread_id, NULL, emer_stop_thread, NULL);
-    // - register for SIGINT and SIGUSR1
-    memset(&act, 0, sizeof(act));
-    act.sa_handler = emer_stop_sig_hndlr;
-    sigaction(SIGINT, &act, NULL);
-    sigaction(SIGUSR1, &act, NULL);
-    // - register for left-button press
+    // register for left-button press, this will trigger an emergency stop
     button_register_cb(0, emer_stop_button_cb);
 
-    // create drive_thread
+    // read the drive.cal file
+    drive_cal_file_read();
+    drive_cal_tbl_print();
+
+    // create drive_thread and emer_stop_thread
+    pthread_create(&tid, NULL, emer_stop_thread, NULL);
     pthread_create(&tid, NULL, drive_thread, NULL);
     
     // success
     return 0;
 }
 
-void drive_run(void)
+void drive_run_cal(void)
 {
     if (drive_proc) {
         ERROR("drive_proc is currently running\n");
         return;
     }
 
-    drive_proc = drive_proc_1;
+    drive_proc = drive_cal_execute;
 }
 
-// -----------------  DRIVE PROCS  ------------------------------------------
-
-static int drive_proc_1(void)
+void drive_run_proc(int proc_id)
 {
-#if 0
-    if (drive_fwd(10, 1500) < 0) return -1;
-    if (drive_fwd(10, 1000) < 0) return -1;
-    if (drive_fwd(10, 700) < 0) return -1;
-    if (drive_fwd(10, 500) < 0) return -1;
-    if (drive_fwd(10, 300) < 0) return -1;
-    if (drive_fwd(10, 100) < 0) return -1;
-#else
-    if (drive_fwd(60, 1000) < 0) return -1;
-#endif
+    int (*proc)(void) = drive_procs_tbl[proc_id];
 
-    if (drive_stop() < 0) return -1;
+    if (proc == NULL) {
+        ERROR("invalid proc_id %d\n", proc_id);
+    }
 
+    if (drive_proc) {
+        ERROR("drive_proc is currently running\n");
+        return;
+    }
+
+    drive_proc = proc;
+}
+
+// -----------------  DRIVE CALIBRATION  -------------------------------------
+
+static int drive_cal_file_read(void)
+{
+    int fd, len;
+
+    fd = open("drive.cal", O_RDONLY);
+    if (fd < 0) {
+        ERROR("failed to open drive.cal, %s\n", strerror(errno));
+        return -1;
+    }
+
+    if ((len = read(fd, drive_cal_tbl, sizeof(drive_cal_tbl))) != sizeof(drive_cal_tbl)) {
+        ERROR("failed to read drive.cal, len=%d, %s\n", len, strerror(errno));
+        close(fd);
+        return -1;
+    }
+
+    close(fd);
     return 0;
+}
+
+static int drive_cal_file_write(void)
+{
+    int fd, len;
+
+    fd = open("drive.cal", O_CREAT|O_TRUNC|O_WRONLY, 0666);
+    if (fd < 0) {
+        ERROR("failed to open drive.cal, %s\n", strerror(errno));
+        return -1;
+    }
+
+    if ((len = write(fd, drive_cal_tbl, sizeof(drive_cal_tbl))) != sizeof(drive_cal_tbl)) {
+        ERROR("failed to write drive.cal, len=%d, %s\n", len, strerror(errno));
+        close(fd);
+        return -1;
+    }
+
+    close(fd);
+    return 0;
+}
+
+static void drive_cal_tbl_print(void)
+{
+    if (drive_cal_tbl[0].speed == 0) {
+        WARN("no drive_cal_tbl\n");
+        return;
+    }
+
+    INFO("     SPEED   LEFT_MPH  RIGHT_MPH\n");
+    for (int i = 0; drive_cal_tbl[i].speed; i++) {
+        INFO("%d  %10d %10.2f %10.2f\n",
+            i, drive_cal_tbl[i].speed, drive_cal_tbl[i].left_mph, drive_cal_tbl[i].right_mph);
+    }
+}
+
+static int drive_cal_execute(void)
+{
+    static int speed_tbl[] = {-2000, -500, 500, 2000};
+
+    #define MAX_SPEED_TBL (sizeof(speed_tbl)/sizeof(speed_tbl[0]))
+    #define CAL_INTVL_US  (60 * 1000000)
+
+    for (int i = 0; i < MAX_SPEED_TBL; i++) {
+        uint64_t start_us, duration_us;
+        int speed = speed_tbl[i];
+        int left_enc, right_enc;
+
+        // set both motors to speed, and 
+        // wait a few secs to stabilize
+        if (abs(speed) <= 500) {  // xxx temporary ?
+            mc_set_speed_all(1000,1000);
+            if (drive_sleep(1000000) < 0) {
+                return -1;
+            }
+        }
+        mc_set_speed_all(speed,speed);
+        if (drive_sleep(3000000) < 0) {
+            return -1;
+        }
+
+        // reset encoder positions
+        // sleep for INTVL_US
+        // read encoder positions
+        start_us = microsec_timer();
+        encoder_pos_reset(0);
+        encoder_pos_reset(1);
+        if (drive_sleep(CAL_INTVL_US) < 0)  {
+            return -1;
+        }
+        left_enc = encoder_get_position(0);
+        right_enc = encoder_get_position(1);
+        duration_us = microsec_timer() - start_us;
+
+        // save results in drive_cal_tbl
+        drive_cal_tbl[i].speed     = speed;
+        drive_cal_tbl[i].left_mph  = (( left_enc/979.62) * (.080*M_PI) / (duration_us/1000000.)) * 2.23694;
+        drive_cal_tbl[i].right_mph = ((right_enc/979.62) * (.080*M_PI) / (duration_us/1000000.)) * 2.23694;
+    }
+
+    // debug print the cal_tbl
+    drive_cal_tbl_print();
+
+    // write cal_tbl to file
+    drive_cal_file_write();
+
+    // success
+    return 0;
+}
+
+static int drive_cal_cvt_mph_to_left_motor_speed(double mph, int *left_mtr_speed)
+{
+    *left_mtr_speed = 0;
+    for (int i = 0; drive_cal_tbl[i+1].speed; i++) {
+        if (mph >= drive_cal_tbl[i].left_mph && mph <= drive_cal_tbl[i+1].left_mph) {
+            *left_mtr_speed = nearbyint(
+               drive_cal_tbl[i].speed + 
+               (drive_cal_tbl[i+1].speed - drive_cal_tbl[i].speed) *
+               ((mph - drive_cal_tbl[i].left_mph) / 
+                (drive_cal_tbl[i+1].left_mph - drive_cal_tbl[i].left_mph))
+                                            );
+            return 0;
+        }
+    }
+    return -1;
+}
+
+static int drive_cal_cvt_mph_to_right_motor_speed(double mph, int *right_mtr_speed)
+{
+    *right_mtr_speed = 0;
+    for (int i = 0; drive_cal_tbl[i+1].speed; i++) {
+        if (mph >= drive_cal_tbl[i].right_mph && mph <= drive_cal_tbl[i+1].right_mph) {
+            *right_mtr_speed = nearbyint(
+               drive_cal_tbl[i].speed + 
+               (drive_cal_tbl[i+1].speed - drive_cal_tbl[i].speed) *
+               ((mph - drive_cal_tbl[i].right_mph) / 
+                (drive_cal_tbl[i+1].right_mph - drive_cal_tbl[i].right_mph))
+                                            );
+            return 0;
+        }
+    }
+    return -1;
 }
 
 // -----------------  DRIVE PROCS SUPPORT ROUTINES  -------------------------
 
-static int drive_fwd(double secs, int speed)
+// XXX update this routine to drive fwd or rev,  or make 2 new routines
+int drive_fwd(double secs, double mph)
 {
-    uint64_t done_us;
+    int left_speed, right_speed;
 
-    INFO("secs=%0.1f speed=%d\n", secs, speed);
+    // convert the mph to left/right mtr ctlr speed
+    if (drive_cal_cvt_mph_to_left_motor_speed(mph, &left_speed) < 0) {
+        ERROR("failed to get left_speed for %0.1f mph\n", mph);
+        return -1;
+    }
+    if (drive_cal_cvt_mph_to_right_motor_speed(mph, &right_speed) < 0) {
+        ERROR("failed to get right_speed for %0.1f mph\n", mph);
+        return -1;
+    }
+    INFO("secs=%0.1f mph=%0.2f speed=%d %d\n", secs, mph, left_speed, right_speed);
 
     // enable fwd proximity sensor
     proximity_enable(0);
     proximity_disable(1);
 
     // start motors
-    if (mc_set_speed_all(speed, speed) < 0) {
+    if (mc_set_speed_all(left_speed, right_speed) < 0) {
         return -1;
     }
 
     // monitor for completion or emergency stop error
-    done_us = microsec_timer() + secs * MS2US(1000);
-    while (true) {
-        if (check_emer_stop(false)) {
-            return -1;
-        }
-        if (microsec_timer() > done_us) {
-            break;
-        }
-        usleep(MS2US(10));
+    if (drive_sleep(secs) < 0) {
+        return -1;
     }
 
     // success
     return 0;
 }
 
-static int drive_stop(void)
+int drive_stop(void)
 {
     uint64_t start_us;
 
@@ -139,19 +286,41 @@ static int drive_stop(void)
     // wait up to 1 second for encoder speed to drop to 0
     start_us = microsec_timer();
     while (true) {
-        if (check_emer_stop(false) || (microsec_timer()-start_us > MS2US(1000))) {
+        if (EMER_STOP_OCCURRED) {
+            return -1;
+        }
+        if (microsec_timer()-start_us > 1000000) {  // 1sec
             return -1;
         }
         if (encoder_get_speed(0) == 0 && encoder_get_speed(1) == 0) {
             INFO("stepped after %lld us\n", microsec_timer()-start_us);
             break;
         }
-        usleep(MS2US(10));
+        usleep(10000);  // 10 ms
     }
 
     // success
     return 0;
 }
+
+static int drive_sleep(uint64_t duration_us)
+{
+    uint64_t done_us = microsec_timer() + duration_us;
+
+    while (true) {
+        if (EMER_STOP_OCCURRED) {
+            return -1;
+        }
+        if (microsec_timer() > done_us) {
+            return 0;
+        }
+        usleep(10000);  // 10 ms
+    }
+}
+
+// -----------------  THREADS  ----------------------------------------------
+
+// - - - - - - - - -  DRIVE_THREAD   - - - - - - - - - - - - - - - - - 
 
 static void *drive_thread(void *cx)
 {
@@ -160,7 +329,7 @@ static void *drive_thread(void *cx)
 
     // set realtime priority
     memset(&param, 0, sizeof(param));
-    param.sched_priority = 85;
+    param.sched_priority = 80;
     rc = sched_setscheduler(0, SCHED_FIFO, &param);
     if (rc < 0) {
         FATAL("sched_setscheduler, %s\n", strerror(errno));
@@ -169,12 +338,8 @@ static void *drive_thread(void *cx)
     while (true) {
         // wait for a request 
         while (drive_proc == NULL) {
-            usleep(MS2US(10));
+            usleep(10000);  // 10 ms
         }
-
-        // clear the emer_stop flags
-        emer_stop_sigint = false;
-        emer_stop_button = false;
 
         // enable motor-ctlr and sensors
         if (mc_enable_all() < 0) {
@@ -187,16 +352,17 @@ static void *drive_thread(void *cx)
         proximity_disable(1);
         imu_accel_enable();
 
-        // make an initial check for any errors prior to calling drive_prox,
-        // the drive_proc also checks for errors as part of its processing
-        if (check_emer_stop(true) < 0) {
-            goto finished;
-        }
+        // enable emer_stop_thread
+        emer_stop_thread_state = EMER_STOP_THREAD_ENABLED;
 
         // call the drive proc
         drive_proc();
 
-finished:
+        // disable emer_stop_thread
+        if (emer_stop_thread_state == EMER_STOP_THREAD_ENABLED) {
+            emer_stop_thread_state = EMER_STOP_THREAD_DISABLED;
+        }
+
         // disable motor-ctlr and sensors
         mc_disable_all();
         encoder_disable(0);
@@ -212,111 +378,94 @@ finished:
     return NULL;
 }
 
-// -----------------  EMERGENCY STOP  ---------------------------------------
+// - - - - - - - - -  EMER_STOP_THREAD - - - - - - - - - - - - - - - - 
 
-static int check_emer_stop(bool first_call)
+static uint64_t enc_low_speed_start_time[2];
+static bool     stop_button_pressed;
+
+static void *emer_stop_thread(void *cx)
 {
     mc_status_t *mcs = mc_get_status();
-    int enc_left_errs=0, enc_right_errs=0;
-    bool prox_front=false, prox_rear=false;
+    int enc_left_errs, enc_right_errs;
+    bool prox_front, prox_rear;
     double accel;
+    struct sched_param param;
+    int rc;
 
-    static struct {
-        int actual_speed;
-        int expected_speed;
-        uint64_t low_speed_start_time;
-    } enc[2];
+    #define DO_EMER_STOP(fmt, args...) \
+        do { \
+            ERROR(fmt, ## args); \
+            mc_disable_all(); \
+            emer_stop_thread_state = EMER_STOP_THREAD_DISABLED_OCCURRED; \
+            goto emer_stopped; \
+        } while (0)
 
-    if (first_call) {
-        memset(enc, 0, sizeof(enc));
+
+    // set realtime priority
+    memset(&param, 0, sizeof(param));
+    param.sched_priority = 80;
+    rc = sched_setscheduler(0, SCHED_FIFO, &param);
+    if (rc < 0) {
+        FATAL("sched_setscheduler, %s\n", strerror(errno));
     }
 
-    if (mcs->state == MC_STATE_DISABLED) {
-        ERROR("mc-disabled\n");
-        return -1;
-    }
+    while (true) {
+emer_stopped:
+        while (emer_stop_thread_state != EMER_STOP_THREAD_ENABLED) {
+            enc_low_speed_start_time[0] = 0;
+            enc_low_speed_start_time[1] = 0;
+            stop_button_pressed = false;
+            usleep(10000);  // 10 ms
+        }
 
-    if (emer_stop_sigint) {
-        ERROR("ctrl-c\n");
-        mc_disable_all();
-        return -1;
-    }
+        if (mcs->state == MC_STATE_DISABLED) {
+            DO_EMER_STOP("mc-disabled\n");
+        }
 
-    if (emer_stop_button) {
-        ERROR("stop-button\n");
-        mc_disable_all();
-        return -1;
-    }
+        if (stop_button_pressed) {
+            DO_EMER_STOP("stop-button\n");
+        }
 
-    if ((enc_left_errs = encoder_get_errors(0)) || (enc_right_errs = encoder_get_errors(1))) {
-        ERROR("enc-errors-%d-%d\n", enc_left_errs, enc_right_errs);
-        mc_disable_all();
-        return -1;
-    }
+        enc_left_errs = enc_right_errs = 0;
+        if ((enc_left_errs = encoder_get_errors(0)) || (enc_right_errs = encoder_get_errors(1))) {
+            DO_EMER_STOP("enc-errors-%d-%d\n", enc_left_errs, enc_right_errs);
+        }
 
-    if ((prox_front = proximity_check(0,NULL)) || (prox_rear = proximity_check(1,NULL))) {
-        ERROR("proximity-%d-%d\n", prox_front, prox_rear);
-        mc_disable_all();
-        return -1;
-    }
+        prox_front = prox_rear = false;
+        if ((prox_front = proximity_check(0,NULL)) || (prox_rear = proximity_check(1,NULL))) {
+            DO_EMER_STOP("proximity-%d-%d\n", prox_front, prox_rear);
+        }
 
-    if (imu_check_accel_alert(&accel)) {
-        ERROR("accel=%0.1f\n", accel);
-        mc_disable_all();
-        return -1;
-    }
+        if (imu_check_accel_alert(&accel)) {
+            DO_EMER_STOP("accel=%0.1f\n", accel);
+        }
 
-    for (int id = 0; id < 2; id++) {
-        enc[id].actual_speed = encoder_get_speed(id);
-        enc[id].expected_speed = (8600./3200.) * mcs->target_speed[id];
-        if (enc[id].actual_speed < enc[id].expected_speed * 0.5) {
-            if (enc[id].low_speed_start_time == 0) {
-                enc[id].low_speed_start_time = microsec_timer();
+        for (int id = 0; id < 2; id++) {
+            int actual_speed = encoder_get_speed(id);
+            int expected_speed = (8600./3200.) * mcs->target_speed[id];  // XXX  defines, or drive cal
+            if (actual_speed < expected_speed * 0.5) {  // xxx handle negative
+                if (enc_low_speed_start_time[id] == 0) {
+                    enc_low_speed_start_time[id] = microsec_timer();
+                }
+            } else {
+                enc_low_speed_start_time[id] = 0;
             }
-        } else {
-            enc[id].low_speed_start_time = 0;
+            if (enc_low_speed_start_time[id] != 0 &&
+                microsec_timer() - enc_low_speed_start_time[id] > 500000)   // 500 ms
+            {
+                DO_EMER_STOP("enc-%d speed actual=%d exp=%d\n", id, actual_speed, expected_speed);
+            }
         }
-        if (enc[id].low_speed_start_time != 0 &&
-            microsec_timer() - enc[id].low_speed_start_time > MS2US(500)) 
-        {
-            ERROR("enc-%d speed actual=%d exp=%d\n", id, enc[id].actual_speed, enc[id].expected_speed);
-            mc_disable_all();
-            return -1;
-        }
+
+        usleep(10000);  // 10 ms
     }
-    
-    return 0;
+
+    return NULL;
 }
 
 static void emer_stop_button_cb(int id, bool pressed, int pressed_duration_us)
 {
-    if (!pressed) {
-        return;
+    if (pressed) {
+        stop_button_pressed = true;
     }
-
-    pthread_kill(emer_stop_thread_id, SIGUSR1);
-    emer_stop_button = true;
-}
-
-static void emer_stop_sig_hndlr(int sig)
-{
-    switch (sig) {
-    case SIGINT:
-        pthread_kill(emer_stop_thread_id, SIGUSR1);
-        emer_stop_sigint = true;
-        break;
-    case SIGUSR1:
-        break;
-    }
-}
-
-static void *emer_stop_thread(void *cx)
-{
-    while (true) {
-        pause();
-        INFO("calling mc_disable_all\n");
-        mc_disable_all();
-    }
-
-    return NULL;
 }

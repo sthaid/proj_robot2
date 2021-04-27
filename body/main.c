@@ -1,3 +1,5 @@
+//XXX  instead handle ctrl c in main to terminate the pgm
+
 #include "common.h"
 
 //
@@ -340,8 +342,10 @@ static int process_cmdline(void)
 
     if (strcmp(cmd, "q") == 0) {
         return -1;  // terminate pgm
+    } else if (strcmp(cmd, "cal") == 0) {
+        drive_run_cal();
     } else if (strcmp(cmd, "go") == 0) {
-        drive_run();
+        drive_run_proc(0);  // xxx arg needed
     } else if (strcmp(cmd, "mc_debug_on") == 0) {
         mc_debug_mode(true);
         mc_debug_mode_enabled = true;
