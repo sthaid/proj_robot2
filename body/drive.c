@@ -146,9 +146,11 @@ static void drive_cal_tbl_print(void)
 
 static int drive_cal_execute(void)
 {
-    static int speed_tbl[] = {-2000, -500, 500, 2000};
+    int speed_tbl[] = {-2000, -800, 800, 2000};
+    int last_speed = speed_tbl[0];
 
     #define MAX_SPEED_TBL (sizeof(speed_tbl)/sizeof(speed_tbl[0]))
+
     #define CAL_INTVL_US  (60 * 1000000)
 
     for (int i = 0; i < MAX_SPEED_TBL; i++) {
@@ -156,16 +158,18 @@ static int drive_cal_execute(void)
         int speed = speed_tbl[i];
         int left_enc, right_enc;
 
+        INFO("XXX calibrate speed %d\n", speed);
+
         // set both motors to speed, and 
         // wait a few secs to stabilize
-        if (abs(speed) <= 500) {  // xxx temporary ?
-            mc_set_speed_all(1000,1000);
-            if (drive_sleep(1000000) < 0) {
-                return -1;
-            }
+        // XXX maybe I don't need a brake duration
+        if (speed > 0 && last_speed < 0) {
+            mc_set_speed_all(0,0);
+            sleep(1);
         }
+        last_speed = speed;
         mc_set_speed_all(speed,speed);
-        if (drive_sleep(3000000) < 0) {
+        if (drive_sleep(3000000) < 0) {   // 3 secs
             return -1;
         }
 
@@ -183,6 +187,7 @@ static int drive_cal_execute(void)
         duration_us = microsec_timer() - start_us;
 
         // save results in drive_cal_tbl
+        INFO("XXX setting drive cal %d  %d\n", i, speed);
         drive_cal_tbl[i].speed     = speed;
         drive_cal_tbl[i].left_mph  = (( left_enc/979.62) * (.080*M_PI) / (duration_us/1000000.)) * 2.23694;
         drive_cal_tbl[i].right_mph = ((right_enc/979.62) * (.080*M_PI) / (duration_us/1000000.)) * 2.23694;
@@ -235,7 +240,8 @@ static int drive_cal_cvt_mph_to_right_motor_speed(double mph, int *right_mtr_spe
 // -----------------  DRIVE PROCS SUPPORT ROUTINES  -------------------------
 
 // XXX update this routine to drive fwd or rev,  or make 2 new routines
-int drive_fwd(double secs, double mph)
+// XXX should this use secs?
+int drive_fwd(uint64_t dur_us, double mph)
 {
     int left_speed, right_speed;
 
@@ -248,19 +254,20 @@ int drive_fwd(double secs, double mph)
         ERROR("failed to get right_speed for %0.1f mph\n", mph);
         return -1;
     }
-    INFO("secs=%0.1f mph=%0.2f speed=%d %d\n", secs, mph, left_speed, right_speed);
+    INFO("secs=%0.1f mph=%0.2f speed=%d %d\n", dur_us/1000000., mph, left_speed, right_speed);
 
     // enable fwd proximity sensor
     proximity_enable(0);
     proximity_disable(1);
 
     // start motors
+    INFO("set speed %d %d\n", left_speed, right_speed);
     if (mc_set_speed_all(left_speed, right_speed) < 0) {
         return -1;
     }
 
     // monitor for completion or emergency stop error
-    if (drive_sleep(secs) < 0) {
+    if (drive_sleep(dur_us) < 0) {
         return -1;
     }
 
@@ -443,7 +450,9 @@ emer_stopped:
         for (int id = 0; id < 2; id++) {
             int actual_speed = encoder_get_speed(id);
             int expected_speed = (8600./3200.) * mcs->target_speed[id];  // XXX  defines, or drive cal
-            if (actual_speed < expected_speed * 0.5) {  // xxx handle negative
+            if ((expected_speed < 0 && actual_speed > expected_speed * 0.5) ||
+                (expected_speed > 0 && actual_speed < expected_speed * 0.5))
+            {
                 if (enc_low_speed_start_time[id] == 0) {
                     enc_low_speed_start_time[id] = microsec_timer();
                 }

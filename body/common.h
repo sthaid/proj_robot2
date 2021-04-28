@@ -44,7 +44,7 @@ int drive_init(void);
 void drive_run_cal(void);
 void drive_run_proc(int proc_id);
 
-int drive_fwd(double secs, double mph);
+int drive_fwd(uint64_t dur_us, double mph);
 int drive_stop(void);
 
 extern int (*drive_procs_tbl[])(void);

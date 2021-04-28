@@ -1,5 +1,3 @@
-//XXX  instead handle ctrl c in main to terminate the pgm
-
 #include "common.h"
 
 //
@@ -33,11 +31,14 @@ static bool     logfile_monitor_thread_running;
 
 static bool     mc_debug_mode_enabled;
 
+static bool     sigint;
+
 //
 // prototypes
 //
 
 static void initialize(void);
+static void sigint_hndlr(int signum);
 static void *logfile_monitor_thread(void *cx);
 
 static void update_display(int maxy, int maxx);
@@ -111,6 +112,17 @@ static void initialize(void)
     // init body program functions
     CALL(oled_ctlr_init, ());
     CALL(drive_init, ());
+
+    // register SIGINT
+    struct sigaction act;
+    memset(&act, 0, sizeof(act));
+    act.sa_handler = sigint_hndlr;
+    sigaction(SIGINT, &act, NULL);
+}
+
+static void sigint_hndlr(int signum)
+{
+    sigint = true;
 }
 
 static void *logfile_monitor_thread(void *cx)
@@ -309,7 +321,7 @@ static int input_handler(int input_char)
     // process input_char
     if (input_char == '\n') {
         if (process_cmdline() == -1) {
-            return -1;  // return -1, terminates pgm
+            return -1;  // terminates pgm
         }
         memset(cmdline, 0, sizeof(cmdline));
     } else if (input_char == KEY_BACKSPACE) {
@@ -344,7 +356,7 @@ static int process_cmdline(void)
         return -1;  // terminate pgm
     } else if (strcmp(cmd, "cal") == 0) {
         drive_run_cal();
-    } else if (strcmp(cmd, "go") == 0) {
+    } else if (strcmp(cmd, "run") == 0) {
         drive_run_proc(0);  // xxx arg needed
     } else if (strcmp(cmd, "mc_debug_on") == 0) {
         mc_debug_mode(true);
@@ -416,6 +428,12 @@ static void curses_runtime(void (*update_display)(int maxy, int maxx), int (*inp
             }
         } else {
             usleep(100000);  // 100 ms
+        }
+
+        // return if sigint (aka ctrl-c)
+        if (sigint) {
+            INFO("exit due to ctrl-c\n");
+            return;
         }
     }
 }
