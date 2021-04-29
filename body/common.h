@@ -11,11 +11,11 @@
 #include <unistd.h>
 #include <signal.h>
 #include <pthread.h>
-#include <curses.h>
 #include <math.h>
 
-// body hardware definitions
+// body hardware , and network interface definitios
 #include <body.h>
+#include <body_network_intfc.h>
 
 // utils
 #include <gpio.h>
@@ -47,7 +47,7 @@ void drive_run_proc(int proc_id);
 int drive_fwd(uint64_t dur_us, double mph);
 int drive_stop(void);
 
+// drive_procs.c
 extern int (*drive_procs_tbl[])(void);
-
 
 #endif

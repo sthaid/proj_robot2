@@ -1,6 +1,7 @@
 *.o
 *.ko
 *.cmd
+*.swp
 
 devel/tests/button/button_test
 devel/tests/current/current_test
@@ -26,4 +27,6 @@ devel/tests/zz_other/realtime/module/rt_gpio_test_module.mod
 devel/tests/zz_other/realtime/module/rt_gpio_test_module.mod.c
 
 body/body
-body/mc_test.log
+body/drive.cal
+
+body_test/bt
