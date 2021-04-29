@@ -1,6 +1,6 @@
 CC       = gcc
 CPPFLAGS = -Wall -g -O2 -I../body/include -I../common/include
-LDFLAGS  = -lpthread
+LDFLAGS  = -lpthread -lcurses
 
 TARGET   = bt
 SRC      = bt.c \
