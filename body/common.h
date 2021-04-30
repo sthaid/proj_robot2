@@ -1,6 +1,13 @@
 #ifndef __COMMON_H__
 #define __COMMON_H__
 
+// dest must be a char array, and not a char *
+#define safe_strcpy(dest, src) \
+    do { \
+        strncpy(dest, src, sizeof(dest)-1); \
+        (dest)[sizeof(dest)-1] = '\0'; \
+    } while (0)
+
 // standard linux header files
 #include <stdio.h>
 #include <stdlib.h>

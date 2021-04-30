@@ -6,7 +6,7 @@
 // defines
 //
 
-#define MAX_LOGMSG_STRS 100
+#define MAX_LOGMSG_STRS 50
 #define LOG_FILENAME "body.log"
 
 //
@@ -17,13 +17,10 @@
 // variables
 //
 
-#if 0 //XXX todo
-static char logmsg_strs[MAX_LOGMSG_STRS][200];
-static int  logmsg_strs_tail;
-static bool logmsg_monitor_thread_running;
-#endif
+static char logmsg_strs[MAX_LOGMSG_STRS][MAX_LOGMSG_STR_SIZE];
+static int  logmsg_strs_count;
 
-static bool sigterm;
+static bool sigterm;  // xxx or sigint
 
 //
 // prototypes
@@ -31,12 +28,13 @@ static bool sigterm;
 
 static void initialize(void);
 static void sigterm_hndlr(int signum);
-//static void *logmsg_monitor_thread(void *cx);
+static void logmsg_cb(char *str);
 
 static void server(void);
 static void *server_thread(void *cx);
 static void process_received_msg(msg_t *msg);
 static void generate_status_msg(msg_t *status_msg);
+static void send_msg(int sockfd, int id, void *data, int data_len);
 
 // -----------------  MAIN AND INIT ROUTINES  ------------------------------
 
@@ -70,20 +68,8 @@ static void initialize(void)
             } \
         } while (0)
 
-#if 0
-    // init logging to LOG_FILENAME
-    if (logmsg_init(LOG_FILENAME) < 0) {
-        fprintf(stderr, "FATAL: logmsg_init failed, %s\n", strerror(errno));
-        exit(1);;
-    }
-
-    // create thread to read the tail of logmsg and copy
-    // the new lines added to the logmsg to logmsgs array
-    pthread_create(&tid, NULL, logmsg_monitor_thread, NULL);
-    while (logmsg_monitor_thread_running == false) {
-        usleep(1000);
-    }
-#endif
+    // register logmsg callback
+    logmsg_register_cb(logmsg_cb);
 
     // init devices
     CALL(gpio_init, ());
@@ -116,38 +102,13 @@ static void sigterm_hndlr(int signum)
     sigterm = true;
 }
 
-#if 0
-// XXX a better way?
-static void *logmsg_monitor_thread(void *cx)
+static void logmsg_cb(char *str)
 {
-    FILE *fp;
-    char s[200];
-
-    // open the LOG_FILENAME for reading and seek to end
-    fp = fopen(LOG_FILENAME, "r");
-    if (fp == NULL) {
-        fprintf(stderr, "FATAL: failed to open %s for reading, %s\n", 
-                LOG_FILENAME, strerror(errno));
-        exit(1);
-    }
-    fseek(fp, 0, SEEK_END);
-    logmsg_monitor_thread_running = true;
-
-    // loop forever reading from LOG_FILENAME and saving output to 
-    // logmsg_strs[] circular array of strings
-    while (true) {
-        if (fgets(s, sizeof(s), fp) != NULL) {
-            int new_tail = logmsg_strs_tail + 1;
-            strncpy(logmsg_strs[new_tail%MAX_LOGMSG_STRS], s, sizeof(logmsg_strs[0]));
-            __sync_synchronize();
-            logmsg_strs_tail = new_tail;
-            continue;
-        }
-        clearerr(fp);
-        usleep(10000);
-    }
+//xxx use safe
+    strncpy(logmsg_strs[logmsg_strs_count % MAX_LOGMSG_STRS], str, MAX_LOGMSG_STR_SIZE-1);
+    __sync_synchronize();
+    logmsg_strs_count++;  // xxx atomic
 }
-#endif
 
 // -----------------  SERVER  ----------------------------------------------
 
@@ -237,11 +198,19 @@ static void * server_thread(void * cx)
     uint64_t time_now;
     int      rc;
     int      recvd_len = 0;
+    int      logmsg_strs_sent_count;
+
+    // xxx comment
+    logmsg_strs_sent_count = logmsg_strs_count - 10;
+    if (logmsg_strs_sent_count < 0) {
+        logmsg_strs_sent_count = 0;
+    }
 
     while (true) {
         // perform non-blocking recv of msg, this is accomplished by
         // first receiving the hdr (which includes the msg len), and then
-        // receiving the rest of the msg
+        // receiving the rest of the msg; and
+        // when the msg is recieved, call process_received_msg
         if (recvd_len < sizeof(struct msg_hdr_s)) {
             // call recv to recieve the msg hdr
             rc = recv(sockfd, (void*)&recv_msg+recvd_len, sizeof(struct msg_hdr_s)-recvd_len, MSG_DONTWAIT);
@@ -261,7 +230,7 @@ static void * server_thread(void * cx)
         }
         if (rc > 0) {
             recvd_len += rc;
-            if (recvd_len > 8 && recvd_len == recv_msg.hdr.len) {
+            if (recvd_len >= sizeof(struct msg_hdr_s) && recvd_len == recv_msg.hdr.len) {
                 process_received_msg(&recv_msg);
                 memset(&recv_msg, 0, recvd_len);
                 recvd_len = 0;
@@ -290,6 +259,13 @@ static void * server_thread(void * cx)
                 return NULL;
             }
             time_last_send = time_now;
+        }
+
+        // XXX send the str here
+        while (logmsg_strs_sent_count < logmsg_strs_count) {
+            char *str = logmsg_strs[logmsg_strs_sent_count % MAX_LOGMSG_STRS];
+            send_msg(sockfd, MSG_ID_LOGMSG, str, strlen(str)+1);
+            logmsg_strs_sent_count++;
         }
 
         // short sleep 
@@ -335,3 +311,23 @@ static void generate_status_msg(msg_t *msg)
     msg->status.total_current        = msg->status.electronics_current + msg->status.motors_current;
 }
 
+static void send_msg(int sockfd, int id, void *data, int data_len)
+{
+    msg_t msg;
+    int rc;
+
+    msg.hdr.magic = MSG_MAGIC;
+    msg.hdr.len   = sizeof(struct msg_hdr_s) + data_len;
+    msg.hdr.id    = id;
+
+    // validate data_len
+
+    if (data) {
+        memcpy((void*)&msg+sizeof(struct msg_hdr_s), data, data_len);
+    }
+
+    rc = send(sockfd, &msg, msg.hdr.len, MSG_NOSIGNAL);
+    if (rc != msg.hdr.len) {
+        //fatal("send msg rc=%d, %s", rc, strerror(errno));
+    }
+}

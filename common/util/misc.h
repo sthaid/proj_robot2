@@ -92,8 +92,8 @@ extern "C" {
         } \
     } while (0)
 
-int logmsg_init(char *log_filename);
 void logmsg(char * lvl, const char * func, char * fmt, ...) __attribute__ ((format (printf, 3, 4)));
+void logmsg_register_cb(void (*cb)(char *str));
 
 // -----------------  TIME  --------------------------------------
 

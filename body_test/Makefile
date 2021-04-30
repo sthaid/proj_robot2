@@ -1,10 +1,9 @@
 CC       = gcc
-CPPFLAGS = -Wall -g -O2 -I../body/include -I../common/include
+CPPFLAGS = -Wall -g -O2 -I../body/include -I../common/include -Wno-stringop-truncation
 LDFLAGS  = -lpthread -lcurses
 
 TARGET   = bt
-SRC      = bt.c \
-           ../common/util/misc.c
+SRC      = bt.c 
 
 OBJ := $(SRC:.c=.o)
 OBJ := $(OBJ:.cpp=.o)

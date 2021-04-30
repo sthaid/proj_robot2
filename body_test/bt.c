@@ -8,9 +8,10 @@
 #include <errno.h>
 #include <pthread.h>
 #include <curses.h>
-
-// common/include
-#include <misc.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netdb.h>
+#include <arpa/inet.h>
 
 // body/include 
 #include <body_network_intfc.h>
@@ -21,6 +22,15 @@
 
 #define NODE "robot-body"
 
+#define MAX_LOGMSG_STRS 50
+
+// dest must be a char array, and not a char *
+#define safe_strcpy(dest, src) \
+    do { \
+        strncpy(dest, src, sizeof(dest)-1); \
+        (dest)[sizeof(dest)-1] = '\0'; \
+    } while (0)
+
 //
 // variables
 //
@@ -29,12 +39,18 @@ static int                 sfd;
 static struct msg_status_s body_status;
 static char                fatal_err_str[100];
 
+static char                logmsg_strs[MAX_LOGMSG_STRS][MAX_LOGMSG_STR_SIZE];
+static int                 logmsg_strs_count;
+
 //
 // prototypes
 //
 
 static void initialize(void);
+static void error(char *fmt, ...) __attribute__ ((format (printf, 1, 2)));
 static void fatal(char *fmt, ...) __attribute__ ((format (printf, 1, 2)));
+static int getsockaddr(char * node, int port, struct sockaddr_in * ret_addr);
+static char *sock_addr_to_str(char * s, int slen, struct sockaddr * addr);
 
 static void *msg_receive_thread(void *cx);
 static void send_msg(int id, void *data, int data_len);
@@ -59,7 +75,7 @@ static void curses_init(void);
 static void curses_exit(void);
 static void curses_runtime(void (*update_display)(int maxy, int maxx), int (*input_handler)(int input_char));
 
-// -----------------  MAIN & INITIALIZE  -----------------------------------------
+// -----------------  MAIN & INITIALIZE & UTILS  ---------------------------------
 
 int main(int argc, char **argv)
 {
@@ -73,7 +89,7 @@ int main(int argc, char **argv)
 
     // if terminting due to fatal error then print the error str
     if (fatal_err_str[0] != '\0') {
-        printf("ERROR: %s\n", fatal_err_str);
+        printf("%s\n", fatal_err_str);
         return 1;
     }
 
@@ -84,7 +100,7 @@ int main(int argc, char **argv)
 static void initialize(void)
 {
     static struct sockaddr_in  sockaddr;
-    char s[100];
+    char s[110];
     pthread_t tid;
 
     // set line buffered stdout
@@ -94,7 +110,6 @@ static void initialize(void)
     if (getsockaddr(NODE, PORT, &sockaddr) < 0) {
         fatal("failed to get address of %s", NODE);
     }
-    //XXX printf("sockaddr = %s\n", sock_addr_to_str(s, sizeof(s), (struct sockaddr *)&sockaddr));
 
     // connect to body pgm
     sfd = socket(AF_INET, SOCK_STREAM, 0);
@@ -102,31 +117,112 @@ static void initialize(void)
         fatal("failed connect to %s, %s",
               sock_addr_to_str(s, sizeof(s), (struct sockaddr *)&sockaddr),
               strerror(errno));
-        exit(1);
     }
 
     // create thread to receive and process msgs from body pgm
     pthread_create(&tid, NULL, msg_receive_thread, NULL);
 }
 
+static void error(char *fmt, ...)
+{
+    va_list ap;
+    int cnt;
+    char err_str[100];
+
+    va_start(ap, fmt);
+    cnt = sprintf(err_str, "BODY_TEST ERROR: ");
+    cnt += vsnprintf(err_str+cnt, sizeof(err_str)-cnt, fmt, ap);
+    va_end(ap);
+
+    if (err_str[cnt-1] == '\n') {
+        err_str[cnt-1] = '\0';
+        cnt--;
+    }
+
+    if (curses_active == false) {
+        printf("%s\n", err_str);
+    } else {
+        safe_strcpy(logmsg_strs[logmsg_strs_count%MAX_LOGMSG_STRS], err_str);
+        __sync_fetch_and_add(&logmsg_strs_count, 1);
+    }
+}
+
 static void fatal(char *fmt, ...)
 {
     va_list ap;
+    int cnt;
 
     va_start(ap, fmt);
-    vsnprintf(fatal_err_str, sizeof(fatal_err_str), fmt, ap);
+    cnt = sprintf(fatal_err_str, "BODY_TEST FATAL: ");
+    cnt += vsnprintf(fatal_err_str+cnt, sizeof(fatal_err_str)-cnt, fmt, ap);
     va_end(ap);
-    __sync_synchronize();
+
+    if (fatal_err_str[cnt-1] == '\n') {
+        fatal_err_str[cnt-1] = '\0';
+        cnt--;
+    }
 
     if (curses_active == false) {
-        printf("ERROR: %s\n", fatal_err_str);
+        printf("%s\n", fatal_err_str);
+        exit(1);
+    } else if (pthread_self() == curses_thread_id) {
+        curses_exit();
+        printf("%s\n", fatal_err_str);
         exit(1);
     } else {
+        __sync_synchronize();
         curses_term_req = true;
-        if (pthread_self() != curses_thread_id) {
-            while (true) pause();
-        }
+        while (true) pause();
     }
+}
+
+static int getsockaddr(char * node, int port, struct sockaddr_in * ret_addr)
+{
+    struct addrinfo   hints;
+    struct addrinfo * result;
+    char              port_str[20];
+    int               ret;
+
+    sprintf(port_str, "%d", port);
+
+    bzero(&hints, sizeof(hints));
+    hints.ai_family   = AF_INET;
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_protocol = 0;
+    hints.ai_flags    = AI_NUMERICSERV;
+
+    ret = getaddrinfo(node, port_str, &hints, &result);
+    if (ret != 0 || result->ai_addrlen != sizeof(*ret_addr)) {
+        return -1;
+    }
+
+    *ret_addr = *(struct sockaddr_in*)result->ai_addr;
+    freeaddrinfo(result);
+    return 0;
+}
+
+static char * sock_addr_to_str(char * s, int slen, struct sockaddr * addr)
+{
+    char addr_str[100];
+    int port;
+
+    if (addr->sa_family == AF_INET) {
+        inet_ntop(AF_INET,
+                  &((struct sockaddr_in*)addr)->sin_addr,
+                  addr_str, sizeof(addr_str));
+        port = ((struct sockaddr_in*)addr)->sin_port;
+    } else if (addr->sa_family == AF_INET6) {
+        inet_ntop(AF_INET6,
+                  &((struct sockaddr_in6*)addr)->sin6_addr,
+                 addr_str, sizeof(addr_str));
+        port = ((struct sockaddr_in6*)addr)->sin6_port;
+    } else {
+        snprintf(s,slen,"Invalid AddrFamily %d", addr->sa_family);
+        return s;
+    }
+
+    snprintf(s,slen,"%s:%d",addr_str,htons(port));
+    return s;
 }
 
 // -----------------  MSG RECIEVE THREAD  ----------------------------------------
@@ -140,7 +236,11 @@ static void *msg_receive_thread(void *cx)
         // receive the msg.hdr
         rc = recv(sfd, &msg, sizeof(struct msg_hdr_s), MSG_WAITALL);
         if (rc != sizeof(struct msg_hdr_s)) {
-            fatal("recv msg hdr rc=%d, %s", rc, strerror(errno));
+            if (rc == 0) {
+                fatal("connection closed by peer");
+            } else {
+                fatal("recv msg hdr rc=%d, %s", rc, strerror(errno));
+            }
         }
 
         // validate the msg.hdr
@@ -154,7 +254,11 @@ static void *msg_receive_thread(void *cx)
         // receive the remainder of the msg
         rc = recv(sfd, (void*)&msg+sizeof(struct msg_hdr_s), msg.hdr.len-sizeof(struct msg_hdr_s), MSG_WAITALL);
         if (rc != msg.hdr.len-sizeof(struct msg_hdr_s)) {
-            fatal("recv msg rc=%d, %s", rc, strerror(errno));
+            if (rc == 0) {
+                fatal("connection closed by peer");
+            } else {
+                fatal("recv msg rc=%d, %s", rc, strerror(errno));
+            }
             exit(1);
         }
 
@@ -162,6 +266,10 @@ static void *msg_receive_thread(void *cx)
         switch (msg.hdr.id) {
         case MSG_ID_STATUS:
             body_status = msg.status;
+            break;
+        case MSG_ID_LOGMSG:
+            safe_strcpy(logmsg_strs[logmsg_strs_count%MAX_LOGMSG_STRS], msg.logmsg.str);
+            __sync_fetch_and_add(&logmsg_strs_count, 1);
             break;
         default:
             fatal("unsupported msg id %d", msg.hdr.id);
@@ -174,25 +282,37 @@ static void *msg_receive_thread(void *cx)
 
 // -----------------  SEND MSG ---------------------------------------------------
 
-// XXX use this in body too
 static void send_msg(int id, void *data, int data_len)
 {
     msg_t msg;
     int rc;
 
+    // validate data_len
+    if ((data == NULL && data_len != 0) ||
+        (data != NULL && (data_len <= 0 || data_len > sizeof(msg_t)-sizeof(struct msg_hdr_s))))
+    {
+        fatal("data=%p data_len=%d", data, data_len);
+    }
+
+    // init msg_hdr
     msg.hdr.magic = MSG_MAGIC;
     msg.hdr.len   = sizeof(struct msg_hdr_s) + data_len;
     msg.hdr.id    = id;
+    msg.hdr.pad   = 0;
 
-    // validate data_len
-
+    // copy data to msg, following the hdr
     if (data) {
         memcpy((void*)&msg+sizeof(struct msg_hdr_s), data, data_len);
     }
 
+    // send the msg
     rc = send(sfd, &msg, msg.hdr.len, MSG_NOSIGNAL);   
     if (rc != msg.hdr.len) {
-        fatal("send msg rc=%d, %s", rc, strerror(errno));
+        if (rc == 0) {
+            fatal("connection closed by peer");
+        } else {
+            fatal("send msg rc=%d, %s", rc, strerror(errno));
+        }
     }
 }
 
@@ -211,6 +331,7 @@ static void update_display(int maxy, int maxx)
              body_status.electronics_current, 
              body_status.motors_current);
 
+// xxx continue here
 #if 0
     // display motor ctlr values
     // rows 2-5
@@ -313,21 +434,21 @@ static void update_display(int maxy, int maxx)
     for (i = 0; i < MAX_OLED_STR; i++) {
         mvprintw(17, 6+10*i, (*strs)[i]);
     }
+#endif
 
     // display the logfile msgs
     // rows 19..maxy-5
     int num_rows = (maxy-5) - 19 + 1;
-    int tail = logmsg_strs_tail;
+    int rcvd_count = logmsg_strs_count;
     for (int i = 0; i < num_rows; i++) {
-        int idx = i + tail - num_rows + 1;
-        if (idx <= 0) continue;
+        int idx = (rcvd_count-1) + i - (num_rows-1);
+        if (idx < 0) continue;
         char *str = logmsg_strs[idx%MAX_LOGMSG_STRS];
         bool is_error_str = (strstr(str, "ERROR") != NULL);
         if (is_error_str) attron(COLOR_PAIR(COLOR_PAIR_RED));
         mvprintw(19+i, 0, "%s", str);
         if (is_error_str) attroff(COLOR_PAIR(COLOR_PAIR_RED));
     }
-#endif
 
     // display cmdline
     mvprintw(maxy-1, 0, "> %s", cmdline);
@@ -370,18 +491,29 @@ static int process_cmdline(void)
     }
     argc = cnt - 1;
 
+    // cmdline documentation:
+    //   q              : terminate pgm
+    //   cal            : perform motors calibration
+    //   run <proc_id>  : run procedure proc_id
+    //   mc_debug <0|1> : adjust mtr ctlr debug mode
+
     if (strcmp(cmd, "q") == 0) {
         return -1;  // terminate pgm
     } else if (strcmp(cmd, "cal") == 0) {
-        // XXX-later sendmsg
+        send_msg(MSG_ID_DRIVE_CAL, NULL, 0);
     } else if (strcmp(cmd, "run") == 0) {
-        send_msg(MSG_ID_DRIVE_PROC, NULL, 0);
-    } else if (strcmp(cmd, "mc_debug_on") == 0) {
-        // XXX-later sendmsg
-    } else if (strcmp(cmd, "mc_debug_off") == 0) {
-        // XXX-later sendmsg
+        struct msg_drive_proc_s x = { 0 };
+        send_msg(MSG_ID_DRIVE_PROC, &x, sizeof(x));
+    } else if (strcmp(cmd, "mc_debug") == 0) {
+        int val;
+        if (argc != 1 || sscanf(arg1, "%d", &val) != 1 || (val != 0 && val != 1)) {
+            error("invalid arg1: %s", cmdline);
+            return 0;
+        }
+        struct msg_mc_debug_ctl_s x = { val };
+        send_msg(MSG_ID_MC_DEBUG_CTL, &x, sizeof(x));
     } else {
-        // XXX need way of indicating it was an error
+        error("invalid cmd: %s", cmdline);
     }
 
     return 0;
@@ -436,14 +568,16 @@ static void curses_runtime(void (*update_display)(int maxy, int maxx), int (*inp
         // refresh display
         refresh();
 
-        // process character inputs
-        // XXX exit on ^d
+        // process character inputs; 
+        // note ERR means 'no input is waiting'
         sleep_us = 0;
         input_char = getch();
         if (input_char == KEY_RESIZE) {
             // immedeate redraw display
-        } else if (input_char != ERR) {  // XXX what is ERR
-            if (input_handler(input_char) != 0) {
+        } else if (input_char != ERR) {
+            if (input_char == 4) {  // 4 is ^d
+                return;
+            } else if (input_handler(input_char) != 0) {
                 return;
             }
         } else {

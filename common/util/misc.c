@@ -23,61 +23,44 @@
 
 // -----------------  LOGMSG  --------------------------------------------
 
-static FILE *logfp;
+static void (*logmsg_cb)(char *str);
 
-int logmsg_init(char *log_filename)
+void logmsg_register_cb(void (*cb)(char *str))
 {
-    // if NULL then logfp will reamin NULL, and logmsg() will log to stderr
-    if (log_filename == NULL) {
-        return 0;
-    }
-
-    // open the log_filename for writing at the end
-    logfp = fopen(log_filename, "a");
-    if (logfp == NULL) {
-        return -1;
-    }
-
-    // set line buffered
-    setlinebuf(logfp);
-
-    // success
-    return 0;
+    logmsg_cb = cb;
 }
 
 void logmsg(char *lvl, const char *func, char *fmt, ...) 
 {
     va_list ap;
-    char    msg[1000];
-    int     len;
+    char    str[1000];
+    int     cnt;
     char    time_str[MAX_TIME_STR];
-    bool    print_prefix;
 
-    // if fmt begins with '#' then do not print the prefix
-    print_prefix = (fmt[0] != '#');
-    if (print_prefix == false) {
-        fmt++;
-    }
+    // start by printing the time, lvl and func to str
+    cnt = sprintf(str, "%s %s %s: ",
+                  time2str(time_str, get_real_time_us(), false, true, true),
+                  lvl, 
+                  func);
 
-    // construct msg
+    // construct str
     va_start(ap, fmt);
-    vsnprintf(msg, sizeof(msg), fmt, ap);
+    cnt += vsnprintf(str+cnt, sizeof(str)-cnt, fmt, ap);
     va_end(ap);
 
-    // remove terminating newline
-    len = strlen(msg);
-    if (len > 0 && msg[len-1] == '\n') {
-        msg[len-1] = '\0';
-        len--;
+    // remove terminating newline char
+    if (cnt > 0 && str[cnt-1] == '\n') {
+        str[cnt-1] = '\0';
+        cnt--;
     }
 
-    // log to logfp, use stderr if logfp is NULL
-    if (print_prefix) {
-        fprintf(logfp?logfp:stderr, "%s %s %s: %s\n",
-            time2str(time_str, get_real_time_us(), false, true, true),
-            lvl, func, msg);
-    } else {
-        fprintf(logfp?logfp:stderr, "%s\n", msg);
+    // log to stderr
+    fprintf(stderr, "%s\n", str);
+
+    // call callback, if registered;
+    // note that the str passed to callback does not terminate in \n
+    if (logmsg_cb) {
+        logmsg_cb(str);  
     }
 }
 
