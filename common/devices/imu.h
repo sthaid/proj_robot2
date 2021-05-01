@@ -13,7 +13,7 @@ extern "C" {
 
 int imu_init(int dev_addr);  // return -1 on error, else 0
 
-double imu_read_magnetometer(void);
+double imu_get_magnetometer(void);
 
 void imu_accel_enable(void);
 void imu_accel_disable(void);

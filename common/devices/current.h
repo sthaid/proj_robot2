@@ -10,8 +10,7 @@ extern "C" {
 
 int current_init(int max_info, ...);    // returns -1 on error, else 0
 
-double current_read_smoothed(int id);
-double current_read_unsmoothed(int id);
+double current_get(int id);
 
 #ifdef __cplusplus
 }

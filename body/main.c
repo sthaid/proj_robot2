@@ -6,8 +6,8 @@
 // defines
 //
 
-#define MAX_LOGMSG_STRS 50
-#define LOG_FILENAME "body.log"
+#define MAX_LOGMSG_STRS      50
+#define MAX_LOGMSG_STR_SIZE  100
 
 //
 // typedefs
@@ -33,8 +33,8 @@ static void logmsg_cb(char *str);
 static void server(void);
 static void *server_thread(void *cx);
 static void process_received_msg(msg_t *msg);
-static void generate_status_msg(msg_t *status_msg);
-static void send_msg(int sockfd, int id, void *data, int data_len);
+static struct msg_status_s * generate_msg_status(void);
+static int send_msg(int sockfd, int id, void *data, int data_len);
 
 // -----------------  MAIN AND INIT ROUTINES  ------------------------------
 
@@ -193,7 +193,6 @@ static void * server_thread(void * cx)
 {
     int      sockfd = (uintptr_t)cx;
     msg_t    recv_msg;
-    msg_t    status_msg;
     uint64_t time_last_send = microsec_timer();
     uint64_t time_now;
     int      rc;
@@ -250,11 +249,8 @@ static void * server_thread(void * cx)
         // if it has been 100 ms since last sending status msg then do so now
         time_now = microsec_timer();
         if (time_now - time_last_send > 100000) {
-            generate_status_msg(&status_msg);
-            rc = send(sockfd, &status_msg, status_msg.hdr.len, MSG_NOSIGNAL);
-            if (rc != status_msg.hdr.len) {
-                ERROR("send status msg failed, rc=%d len=%d, %s\n",
-                      rc, status_msg.hdr.len, strerror(errno));
+            if (send_msg(sockfd, MSG_ID_STATUS, generate_msg_status(),
+                         sizeof(struct msg_status_s)) < 0) {
                 close(sockfd);
                 return NULL;
             }
@@ -265,6 +261,7 @@ static void * server_thread(void * cx)
         while (logmsg_strs_sent_count < logmsg_strs_count) {
             char *str = logmsg_strs[logmsg_strs_sent_count % MAX_LOGMSG_STRS];
             send_msg(sockfd, MSG_ID_LOGMSG, str, strlen(str)+1);
+            // xxx check rc
             logmsg_strs_sent_count++;
         }
 
@@ -275,11 +272,13 @@ static void * server_thread(void * cx)
     return NULL;
 }
 
+// xxx - - - - 
+
 // xxx msg to abort a drive proc
 // xxx possibly also when client exits
 static void process_received_msg(msg_t *msg)
 {
-    INFO("RECVD magic=0x%x  len=%d  id=%d\n", msg->hdr.magic, msg->hdr.len, msg->hdr.id);
+    //INFO("RECVD magic=0x%x  len=%d  id=%d\n", msg->hdr.magic, msg->hdr.len, msg->hdr.id);
 
     switch (msg->hdr.id) {
     case MSG_ID_DRIVE_CAL:
@@ -291,27 +290,104 @@ static void process_received_msg(msg_t *msg)
     case MSG_ID_MC_DEBUG_CTL:
         mc_debug_mode(msg->mc_debug_ctl.enable);
         break;
+    case MSG_ID_LOG_MARK:
+        INFO("------------------------------------------------\n");
+        break;
     default:
         ERROR("received invalid msg id %d\n", msg->hdr.id);
         break;
     }
 }
 
-static void generate_status_msg(msg_t *msg)
+// xxx - - - - 
+
+static struct msg_status_s * generate_msg_status(void)
 {
     mc_status_t *mcs = mc_get_status();
+    int id;
+    double val;
 
-    msg->hdr.magic = MSG_MAGIC;
-    msg->hdr.len   = sizeof(msg_t);
-    msg->hdr.id    = MSG_ID_STATUS;
+    static struct msg_status_s x;
+    static int accel_alert_count;
+    static double accel_alert_last_value;
 
-    msg->status.voltage              = mcs->voltage;
-    msg->status.electronics_current  = current_read_smoothed(0);
-    msg->status.motors_current       = mcs->motors_current;
-    msg->status.total_current        = msg->status.electronics_current + msg->status.motors_current;
+    memset(&x, 0, sizeof(x));
+
+    // voltage and current
+    x.voltage              = mcs->voltage;
+    x.electronics_current  = current_get(0);
+    x.motors_current       = mcs->motors_current;
+    x.total_current        = x.electronics_current + x.motors_current;
+
+    // motors and encoders
+    x.mc_state              = mcs->state;
+    strcpy(x.mc_state_str, MC_STATE_STR(x.mc_state));  // xxx safe
+    x.mc_debug_mode_enabled = mcs->debug_mode_enabled;
+    x.mc_target_speed[0]    = mcs->target_speed[0];
+    x.mc_target_speed[1]    = mcs->target_speed[1];
+    x.enc_poll_intvl_us     = encoder_get_poll_intvl_us();
+    for (id = 0; id < 2; id++) {
+        x.enc[id].enabled  = encoder_get_enabled(id);
+        x.enc[id].position = encoder_get_position(id);
+        x.enc[id].speed    = encoder_get_speed(id);
+        x.enc[id].errors   = encoder_get_errors(id);
+    }
+    if (x.mc_debug_mode_enabled) {
+        // these are only valid when mc_debug_mode_enabled
+        for (id = 0; id < 2; id++) {
+            struct debug_mode_mtr_vars_s *y = &mcs->debug_mode_mtr_vars[id];
+            x.mc[id].error_status  = y->error_status;
+            x.mc[id].target_speed  = y->target_speed;
+            x.mc[id].current_speed = y->current_speed;
+            x.mc[id].max_accel     = y->max_accel;
+            x.mc[id].max_decel     = y->max_decel;
+            x.mc[id].input_voltage = y->input_voltage;
+            x.mc[id].current       = y->current;
+        }
+    }
+
+    // proxmity sensors
+    x.prox_sig_limit      = proximity_get_sig_limit();
+    x.prox_poll_intvl_us  = proximity_get_poll_intvl_us();
+    for (id = 0; id < 2; id++) {
+        x.prox[id].enabled = proximity_get_enabled(id);
+        x.prox[id].alert   = proximity_check(id, &x.prox[id].sig);
+    }
+
+    // imu
+    if (imu_check_accel_alert(&val)) {
+        accel_alert_count++;
+        accel_alert_last_value = val;
+    }
+    x.heading                = imu_get_magnetometer();
+    x.accel_enabled          = imu_get_accel_enabled();
+    x.accel_alert_count      = accel_alert_count;
+    x.accel_alert_last_value = accel_alert_last_value;
+    x.accel_alert_limit      = imu_get_accel_alert_limit();
+
+    // environment
+    x.temperature_degc = env_get_temperature_degc();
+    x.pressure_pascal  = env_get_pressure_pascal();
+    x.temperature_degf = env_get_temperature_degf();
+    x.pressure_inhg    = env_get_pressure_inhg();
+
+    // buttons
+    for (id = 0; id < 2; id++) {
+        x.button[id].pressed = button_is_pressed(id);
+    }
+
+    // oled
+    if (sizeof(x.oled_strs) != sizeof(oled_strs_t)) {
+        FATAL("BUG: sizeof(x.oled_strs)=%zd sizeof(oled_strs_t)=%zd\n",
+              sizeof(x.oled_strs), sizeof(oled_strs_t));
+    }
+    memcpy(x.oled_strs, oled_get_strs(), sizeof(oled_strs_t));
+
+    return &x;
 }
 
-static void send_msg(int sockfd, int id, void *data, int data_len)
+// xxx move ?
+static int send_msg(int sockfd, int id, void *data, int data_len)
 {
     msg_t msg;
     int rc;
@@ -320,7 +396,7 @@ static void send_msg(int sockfd, int id, void *data, int data_len)
     msg.hdr.len   = sizeof(struct msg_hdr_s) + data_len;
     msg.hdr.id    = id;
 
-    // validate data_len
+    // xxx validate data_len
 
     if (data) {
         memcpy((void*)&msg+sizeof(struct msg_hdr_s), data, data_len);
@@ -328,6 +404,13 @@ static void send_msg(int sockfd, int id, void *data, int data_len)
 
     rc = send(sockfd, &msg, msg.hdr.len, MSG_NOSIGNAL);
     if (rc != msg.hdr.len) {
-        //fatal("send msg rc=%d, %s", rc, strerror(errno));
+        if (rc == 0) {
+            ERROR("connection terminated by peer\n");
+        } else {
+            ERROR("send rc=%d len=%d, %s\n", rc, msg.hdr.len, strerror(errno));
+        }
+        return -1;
     }
+
+    return 0;
 }

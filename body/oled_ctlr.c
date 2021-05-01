@@ -54,7 +54,7 @@ static void *oled_ctlr_thread(void *cx)
         // update oled_str array once per second
         if ((count % 10) == 0) {
             mc_status_t *mcs = mc_get_status();
-            double electronics_current = current_read_smoothed(0);
+            double electronics_current = current_get(0);
 
             if (MAX_OLED_STR != 5) {
                 FATAL("MAX_OLED_STR\n");
@@ -65,11 +65,11 @@ static void *oled_ctlr_thread(void *cx)
             snprintf(oled_strs[1], MAX_OLED_STR_SIZE,
                      "I=%-4.2f", electronics_current + mcs->motors_current);
             snprintf(oled_strs[2], MAX_OLED_STR_SIZE,
-                     "H=%-3.0f", imu_read_magnetometer());
+                     "H=%-3.0f", imu_get_magnetometer());
             snprintf(oled_strs[3], MAX_OLED_STR_SIZE,
-                     "T=%-4.1f", env_read_temperature_degf());
+                     "T=%-4.1f", env_get_temperature_degf());
             snprintf(oled_strs[4], MAX_OLED_STR_SIZE,
-                     "P=%-5.2f", env_read_pressure_inhg());
+                     "P=%-5.2f", env_get_pressure_inhg());
         }
 
         // check if should display the next str

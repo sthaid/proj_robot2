@@ -36,22 +36,22 @@ int env_init(int dev_addr)  // multiple instances not supported
     return 0;
 }
 
-double env_read_temperature_degc(void)
+double env_get_temperature_degc(void)
 {
     return temperature;
 }
 
-double env_read_pressure_pascal(void)
+double env_get_pressure_pascal(void)
 {
     return pressure;
 }
 
-double env_read_temperature_degf(void)
+double env_get_temperature_degf(void)
 {
     return CENTIGRADE_TO_FAHRENHEIT(temperature);
 }
 
-double env_read_pressure_inhg(void)
+double env_get_pressure_inhg(void)
 {
     return PASCAL_TO_INHG(pressure);
 }

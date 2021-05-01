@@ -322,23 +322,26 @@ static char cmdline[100];
 
 static void update_display(int maxy, int maxx)
 {
+    struct msg_status_s *x = &body_status;
+    int id;
+
+    static int last_accel_alert_count = -1;
+
     // display voltage and current
     // row 0
     mvprintw(0, 0,
              "VOLTAGE = %-5.2f - CURRENT = %-4.2f  (%4.2f + %4.2f)",
-             body_status.voltage, 
-             body_status.total_current, 
-             body_status.electronics_current, 
-             body_status.motors_current);
+             x->voltage, 
+             x->total_current, 
+             x->electronics_current, 
+             x->motors_current);
 
-// xxx continue here
-#if 0
     // display motor ctlr values
     // rows 2-5
     mvprintw(2, 0,
              "MOTORS: %s   EncPollIntvlUs=%d",
-            MC_STATE_STR(mcs->state), encoder_get_poll_intvl_us());
-    if (mc_debug_mode_enabled) {
+            x->mc_state_str, x->enc_poll_intvl_us);
+    if (x->mc_debug_mode_enabled) {
         mvprintw(3,0, 
              "      Target   Ena Position Speed Errors   ErrStat Target Current Accel Voltage Current");
     } else {
@@ -346,95 +349,86 @@ static void update_display(int maxy, int maxx)
              "      Target   Ena Position Speed Errors");
     }
     for (id = 0; id < 2; id++) {
-        if (mc_debug_mode_enabled) {
-            struct debug_mode_mtr_vars_s *x = &mcs->debug_mode_mtr_vars[id];
+        if (x->mc_debug_mode_enabled) {
             mvprintw(4+id, 0, 
                      "  %c - %6d   %3d %8d %5d %6d    0x%4.4x %6d %7d %2d %2d %7.2f %7.2f",
-                     (id == 0 ? 'L' : 'R'), mcs->target_speed[id],
-                     encoder_get_enabled(id),
-                     encoder_get_position(id),
-                     encoder_get_speed(id),
-                     encoder_get_errors(id),
-                     x->error_status, x->target_speed, x->current_speed, 
-                     x->max_accel, x->max_decel,
-                     x->input_voltage/1000., x->current/1000.);
+                     (id == 0 ? 'L' : 'R'), 
+                     x->mc_target_speed[id],
+                     x->enc[id].enabled,
+                     x->enc[id].position,
+                     x->enc[id].speed,
+                     x->enc[id].errors,
+                     x->mc[id].error_status, 
+                     x->mc[id].target_speed, 
+                     x->mc[id].current_speed, 
+                     x->mc[id].max_accel, 
+                     x->mc[id].max_decel,
+                     x->mc[id].input_voltage/1000., 
+                     x->mc[id].current/1000.);
         } else {
             mvprintw(4+id, 0, 
                      "  %c - %6d   %3d %8d %5d %6d",
-                     (id == 0 ? 'L' : 'R'), mcs->target_speed[id],
-                     encoder_get_enabled(id),
-                     encoder_get_position(id),
-                     encoder_get_speed(id),
-                     encoder_get_errors(id));
+                     (id == 0 ? 'L' : 'R'), 
+                     x->mc_target_speed[id],
+                     x->enc[id].enabled,
+                     x->enc[id].position,
+                     x->enc[id].speed,
+                     x->enc[id].errors);
         }
     }
 
     // display proximity sensor values
     // rows 7-9
     mvprintw(7, 0,
-             "PROXIMITY:  AlertSigLimit=%4.2f  PollIntvlUs=%d",
-             proximity_get_alert_limit(), proximity_get_poll_intvl_us());
+             "PROXIMITY:  SigLimit=%4.2f  PollIntvlUs=%d",
+             x->prox_sig_limit,
+             x->prox_poll_intvl_us);
     for (id = 0; id < 2; id++) {
-        double proximity_avg_sig;
-        bool proximity_alert;
-
-        proximity_alert = proximity_check(id, &proximity_avg_sig);
         mvprintw(8+id, 0,
                  "  %c - Enabled=%d  Alert=%d  Sig=%4.2f",
                  (id == 0 ? 'F' : 'R'),
-                 proximity_get_enabled(id),
-                 proximity_alert,
-                 proximity_avg_sig);
-        if (proximity_alert) {
-            beep();
-        }
+                 x->prox[id].enabled,
+                 x->prox[id].alert,
+                 x->prox[id].sig);
+    }
+    if (x->prox[0].alert || x->prox[1].alert) {
+        beep(); 
     }
 
     // display IMU values
     // row 11
-    static double last_accel_alert_value;
-    static int    accel_alert_count;
-    double accel_alert_value;
-    if (imu_check_accel_alert(&accel_alert_value)) {
-        last_accel_alert_value = accel_alert_value;
-        accel_alert_count++;
+    mvprintw(11, 0,
+        "IMU:  Heading=%3.0f - Accel Ena=%d AlertCount=%d AlertLastValue=%4.2f AlertLimit=%4.2f",
+        x->heading,
+        x->accel_enabled,
+        x->accel_alert_count, 
+        x->accel_alert_last_value,
+        x->accel_alert_limit);
+    if (x->accel_alert_count != last_accel_alert_count && last_accel_alert_count != -1) {
         beep();
     }
-    mvprintw(11, 0,
-        "IMU:  Heading=%3.0f - Accel Ena=%d AlertCount=%d LastAlertValue=%4.2f AlertValueLimit=%4.2f",
-        imu_read_magnetometer(),
-        imu_get_accel_enabled(),
-        accel_alert_count, last_accel_alert_value,
-        imu_get_accel_alert_limit());
+    last_accel_alert_count = x->accel_alert_count;
 
     // display ENV values
     // row 13
-    double temperature, pressure;
-    temperature = env_read_temperature_degc();
-    pressure = env_read_pressure_pascal();
     mvprintw(13, 0, 
         "ENV:  %4.1f C  %0.0f Pa - %4.1f F  %5.2f in Hg",
-        temperature, pressure, 
-        CENTIGRADE_TO_FAHRENHEIT(temperature),
-        PASCAL_TO_INHG(pressure));
+        x->temperature_degc, x->pressure_pascal, 
+        x->temperature_degf, x->pressure_inhg);
 
     // button values
     // row 15
     mvprintw(15, 0, 
         "BTNS: %d  %d",
-        button_is_pressed(0),
-        button_is_pressed(1));
+        x->button[0].pressed,
+        x->button[1].pressed);
 
     // oled strings
     // row 17
-    int i;
-    oled_strs_t *strs;
-    strs = oled_get_strs();
     mvprintw(17, 0, "OLED:");
-    for (i = 0; i < MAX_OLED_STR; i++) {
-        mvprintw(17, 6+10*i, (*strs)[i]);
+    for (int i = 0; i < MAX_OLED_STR; i++) {
+        mvprintw(17, 6+10*i, x->oled_strs[i]);
     }
-#endif
 
     // display the logfile msgs
     // rows 19..maxy-5
@@ -459,7 +453,9 @@ static void update_display(int maxy, int maxx)
 static int input_handler(int input_char)
 {
     // process input_char
-    if (input_char == '\n') {
+    if (input_char == 4) {  // 4 is ^d
+        return -1;  // terminates pgm
+    } else if (input_char == '\n') {
         if (process_cmdline() == -1) {
             return -1;  // terminates pgm
         }
@@ -512,6 +508,8 @@ static int process_cmdline(void)
         }
         struct msg_mc_debug_ctl_s x = { val };
         send_msg(MSG_ID_MC_DEBUG_CTL, &x, sizeof(x));
+    } else if (strcmp(cmd, "log_mark") == 0) {
+        send_msg(MSG_ID_LOG_MARK, NULL, 0);
     } else {
         error("invalid cmd: %s", cmdline);
     }
@@ -575,9 +573,7 @@ static void curses_runtime(void (*update_display)(int maxy, int maxx), int (*inp
         if (input_char == KEY_RESIZE) {
             // immedeate redraw display
         } else if (input_char != ERR) {
-            if (input_char == 4) {  // 4 is ^d
-                return;
-            } else if (input_handler(input_char) != 0) {
+            if (input_handler(input_char) != 0) {
                 return;
             }
         } else {

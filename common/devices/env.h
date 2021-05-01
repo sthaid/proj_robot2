@@ -12,10 +12,10 @@ extern "C" {
 
 int env_init(int dev_addr);  // return -1 on error, else 0
 
-double env_read_temperature_degc(void);
-double env_read_pressure_pascal(void);
-double env_read_temperature_degf(void);
-double env_read_pressure_inhg(void);
+double env_get_temperature_degc(void);
+double env_get_pressure_pascal(void);
+double env_get_temperature_degf(void);
+double env_get_pressure_inhg(void);
 
 #ifdef __cplusplus
 }

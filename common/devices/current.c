@@ -13,11 +13,12 @@
 
 static struct info_s {
     int adc_chan;
-    double current;
+    double current_smoothed;
 } info_tbl[10];
 static int max_info;
 
 static void * current_thread(void *cx);
+static double read_current_unsmoothed(int id);
 
 // -----------------  API  --------------------------------------
 
@@ -53,37 +54,31 @@ int current_init(int max_info_arg, ...)  // int adc_chan, ...
     return 0;
 }
 
-double current_read_unsmoothed(int id)
+double current_get(int id)
 {
-    double v;
-
-    STM32_adc_read(info_tbl[id].adc_chan, &v);
-    return (v - 0.322) * (1. / .264);
-}
-
-double current_read_smoothed(int id)
-{
-    return info_tbl[id].current;
+    return info_tbl[id].current_smoothed;
 }
 
 // -----------------  THREAD-------------------------------------
 
 static void * current_thread(void *cx)
 {
-    int id;
-    double current;
-
     while (true) {
-        for (id = 0; id < max_info; id++) {
-            current = current_read_unsmoothed(id);
-
-            info_tbl[id].current = 0.98 * info_tbl[id].current + 
-                                   0.02 * current;
-
-            usleep(10000);   // 10 ms
+        for (int id = 0; id < max_info; id++) {
+            info_tbl[id].current_smoothed = 
+                0.98 * info_tbl[id].current_smoothed + 
+                0.02 * read_current_unsmoothed(id);
         }
+        usleep(10000);   // 10 ms
     }
 
     return NULL;
 }
 
+static double read_current_unsmoothed(int id)
+{
+    double v;
+
+    STM32_adc_read(info_tbl[id].adc_chan, &v);
+    return (v - 0.322) * (1. / .264);
+}

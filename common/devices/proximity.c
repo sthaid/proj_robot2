@@ -17,7 +17,7 @@
 // defines
 //
 
-#define DEFAULT_PROXIMITY_ALERT_LIMIT  0.1
+#define DEFAULT_PROXIMITY_SIG_LIMIT  0.1
 
 //
 // variables
@@ -27,13 +27,13 @@ static struct info_s {
     int gpio_sig;
     int gpio_enable;
     bool enabled;
-    double avg_sig;
+    double sig;
 } info_tbl[10];
 static int max_info;
 
 static int poll_rate;
 
-static double alert_limit = DEFAULT_PROXIMITY_ALERT_LIMIT;
+static double sig_limit = DEFAULT_PROXIMITY_SIG_LIMIT;
 
 //
 // prototypes
@@ -90,13 +90,13 @@ int proximity_init(int max_info_arg, ...)  // int gpio_sig, int gpio_enable
     return 0;
 }
 
-bool proximity_check(int id, double *avg_sig_arg)
+bool proximity_check(int id, double *sig_arg)
 {
-    if (avg_sig_arg) {
-        *avg_sig_arg = info_tbl[id].avg_sig;
+    if (sig_arg) {
+        *sig_arg = info_tbl[id].sig;
     }
 
-    return info_tbl[id].avg_sig > alert_limit;
+    return info_tbl[id].sig > sig_limit;
 }
 
 void proximity_enable(int id)
@@ -111,10 +111,10 @@ void proximity_disable(int id)
     info_tbl[id].enabled = false;
 }
 
-void proximity_set_alert_limit(double alert_limit_arg)
+void proximity_set_sig_limit(double sig_limit_arg)
 {
-    // alert_limit applies to all proximity sensors
-    alert_limit = alert_limit_arg;
+    // sig_limit applies to all proximity sensors
+    sig_limit = sig_limit_arg;
 }
 
 bool proximity_get_enabled(int id)
@@ -122,9 +122,9 @@ bool proximity_get_enabled(int id)
     return info_tbl[id].enabled;
 }
 
-double proximity_get_alert_limit(void)
+double proximity_get_sig_limit(void)
 {
-    return alert_limit;
+    return sig_limit;
 }
 
 int proximity_get_poll_intvl_us(void)
@@ -158,7 +158,7 @@ static void *proximity_thread(void *cx)
         // purpose is to save power
         if (all_disabled()) {
             for (int id = 0; id < max_info; id++) {
-                info_tbl[id].avg_sig = 0;
+                info_tbl[id].sig = 0;
             }
             poll_rate = 0;
             t_last = timer_get();;
@@ -176,15 +176,15 @@ static void *proximity_thread(void *cx)
             int sig;
 
             if (info->enabled == false) {
-                info->avg_sig = 0;
+                info->sig = 0;
                 continue;
             }
 
             sig = ((gpio_all >> info->gpio_sig) & 1) ? 0 : 1;
             if (sig == 0) {
-                info->avg_sig = 0.99 * info->avg_sig;
+                info->sig = 0.99 * info->sig;
             } else {
-                info->avg_sig = 0.99 * info->avg_sig + 0.01;
+                info->sig = 0.99 * info->sig + 0.01;
             }
         }
 

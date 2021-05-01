@@ -72,7 +72,7 @@ int imu_init(int dev_addr)  // multiple instances not supported
 
 // - - - - - - - - -  MAGNETOMETER   - - - - - - - - - - - - - - 
 
-double imu_read_magnetometer(void)
+double imu_get_magnetometer(void)
 {
     double heading;
 
