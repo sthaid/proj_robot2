@@ -2,6 +2,16 @@
 TITLE: INTRO - TODO
 ===========================
 
+https://www.raspberrypi.org/documentation/linux/usage/systemd.md
+Type=simple
+ExecStart
+ExecStop
+  or 
+KillSignal
+
+StandardInput=null
+StandardOutput=file:/path
+
 front wheel,
 - make 1 inch spacer, and mount to spacer
 

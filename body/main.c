@@ -1,4 +1,4 @@
-// xxx review use of FATAL
+// xxx msg to abort a drive proc, and possibly when a client exits
 
 #include "common.h"
 
@@ -8,6 +8,13 @@
 
 #define MAX_LOGMSG_STRS      50
 #define MAX_LOGMSG_STR_SIZE  100
+
+// dest must be a char array, and not a char *
+#define safe_strcpy(dest, src) \
+    do { \
+        strncpy(dest, src, sizeof(dest)-1); \
+        (dest)[sizeof(dest)-1] = '\0'; \
+    } while (0)
 
 //
 // typedefs
@@ -20,21 +27,21 @@
 static char logmsg_strs[MAX_LOGMSG_STRS][MAX_LOGMSG_STR_SIZE];
 static int  logmsg_strs_count;
 
-static bool sigterm;  // xxx or sigint
+static bool sigint, sigterm;
 
 //
 // prototypes
 //
 
 static void initialize(void);
-static void sigterm_hndlr(int signum);
+static void sig_hndlr(int signum);
 static void logmsg_cb(char *str);
 
 static void server(void);
 static void *server_thread(void *cx);
-static void process_received_msg(msg_t *msg);
-static struct msg_status_s * generate_msg_status(void);
 static int send_msg(int sockfd, int id, void *data, int data_len);
+static struct msg_status_s * generate_msg_status(void);
+static void process_received_msg(msg_t *msg);
 
 // -----------------  MAIN AND INIT ROUTINES  ------------------------------
 
@@ -44,12 +51,18 @@ int main(int argc, char **argv)
     initialize();
 
     // call server to accept and process connections from clients
-    // xxx how does this return, what about sigterm
-    // xxx add scripts to control starting and stopping, and add to /etc/rc.local
     server();
 
     // stop motors
     mc_disable_all();
+
+    // print reason for terminating
+    if (sigint || sigterm) {
+        INFO("terminating due to %s\n", sigint ? "SIGINT" : "SIGTERM");
+    }
+
+    // call oled_exit to clear the oled display
+    oled_ctlr_exit("term");
 
     // done
     return 0;
@@ -92,22 +105,21 @@ static void initialize(void)
     // register SIGTERM
     struct sigaction act;
     memset(&act, 0, sizeof(act));
-    act.sa_handler = sigterm_hndlr;
+    act.sa_handler = sig_hndlr;
+    sigaction(SIGINT, &act, NULL);
     sigaction(SIGTERM, &act, NULL);
 }
 
-static void sigterm_hndlr(int signum)
+static void sig_hndlr(int signum)
 {
-    // xxx where used, and test
-    sigterm = true;
+    if (signum == SIGINT) sigint = true;
+    if (signum == SIGTERM) sigterm = true;
 }
 
 static void logmsg_cb(char *str)
 {
-//xxx use safe
-    strncpy(logmsg_strs[logmsg_strs_count % MAX_LOGMSG_STRS], str, MAX_LOGMSG_STR_SIZE-1);
-    __sync_synchronize();
-    logmsg_strs_count++;  // xxx atomic
+    safe_strcpy(logmsg_strs[logmsg_strs_count%MAX_LOGMSG_STRS], str);
+    __sync_fetch_and_add(&logmsg_strs_count,1);
 }
 
 // -----------------  SERVER  ----------------------------------------------
@@ -124,16 +136,10 @@ static void server(void)
 
     // create socket
     listen_sockfd = socket(AF_INET, SOCK_STREAM, 0);
-    if (listen_sockfd == -1) {
-        FATAL("socket, %s\n", strerror(errno));
-    }
 
     // set reuseaddr
     optval = 1;
-    ret = setsockopt(listen_sockfd, SOL_SOCKET, SO_REUSEADDR, &optval, 4);
-    if (ret == -1) {
-        FATAL("SO_REUSEADDR, %s\n", strerror(errno));
-    }
+    setsockopt(listen_sockfd, SOL_SOCKET, SO_REUSEADDR, &optval, 4);
 
     // bind socket
     bzero(&server_address, sizeof(server_address));
@@ -148,21 +154,13 @@ static void server(void)
     }
 
     // listen 
-    ret = listen(listen_sockfd, 2);
-    if (ret == -1) {
-        FATAL("listen, %s\n", strerror(errno));
-    }
+    listen(listen_sockfd, 2);
 
     // init thread attributes to make thread detached
-    if (pthread_attr_init(&attr) != 0) {
-        FATAL("pthread_attr_init, %s\n", strerror(errno));
-    }
-    if (pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED) != 0) {
-        FATAL("pthread_attr_setdetachstate, %s\n", strerror(errno));
-    }
+    pthread_attr_init(&attr);
+    pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
 
     // loop, accepting connection, and create thread to service the client
-    // xxx what typically sees the sigterm
     INFO("server: accepting connections\n");
     while (1) {
         int                sockfd;
@@ -173,19 +171,16 @@ static void server(void)
         len = sizeof(address);
         sockfd = accept(listen_sockfd, (struct sockaddr *) &address, &len);
         if (sockfd == -1) {
-            if (sigterm) {
+            if (sigint || sigterm) {
                 break;
             }
-            FATAL("accept, %s\n", strerror(errno));
+            ERROR("accept, %s\n", strerror(errno));
+            continue;
         }
 
         // create thread
-        INFO("accepting connection from %s\n", 
-             sock_addr_to_str(s,sizeof(s),(struct sockaddr *)&address));
-
-        if (pthread_create(&thread, &attr, server_thread, (void*)(uintptr_t)sockfd) != 0) {
-            FATAL("pthread_create server_thread, %s\n", strerror(errno));
-        }
+        INFO("accepted connection from %s\n", sock_addr_to_str(s,sizeof(s),(struct sockaddr *)&address));
+        pthread_create(&thread, &attr, server_thread, (void*)(uintptr_t)sockfd);
     }
 }
 
@@ -199,7 +194,8 @@ static void * server_thread(void * cx)
     int      recvd_len = 0;
     int      logmsg_strs_sent_count;
 
-    // xxx comment
+    // init logmsg_strs_sent_count, so that the most recent 10 logmsg strs 
+    // will be sent to the client
     logmsg_strs_sent_count = logmsg_strs_count - 10;
     if (logmsg_strs_sent_count < 0) {
         logmsg_strs_sent_count = 0;
@@ -257,11 +253,13 @@ static void * server_thread(void * cx)
             time_last_send = time_now;
         }
 
-        // XXX send the str here
+        // if there are logmsg_strs that need to be sent, then do so
         while (logmsg_strs_sent_count < logmsg_strs_count) {
             char *str = logmsg_strs[logmsg_strs_sent_count % MAX_LOGMSG_STRS];
-            send_msg(sockfd, MSG_ID_LOGMSG, str, strlen(str)+1);
-            // xxx check rc
+            if (send_msg(sockfd, MSG_ID_LOGMSG, str, strlen(str)+1) < 0) {
+                close(sockfd);
+                return NULL;
+            }
             logmsg_strs_sent_count++;
         }
 
@@ -272,34 +270,45 @@ static void * server_thread(void * cx)
     return NULL;
 }
 
-// xxx - - - - 
-
-// xxx msg to abort a drive proc
-// xxx possibly also when client exits
-static void process_received_msg(msg_t *msg)
+static int send_msg(int sockfd, int id, void *data, int data_len)
 {
-    //INFO("RECVD magic=0x%x  len=%d  id=%d\n", msg->hdr.magic, msg->hdr.len, msg->hdr.id);
+    msg_t msg;
+    int rc;
 
-    switch (msg->hdr.id) {
-    case MSG_ID_DRIVE_CAL:
-        drive_run_cal();
-        break;
-    case MSG_ID_DRIVE_PROC:
-        drive_run_proc(msg->drive_proc.proc_id);
-        break;
-    case MSG_ID_MC_DEBUG_CTL:
-        mc_debug_mode(msg->mc_debug_ctl.enable);
-        break;
-    case MSG_ID_LOG_MARK:
-        INFO("------------------------------------------------\n");
-        break;
-    default:
-        ERROR("received invalid msg id %d\n", msg->hdr.id);
-        break;
+    // validate data_len
+    if ((data == NULL && data_len != 0) ||
+        (data != NULL && (data_len <= 0 || data_len > sizeof(msg_t)-sizeof(struct msg_hdr_s))))
+    {
+        FATAL("BUG data=%p data_len=%d", data, data_len);
     }
+
+    // init the msg.hdr fields
+    msg.hdr.magic = MSG_MAGIC;
+    msg.hdr.len   = sizeof(struct msg_hdr_s) + data_len;
+    msg.hdr.id    = id;
+    msg.hdr.pad   = 0;
+
+    // copy data to msg, following the hdr
+    if (data) {
+        memcpy((void*)&msg+sizeof(struct msg_hdr_s), data, data_len);
+    }
+
+    // send the msg
+    rc = send(sockfd, &msg, msg.hdr.len, MSG_NOSIGNAL);
+    if (rc != msg.hdr.len) {
+        if (rc == 0) {
+            ERROR("connection terminated by peer\n");
+        } else {
+            ERROR("send rc=%d len=%d, %s\n", rc, msg.hdr.len, strerror(errno));
+        }
+        return -1;
+    }
+
+    // msg has queued to be sent, return success
+    return 0;
 }
 
-// xxx - - - - 
+// -  -  -  -  -  -   SERVER - GENERATE_MSG_STATUS - -  -  -  -  -  -  -  - 
 
 static struct msg_status_s * generate_msg_status(void)
 {
@@ -321,7 +330,7 @@ static struct msg_status_s * generate_msg_status(void)
 
     // motors and encoders
     x.mc_state              = mcs->state;
-    strcpy(x.mc_state_str, MC_STATE_STR(x.mc_state));  // xxx safe
+    safe_strcpy(x.mc_state_str, MC_STATE_STR(x.mc_state));
     x.mc_debug_mode_enabled = mcs->debug_mode_enabled;
     x.mc_target_speed[0]    = mcs->target_speed[0];
     x.mc_target_speed[1]    = mcs->target_speed[1];
@@ -386,31 +395,27 @@ static struct msg_status_s * generate_msg_status(void)
     return &x;
 }
 
-// xxx move ?
-static int send_msg(int sockfd, int id, void *data, int data_len)
+// -  -  -  -  -  -   SERVER - PROCESSS RECVD NSGS    -  -  -  -  -  -  -  - 
+
+static void process_received_msg(msg_t *msg)
 {
-    msg_t msg;
-    int rc;
+    //INFO("RECVD magic=0x%x  len=%d  id=%d\n", msg->hdr.magic, msg->hdr.len, msg->hdr.id);
 
-    msg.hdr.magic = MSG_MAGIC;
-    msg.hdr.len   = sizeof(struct msg_hdr_s) + data_len;
-    msg.hdr.id    = id;
-
-    // xxx validate data_len
-
-    if (data) {
-        memcpy((void*)&msg+sizeof(struct msg_hdr_s), data, data_len);
+    switch (msg->hdr.id) {
+    case MSG_ID_DRIVE_CAL:
+        drive_run_cal();
+        break;
+    case MSG_ID_DRIVE_PROC:
+        drive_run_proc(msg->drive_proc.proc_id);
+        break;
+    case MSG_ID_MC_DEBUG_CTL:
+        mc_debug_mode(msg->mc_debug_ctl.enable);
+        break;
+    case MSG_ID_LOG_MARK:
+        INFO("------------------------------------------------\n");
+        break;
+    default:
+        ERROR("received invalid msg id %d\n", msg->hdr.id);
+        break;
     }
-
-    rc = send(sockfd, &msg, msg.hdr.len, MSG_NOSIGNAL);
-    if (rc != msg.hdr.len) {
-        if (rc == 0) {
-            ERROR("connection terminated by peer\n");
-        } else {
-            ERROR("send rc=%d len=%d, %s\n", rc, msg.hdr.len, strerror(errno));
-        }
-        return -1;
-    }
-
-    return 0;
 }

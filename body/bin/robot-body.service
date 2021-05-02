@@ -1,0 +1,16 @@
+[Unit]
+Description=Robot body service
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/home/haid/proj/proj_robot2/body/body
+WorkingDirectory=/home/haid/proj/proj_robot2/body
+StandardInput=null
+StandardOutput=append:/home/haid/proj/proj_robot2/body/body.log
+StandardError=inherit
+User=root
+Restart=no
+
+[Install]
+WantedBy=multi-user.target
