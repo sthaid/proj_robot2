@@ -102,6 +102,8 @@ static void initialize(void)
     static struct sockaddr_in  sockaddr;
     char s[110];
     pthread_t tid;
+    int rc;
+    struct timeval tv = {3,0};
 
     // set line buffered stdout
     setlinebuf(stdout);
@@ -117,6 +119,12 @@ static void initialize(void)
         fatal("failed connect to %s, %s",
               sock_addr_to_str(s, sizeof(s), (struct sockaddr *)&sockaddr),
               strerror(errno));
+    }
+
+    // set 3 second recv timeout
+    rc = setsockopt(sfd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+    if (rc < 0) {
+	fatal("failed to set SO_RCVTIMEO, %s\n", strerror(errno));
     }
 
     // create thread to receive and process msgs from body pgm
@@ -259,7 +267,6 @@ static void *msg_receive_thread(void *cx)
             } else {
                 fatal("recv msg rc=%d, %s", rc, strerror(errno));
             }
-            exit(1);
         }
 
         // process the msg
