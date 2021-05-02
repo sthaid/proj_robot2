@@ -61,6 +61,9 @@ int main(int argc, char **argv)
         INFO("terminating due to %s\n", sigint ? "SIGINT" : "SIGTERM");
     }
 
+    // call oled_exit to clear the oled display
+    oled_ctlr_exit("term");
+
     // done
     return 0;
 }

@@ -15,6 +15,8 @@ static int  oled_stridx;
 static int  oled_advance_intvl_ms;
 static bool oled_button_advance_req;
 
+static pthread_mutex_t oled_mutex = PTHREAD_MUTEX_INITIALIZER;
+
 //
 // prototypes
 //
@@ -35,6 +37,13 @@ int oled_ctlr_init(void)
     button_register_cb(1, oled_button_cb);
 
     return 0;
+}
+
+void oled_ctlr_exit(char *str)
+{
+    pthread_mutex_lock(&oled_mutex);
+    oled_draw_str(0, str);
+    // to ensure the str remains displayed, do not unlock the mutex
 }
 
 oled_strs_t *oled_get_strs(void)
@@ -85,7 +94,9 @@ static void *oled_ctlr_thread(void *cx)
         // then display the new string
         str_to_display = oled_strs[oled_stridx];
         if (strcmp(str_to_display, str_currently_displayed) != 0) {
+            pthread_mutex_lock(&oled_mutex);
             oled_draw_str(0, str_to_display);
+            pthread_mutex_unlock(&oled_mutex);
             strcpy(str_currently_displayed, str_to_display);
         }
 

@@ -44,6 +44,7 @@
 #define MAX_OLED_STR_SIZE  10
 typedef char oled_strs_t[MAX_OLED_STR][MAX_OLED_STR_SIZE];
 int oled_ctlr_init(void);
+void oled_ctlr_exit(char *str);
 oled_strs_t *oled_get_strs(void);
 
 // drive.c

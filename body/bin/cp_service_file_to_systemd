@@ -1,0 +1,5 @@
+#!/bin/bash
+
+sudo cp bin/robot-body.service /etc/systemd/system
+
+echo "may need ro run: systemctl daemon-reload'
