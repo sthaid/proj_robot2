@@ -13,7 +13,6 @@ extern "C" {
 #define MAX_OLED_STR_SIZE   10
 
 // msgs sent from client to body
-#define MSG_ID_DRIVE_CAL     1
 #define MSG_ID_DRIVE_PROC    2
 #define MSG_ID_MC_DEBUG_CTL  3
 #define MSG_ID_LOG_MARK      4

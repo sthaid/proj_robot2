@@ -49,11 +49,23 @@ oled_strs_t *oled_get_strs(void);
 
 // drive.c
 int drive_init(void);
-void drive_run_cal(void);
-void drive_run_proc(int proc_id);
+void drive_run(int proc_id);
+int drive_sleep(uint64_t duration_us);
 
-int drive_fwd(uint64_t dur_us, double mph);
+// drive.c routines called from drive_procs.c
+int drive_fwd(double mph, double feet);
+int drive_rew(double mph, double feet);
+int drive_xxx(double lmph, double rmph, double feet);
+int drive_rotate(double mph, double feet);  // angle xxx
 int drive_stop(void);
+
+// drive_cal.c
+int drive_cal_file_read(void);
+int drive_cal_file_write(void);
+void drive_cal_tbl_print(void);
+int drive_cal_proc(void);
+int drive_cal_cvt_mph_to_left_motor_speed(double mph, int *left_mtr_speed);
+int drive_cal_cvt_mph_to_right_motor_speed(double mph, int *right_mtr_speed);
 
 // drive_procs.c
 extern int (*drive_procs_tbl[])(void);

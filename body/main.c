@@ -402,11 +402,9 @@ static void process_received_msg(msg_t *msg)
     //INFO("RECVD magic=0x%x  len=%d  id=%d\n", msg->hdr.magic, msg->hdr.len, msg->hdr.id);
 
     switch (msg->hdr.id) {
-    case MSG_ID_DRIVE_CAL:
-        drive_run_cal();
-        break;
     case MSG_ID_DRIVE_PROC:
-        drive_run_proc(msg->drive_proc.proc_id);
+        msg->drive_proc.proc_id = 1; //xxx temp
+        drive_run(msg->drive_proc.proc_id);
         break;
     case MSG_ID_MC_DEBUG_CTL:
         mc_debug_mode(msg->mc_debug_ctl.enable);
