@@ -497,34 +497,26 @@ static int input_handler(int input_char)
 
 static int process_cmdline(void)
 {
-    int cnt;
-    int argc  __attribute__((unused));
-    char cmd[100], arg1[100], arg2[100], arg3[100], arg4[100];
+    int  cnt, argval[4];
+    char cmd[100];
 
     cmd[0] = '\0';
-    cnt = sscanf(cmdline, "%s %s %s %s %s", cmd, arg1, arg2, arg3, arg4);
+    memset(argval, 0, sizeof(argval));
+    cnt = sscanf(cmdline, "%s %d %d %d %d", cmd, &argval[0], &argval[1], &argval[2], &argval[3]); 
     if (cnt == 0 || cmd[0] == '\0') {
         return 0;
     }
-    argc = cnt - 1;
-
-    // cmdline documentation:
-    //   q              : terminate pgm
-    //   run <proc_id>  : run procedure proc_id
-    //   mc_debug <0|1> : adjust mtr ctlr debug mode
 
     if (strcmp(cmd, "q") == 0) {
         return -1;  // terminate pgm
-    } else if (strcmp(cmd, "run") == 0) {
-        struct msg_drive_proc_s x = { 1 };
+    } else if (strcmp(cmd, "cal") == 0) {
+        struct msg_drive_proc_s x = { 0, argval[0], argval[1], argval[2], argval[3] };
+        send_msg(MSG_ID_DRIVE_PROC, &x, sizeof(x));
+    } else if (strcmp(cmd, "fwd") == 0) {
+        struct msg_drive_proc_s x = { 1, argval[0], argval[1], argval[2], argval[3] };
         send_msg(MSG_ID_DRIVE_PROC, &x, sizeof(x));
     } else if (strcmp(cmd, "mc_debug") == 0) {
-        int val;
-        if (argc != 1 || sscanf(arg1, "%d", &val) != 1 || (val != 0 && val != 1)) {
-            error("invalid arg1: %s", cmdline);
-            return 0;
-        }
-        struct msg_mc_debug_ctl_s x = { val };
+        struct msg_mc_debug_ctl_s x = { argval[0] };
         send_msg(MSG_ID_MC_DEBUG_CTL, &x, sizeof(x));
     } else if (strcmp(cmd, "log_mark") == 0) {
         send_msg(MSG_ID_LOG_MARK, NULL, 0);

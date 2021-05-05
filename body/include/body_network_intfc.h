@@ -32,6 +32,10 @@ typedef struct {
     union {
         struct msg_drive_proc_s {
             int proc_id;
+	    int arg0;
+	    int arg1;
+	    int arg2;
+	    int arg3;
         } drive_proc;
         struct msg_mc_debug_ctl_s {
             int enable;
