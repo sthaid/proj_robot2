@@ -51,6 +51,7 @@ oled_strs_t *oled_get_strs(void);
 int drive_init(void);
 void drive_run(int proc_id);
 int drive_sleep(uint64_t duration_us);
+void drive_emer_stop(void);
 
 // drive.c routines called from drive_procs.c
 int drive_fwd(double mph, double feet);

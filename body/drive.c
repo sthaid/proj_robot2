@@ -85,6 +85,12 @@ int drive_sleep(uint64_t duration_us)
     }
 }
 
+void drive_emer_stop(void)
+{
+    ERROR("emergency stop\n");
+    mc_disable_all();
+}
+
 // -----------------  DRIVE PROCS SUPPORT ROUTINES  -------------------------
 
 static int drive_common(double lmph, double rmph, double feet)

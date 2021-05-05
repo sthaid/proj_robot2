@@ -13,13 +13,14 @@ extern "C" {
 #define MAX_OLED_STR_SIZE   10
 
 // msgs sent from client to body
-#define MSG_ID_DRIVE_PROC    2
-#define MSG_ID_MC_DEBUG_CTL  3
-#define MSG_ID_LOG_MARK      4
+#define MSG_ID_DRIVE_EMER_STOP 1
+#define MSG_ID_DRIVE_PROC      2
+#define MSG_ID_MC_DEBUG_CTL    3
+#define MSG_ID_LOG_MARK        4
 
 // msgs sent from body to client
-#define MSG_ID_STATUS        21
-#define MSG_ID_LOGMSG        22
+#define MSG_ID_STATUS          21
+#define MSG_ID_LOGMSG          22
 
 typedef struct {
     struct msg_hdr_s {

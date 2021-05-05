@@ -54,7 +54,7 @@ int main(int argc, char **argv)
     server();
 
     // stop motors
-    mc_disable_all();
+    drive_emer_stop();
 
     // print reason for terminating
     if (sigint || sigterm) {
@@ -217,8 +217,7 @@ static void * server_thread(void * cx)
                 recv_msg.hdr.len > sizeof(recv_msg)) 
             {
                 ERROR("invalid msg magic 0x%x or len %d\n", recv_msg.hdr.magic, recv_msg.hdr.len);
-                close(sockfd);
-                return NULL;
+                goto term;
             }
             // call recv to receive the remainder of the msg
             rc = recv(sockfd, (void*)&recv_msg+recvd_len, recv_msg.hdr.len-recvd_len, MSG_DONTWAIT);
@@ -233,13 +232,11 @@ static void * server_thread(void * cx)
         } else if (rc == 0) {
             // terminate connection
             INFO("connection terminated by peer\n");
-            close(sockfd);
-            return NULL;
+            goto term;
         } else if (errno != EWOULDBLOCK && errno != EAGAIN) {
             // errno is unexpected, print msg and terminate connection
             ERROR("recv failed, %s\n", strerror(errno));
-            close(sockfd);
-            return NULL;
+            goto term;
         }
 
         // if it has been 100 ms since last sending status msg then do so now
@@ -247,8 +244,7 @@ static void * server_thread(void * cx)
         if (time_now - time_last_send > 100000) {
             if (send_msg(sockfd, MSG_ID_STATUS, generate_msg_status(),
                          sizeof(struct msg_status_s)) < 0) {
-                close(sockfd);
-                return NULL;
+                goto term;
             }
             time_last_send = time_now;
         }
@@ -257,8 +253,7 @@ static void * server_thread(void * cx)
         while (logmsg_strs_sent_count < logmsg_strs_count) {
             char *str = logmsg_strs[logmsg_strs_sent_count % MAX_LOGMSG_STRS];
             if (send_msg(sockfd, MSG_ID_LOGMSG, str, strlen(str)+1) < 0) {
-                close(sockfd);
-                return NULL;
+                goto term;
             }
             logmsg_strs_sent_count++;
         }
@@ -267,6 +262,9 @@ static void * server_thread(void * cx)
         usleep(25000);  // 25 ms
     }
 
+term:
+    drive_emer_stop();
+    close(sockfd);
     return NULL;
 }
 
@@ -402,6 +400,9 @@ static void process_received_msg(msg_t *msg)
     //INFO("RECVD magic=0x%x  len=%d  id=%d\n", msg->hdr.magic, msg->hdr.len, msg->hdr.id);
 
     switch (msg->hdr.id) {
+    case MSG_ID_DRIVE_EMER_STOP:
+        drive_emer_stop();
+        break;
     case MSG_ID_DRIVE_PROC:
         msg->drive_proc.proc_id = 1; //xxx temp
         drive_run(msg->drive_proc.proc_id);
