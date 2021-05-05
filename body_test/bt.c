@@ -8,6 +8,7 @@
 #include <errno.h>
 #include <pthread.h>
 #include <curses.h>
+#include <signal.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netdb.h>
@@ -38,7 +39,7 @@
 static int                 sfd;
 static struct msg_status_s body_status;
 static char                fatal_err_str[100];
-
+static bool                sigint;
 static char                logmsg_strs[MAX_LOGMSG_STRS][MAX_LOGMSG_STR_SIZE];
 static int                 logmsg_strs_count;
 
@@ -47,6 +48,7 @@ static int                 logmsg_strs_count;
 //
 
 static void initialize(void);
+static void sig_hndlr(int sig);
 static void error(char *fmt, ...) __attribute__ ((format (printf, 1, 2)));
 static void fatal(char *fmt, ...) __attribute__ ((format (printf, 1, 2)));
 static int getsockaddr(char * node, int port, struct sockaddr_in * ret_addr);
@@ -58,6 +60,7 @@ static void send_msg(int id, void *data, int data_len);
 static void update_display(int maxy, int maxx);
 static int input_handler(int input_char);
 static int  process_cmdline(void);
+static void other_handler(void);
 
 //
 // curses wrapper definitions
@@ -73,7 +76,8 @@ static WINDOW  * curses_window;
 
 static void curses_init(void);
 static void curses_exit(void);
-static void curses_runtime(void (*update_display)(int maxy, int maxx), int (*input_handler)(int input_char));
+static void curses_runtime(void (*update_display)(int maxy, int maxx), int (*input_handler)(int input_char),
+		           void (*other_handler)(void));
 
 // -----------------  MAIN & INITIALIZE & UTILS  ---------------------------------
 
@@ -84,7 +88,7 @@ int main(int argc, char **argv)
 
     // invoke the curses user interface
     curses_init();
-    curses_runtime(update_display, input_handler);
+    curses_runtime(update_display, input_handler, other_handler);
     curses_exit();
 
     // if terminting due to fatal error then print the error str
@@ -104,9 +108,14 @@ static void initialize(void)
     pthread_t tid;
     int rc;
     struct timeval tv = {3,0};
+    static struct sigaction act;
 
     // set line buffered stdout
     setlinebuf(stdout);
+
+    // ignore ctrl-c
+    act.sa_handler = sig_hndlr;
+    sigaction(SIGINT, &act, NULL);
 
     // get sockaddr for body pgm
     if (getsockaddr(NODE, PORT, &sockaddr) < 0) {
@@ -129,6 +138,13 @@ static void initialize(void)
 
     // create thread to receive and process msgs from body pgm
     pthread_create(&tid, NULL, msg_receive_thread, NULL);
+}
+
+static void sig_hndlr(int sig)
+{
+    if (sig == SIGINT) {
+	sigint = true;
+    }
 }
 
 static void error(char *fmt, ...)
@@ -323,7 +339,7 @@ static void send_msg(int id, void *data, int data_len)
     }
 }
 
-// -----------------  CURSES UPDATE_DISPLAY  -------------------------------
+// -----------------  CURSES WRAPPER CALLBACKS  ----------------------------
 
 static char cmdline[100];
 
@@ -455,8 +471,6 @@ static void update_display(int maxy, int maxx)
     mvprintw(maxy-1, 0, "> %s", cmdline);
 }
 
-// -----------------  CURSES INPUT_HANDLER  --------------------------------
-
 static int input_handler(int input_char)
 {
     // process input_char
@@ -496,16 +510,13 @@ static int process_cmdline(void)
 
     // cmdline documentation:
     //   q              : terminate pgm
-    //   cal            : perform motors calibration
     //   run <proc_id>  : run procedure proc_id
     //   mc_debug <0|1> : adjust mtr ctlr debug mode
 
     if (strcmp(cmd, "q") == 0) {
         return -1;  // terminate pgm
-    } else if (strcmp(cmd, "cal") == 0) {
-        send_msg(MSG_ID_DRIVE_CAL, NULL, 0);
     } else if (strcmp(cmd, "run") == 0) {
-        struct msg_drive_proc_s x = { 0 };
+        struct msg_drive_proc_s x = { 1 };
         send_msg(MSG_ID_DRIVE_PROC, &x, sizeof(x));
     } else if (strcmp(cmd, "mc_debug") == 0) {
         int val;
@@ -523,6 +534,16 @@ static int process_cmdline(void)
 
     return 0;
 }
+
+static void other_handler(void)
+{
+    if (sigint) {
+	sigint = false;
+	error("ctrl-c");
+	send_msg(MSG_ID_DRIVE_EMER_STOP, NULL, 0);
+    }
+}
+
 // -----------------  CURSES WRAPPER  ----------------------------------------
 
 static void curses_init(void)
@@ -550,7 +571,8 @@ static void curses_exit(void)
     curses_active = false;
 }
 
-static void curses_runtime(void (*update_display)(int maxy, int maxx), int (*input_handler)(int input_char))
+static void curses_runtime(void (*update_display)(int maxy, int maxx), int (*input_handler)(int input_char),
+		           void (*other_handler)(void))
 {
     int input_char, maxy, maxx;
     int maxy_last=0, maxx_last=0;
@@ -591,6 +613,11 @@ static void curses_runtime(void (*update_display)(int maxy, int maxx), int (*inp
         if (curses_term_req) {
             return;
         }
+
+	// if other_handler is provided then call it
+	if (other_handler) {
+	    other_handler();
+	}
 
         // if need to sleep is indicated then do so
         if (sleep_us) {
