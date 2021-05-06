@@ -49,6 +49,7 @@ static int                 logmsg_strs_count;
 
 static void initialize(void);
 static void sig_hndlr(int sig);
+static void blank_line(void);
 static void error(char *fmt, ...) __attribute__ ((format (printf, 1, 2)));
 static void fatal(char *fmt, ...) __attribute__ ((format (printf, 1, 2)));
 static int getsockaddr(char * node, int port, struct sockaddr_in * ret_addr);
@@ -144,6 +145,16 @@ static void sig_hndlr(int sig)
 {
     if (sig == SIGINT) {
 	sigint = true;
+    }
+}
+
+static void blank_line(void)
+{
+    if (curses_active == false) {
+        printf("%s\n", "");
+    } else {
+        safe_strcpy(logmsg_strs[logmsg_strs_count%MAX_LOGMSG_STRS], "");
+        __sync_fetch_and_add(&logmsg_strs_count, 1);
     }
 }
 
@@ -504,16 +515,20 @@ static int process_cmdline(void)
     memset(argval, 0, sizeof(argval));
     cnt = sscanf(cmdline, "%s %d %d %d %d", cmd, &argval[0], &argval[1], &argval[2], &argval[3]); 
     if (cnt == 0 || cmd[0] == '\0') {
+	blank_line();
         return 0;
     }
 
     if (strcmp(cmd, "q") == 0) {
         return -1;  // terminate pgm
     } else if (strcmp(cmd, "cal") == 0) {
-        struct msg_drive_proc_s x = { 0, argval[0], argval[1], argval[2], argval[3] };
+        struct msg_drive_proc_s x = { 0, {argval[0], argval[1], argval[2], argval[3]} };
         send_msg(MSG_ID_DRIVE_PROC, &x, sizeof(x));
     } else if (strcmp(cmd, "fwd") == 0) {
-        struct msg_drive_proc_s x = { 1, argval[0], argval[1], argval[2], argval[3] };
+        struct msg_drive_proc_s x = { 1, {argval[0], argval[1], argval[2], argval[3]} };
+        send_msg(MSG_ID_DRIVE_PROC, &x, sizeof(x));
+    } else if (strcmp(cmd, "rev") == 0) {
+        struct msg_drive_proc_s x = { 2, {argval[0], argval[1], argval[2], argval[3]} };
         send_msg(MSG_ID_DRIVE_PROC, &x, sizeof(x));
     } else if (strcmp(cmd, "mc_debug") == 0) {
         struct msg_mc_debug_ctl_s x = { argval[0] };
