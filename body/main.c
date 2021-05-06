@@ -404,8 +404,7 @@ static void process_received_msg(msg_t *msg)
         drive_emer_stop();
         break;
     case MSG_ID_DRIVE_PROC:
-        msg->drive_proc.proc_id = 1; //xxx temp
-        drive_run(msg->drive_proc.proc_id);
+        drive_run(&msg->drive_proc);
         break;
     case MSG_ID_MC_DEBUG_CTL:
         mc_debug_mode(msg->mc_debug_ctl.enable);

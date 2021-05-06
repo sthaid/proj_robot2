@@ -1,3 +1,5 @@
+// xxx be nice to accumulate the total distance
+
 #include "common.h"
 
 //
@@ -9,23 +11,21 @@
 
 #define EMER_STOP_OCCURRED (emer_stop_thread_state == EMER_STOP_THREAD_DISABLED)
 
-#define MIN_MTR_SPEED 700   // xxx cal starting here
-
-#define ENC_POS_TO_FEET(pos)  ((pos) * ((1/979.62) * (.080*M_PI) * 3.28084))
+#define ENC_POS_TO_FEET(pos)         ((pos) * ((1/979.62) * (.080*M_PI) * 3.28084))
+#define EXP_ENC_SPEED(mtr_tgt_speed) ((8600./3200.) * (mtr_tgt_speed))
 
 //
 // variables
 //
 
-static int (*drive_proc)(void);
-
-static int emer_stop_thread_state;
+static struct msg_drive_proc_s * drive_proc_msg;
+static int                       emer_stop_thread_state;
 
 //
 // prototypes
 //
 
-static int drive_common(double lmph, double rmph, double feet);
+static int drive_common(double left_mtr_mph, double right_mtr_mph, double feet);
 
 static void *drive_thread(void *cx);
 static void *emer_stop_thread(void *cx);
@@ -52,20 +52,18 @@ int drive_init(void)
     return 0;
 }
 
-void drive_run(int proc_id)
+void drive_run(struct msg_drive_proc_s *drive_proc_msg_arg)
 {
-    int (*proc)(void) = drive_procs_tbl[proc_id];
+    static struct msg_drive_proc_s static_drive_proc_msg;
 
-    if (proc == NULL) {
-        ERROR("invalid proc_id %d\n", proc_id);
-    }
-
-    if (drive_proc) {
+    if (drive_proc_msg != NULL) {
         ERROR("drive_proc is currently running\n");
         return;
     }
 
-    drive_proc = proc;
+    static_drive_proc_msg = *drive_proc_msg_arg;
+    __sync_synchronize();
+    drive_proc_msg = &static_drive_proc_msg;
 }
 
 // this is public because it is called from drive_cal.c,
@@ -93,9 +91,59 @@ void drive_emer_stop(void)
 
 // -----------------  DRIVE PROCS SUPPORT ROUTINES  -------------------------
 
-static int drive_common(double lmph, double rmph, double feet)
+int drive_fwd(double feet, double mph)
 {
-    // The larger of lmph or rmph will be the reference motor. The other 
+    return drive_common(mph, mph, feet);
+}
+
+int drive_rev(double feet, double mph)
+{
+    return drive_common(-mph, -mph, feet);
+}
+
+int drive_rotate(double degrees, double rpm)
+{
+    return -1;  // xxx tbd return drive_common(mph, -mph, feet);
+}
+
+int drive_stop(void)
+{
+    uint64_t start_us;
+
+    INFO("called\n");
+
+    // disable proximty sensors
+    proximity_disable(0);
+    proximity_disable(1);
+
+    // set all motor speeds to 0
+    if (mc_set_speed_all(0,0) < 0) {
+        return -1;
+    }
+
+    // wait up to 1 second for encoder speed to drop to 0
+    start_us = microsec_timer();
+    while (true) {
+        if (EMER_STOP_OCCURRED) {
+            return -1;
+        }
+        if (microsec_timer()-start_us > 1000000) {  // 1sec
+            return -1;
+        }
+        if (encoder_get_speed(0) == 0 && encoder_get_speed(1) == 0) {
+            INFO("stepped after %lld us\n", microsec_timer()-start_us);
+            break;
+        }
+        usleep(10000);  // 10 ms
+    }
+
+    // success
+    return 0;
+}
+
+static int drive_common(double left_mtr_mph, double right_mtr_mph, double feet)
+{
+    // The larger of left_mtr_mph or right_mtr_mph will be the reference motor. The other 
     // motor will sync its distance to the reference motor.
     //
     // The mph values will only be used when determining the initial motor
@@ -135,56 +183,45 @@ static int drive_common(double lmph, double rmph, double feet)
     //        1         infinite  (straight line)
     //       -1         0         (spinning)
 
-    // xxx clean up
-    int left_mtr_speed, right_mtr_speed;
-    int ref_mtr_id, ref_mtr_speed;
-    int sync_mtr_id, sync_mtr_speed;
-
-    int last_ref_enc_val, last_sync_enc_val;
-    uint64_t last_enc_val_time;
-    int ms;
-
-    int curr_ref_enc_val, curr_sync_enc_val;
-    int ref_enc_rate, sync_enc_rate;
-    //int accel_intvl_ms;
-
-    int predicted_future_ref_enc_val;
-    int predicted_future_sync_enc_val;
-    int desired_future_sync_enc_val;
-    double ref_mtr_mph, sync_mtr_mph;
-
-    double ref_mtr_feet_travelled;
+    int      left_mtr_speed, right_mtr_speed;
+    int      ref_mtr_id, sync_mtr_id;
+    int      ref_mtr_speed, sync_mtr_speed;
+    double   ref_mtr_mph, sync_mtr_mph;
 
     // convert the mph to left/right mtr ctlr speed
-    if (drive_cal_cvt_mph_to_left_motor_speed(lmph, &left_mtr_speed) < 0) {
-        ERROR("failed to get left_speed for %0.1f mph\n", lmph);
+    if (drive_cal_cvt_mph_to_left_motor_speed(left_mtr_mph, &left_mtr_speed) < 0) {
+        ERROR("failed to get left_speed for %0.1f mph\n", left_mtr_mph);
         return -1;
     }
-    if (drive_cal_cvt_mph_to_right_motor_speed(rmph, &right_mtr_speed) < 0) {
-        ERROR("failed to get right_speed for %0.1f mph\n", rmph);
+    if (drive_cal_cvt_mph_to_right_motor_speed(right_mtr_mph, &right_mtr_speed) < 0) {
+        ERROR("failed to get right_speed for %0.1f mph\n", right_mtr_mph);
         return -1;
     }
 
     // init variables relating to the reference and syncing mtrs
-    if (fabs(lmph) >= fabs(rmph)) {
-        ref_mtr_id     = 0;  // left mtr
-        ref_mtr_mph    = lmph; // xxx name
+    // note: id==0 is left mtr; id==1 is right mtr
+    if (fabs(left_mtr_mph) >= fabs(right_mtr_mph)) {
+        ref_mtr_id     = 0;
+        ref_mtr_mph    = left_mtr_mph;
         ref_mtr_speed  = left_mtr_speed;
-        sync_mtr_id    = 1;  // right mtr
-        sync_mtr_mph   = rmph;
+        sync_mtr_id    = 1;
+        sync_mtr_mph   = right_mtr_mph;
         sync_mtr_speed = right_mtr_speed;
     } else {
-        ref_mtr_id     = 1;  // right mtr
-        ref_mtr_mph    = rmph;
+        ref_mtr_id     = 1;
+        ref_mtr_mph    = right_mtr_mph;
         ref_mtr_speed  = right_mtr_speed;
-        sync_mtr_id    = 0;  // left mtr
-        sync_mtr_mph   = lmph;
+        sync_mtr_id    = 0;
+        sync_mtr_mph   = left_mtr_mph;
         sync_mtr_speed = left_mtr_speed;
     }
 
     // validate that the mtr speeds exceed the minimum allowed
-    if (abs(ref_mtr_speed) < MIN_MTR_SPEED || abs(sync_mtr_speed) < MIN_MTR_SPEED) {
-        ERROR("speed too low %d %d\n", ref_mtr_speed, sync_mtr_speed);
+    if (abs(ref_mtr_speed) < MIN_MTR_SPEED || abs(ref_mtr_speed) > MAX_MTR_SPEED ||
+        abs(sync_mtr_speed) < MIN_MTR_SPEED || abs(sync_mtr_speed) > MAX_MTR_SPEED)
+    {
+        ERROR("invalid mtr_speed, ref_mtr_speed=%d sync_mtr_speed=%d\n", 
+              ref_mtr_speed, sync_mtr_speed);
         return -1;
     }
 
@@ -193,9 +230,9 @@ static int drive_common(double lmph, double rmph, double feet)
     encoder_pos_reset(1);
 
     // get last enc values and current time
-    last_ref_enc_val = encoder_get_position(ref_mtr_id);
-    last_sync_enc_val = encoder_get_position(sync_mtr_id);
-    last_enc_val_time = microsec_timer();
+    int      last_ref_enc_val  = encoder_get_position(ref_mtr_id);
+    int      last_sync_enc_val = encoder_get_position(sync_mtr_id);
+    uint64_t last_enc_val_time = microsec_timer();
 
     // enable or disabled the proximity sensors based on whether the
     // robot is spinning, moving forward, or moving reverse
@@ -214,13 +251,17 @@ static int drive_common(double lmph, double rmph, double feet)
     }
 
     // start motors
-    INFO("set speed %d %d\n", left_mtr_speed, right_mtr_speed);
+    INFO("xxx set speed %d %d\n", left_mtr_speed, right_mtr_speed);
     if (mc_set_speed_all(left_mtr_speed, right_mtr_speed) < 0) {
         return -1;
     }
 
-    // xxx do distance later
-    ms = 0;
+    // loop, at 10 ms intervals:
+    // - check if EMER_STOP_OCCURRED; if so, return error
+    // - check if the ref_mtr has travelled the desired distance; if so, return success
+    // - every 100 ms make minor adjustments to the sync_mtr_speed, so that the sync
+    //   mtr encoder position tracks the ref mtr encoder position
+    int ms = 0;
     while (true) {
         // check if the emer_stop_thread shut down the motors
         if (EMER_STOP_OCCURRED) {
@@ -229,9 +270,9 @@ static int drive_common(double lmph, double rmph, double feet)
 
         // if the ref mtr has travelled the desired number of feet then
         // break (return)
-        ref_mtr_feet_travelled = ENC_POS_TO_FEET(encoder_get_position(ref_mtr_id));
+        double ref_mtr_feet_travelled = ENC_POS_TO_FEET(encoder_get_position(ref_mtr_id));
         if (fabs(ref_mtr_feet_travelled) > feet) {
-            break;
+            break;  // return success
         }
 
         // every 100 ms check for the need to adjust the sync mtr speed
@@ -239,6 +280,11 @@ static int drive_common(double lmph, double rmph, double feet)
         // encoder position 
         if (ms != 0 && ((ms % 100) == 0)) do {
             uint64_t time_now = microsec_timer();
+            int      curr_ref_enc_val, curr_sync_enc_val;
+            int      ref_enc_rate, sync_enc_rate;
+            int      predicted_future_ref_enc_val;
+            int      predicted_future_sync_enc_val;
+            int      desired_future_sync_enc_val;
             
             // get current encoder values;
             // calculate encoder rates;
@@ -262,72 +308,17 @@ static int drive_common(double lmph, double rmph, double feet)
             // desired and predicted encoder positions in 0.5 secs on the future
             int sync_mtr_speed_adj = (desired_future_sync_enc_val - predicted_future_sync_enc_val) / 50;
             if (sync_mtr_speed_adj) {
-                if (sync_mtr_speed_adj > 3) sync_mtr_speed_adj = 3;   // xxx is this needed
+                if (sync_mtr_speed_adj > 3) sync_mtr_speed_adj = 3;
                 if (sync_mtr_speed_adj < -3) sync_mtr_speed_adj = -3;
                 sync_mtr_speed += sync_mtr_speed_adj;
                 mc_set_speed(sync_mtr_id, sync_mtr_speed);
-                INFO("adjusted sync mtr speed by %d\n", sync_mtr_speed_adj);
+                INFO("xxx adjusted sync mtr speed by %d\n", sync_mtr_speed_adj);
             }
         } while (0);
 
         // sleep for 10 ms
         usleep(10000);  // 10 ms
         ms += 10;
-    }
-
-    // success
-    return 0;
-}
-
-
-// XXX update this routine to drive fwd or rev,  or make 2 new routines
-// XXX should this use secs?
-int drive_rotate(double mph, double feet)
-{
-    return drive_common(mph, -mph, feet);
-}
-int drive_xxx(double lmph, double rmph, double feet)
-{
-    return drive_common(lmph, rmph, feet);
-}
-int drive_fwd(double mph, double feet)
-{
-    return drive_common(mph, mph, feet);
-}
-int drive_rew(double mph, double feet)
-{
-    return drive_common(-mph, -mph, feet);
-}
-
-int drive_stop(void)
-{
-    uint64_t start_us;
-
-    INFO("called\n");
-
-    // disable proximty sensors
-    proximity_disable(0);
-    proximity_disable(1);
-
-    // set all motor speeds to 0
-    if (mc_set_speed_all(0,0) < 0) {
-        return -1;
-    }
-
-    // wait up to 1 second for encoder speed to drop to 0
-    start_us = microsec_timer();
-    while (true) {
-        if (EMER_STOP_OCCURRED) {
-            return -1;
-        }
-        if (microsec_timer()-start_us > 1000000) {  // 1sec
-            return -1;
-        }
-        if (encoder_get_speed(0) == 0 && encoder_get_speed(1) == 0) {
-            INFO("stepped after %lld us\n", microsec_timer()-start_us);
-            break;
-        }
-        usleep(10000);  // 10 ms
     }
 
     // success
@@ -353,13 +344,13 @@ static void *drive_thread(void *cx)
 
     while (true) {
         // wait for a request 
-        while (drive_proc == NULL) {
+        while (drive_proc_msg == NULL) {
             usleep(10000);  // 10 ms
         }
 
         // enable motor-ctlr and sensors
         if (mc_enable_all() < 0) {
-            drive_proc = NULL;
+            drive_proc_msg = NULL;
             continue;
         }
         encoder_enable(0);
@@ -372,7 +363,7 @@ static void *drive_thread(void *cx)
         emer_stop_thread_state = EMER_STOP_THREAD_ENABLED;
 
         // call the drive proc
-        drive_proc();
+        drive_proc(drive_proc_msg);
 
         // disable emer_stop_thread
         emer_stop_thread_state = EMER_STOP_THREAD_DISABLED;
@@ -385,8 +376,8 @@ static void *drive_thread(void *cx)
         proximity_disable(1);
         imu_accel_disable();
 
-        // clear drive_proc
-        drive_proc = NULL;
+        // clear drive_proc_msg
+        drive_proc_msg = NULL;
     }
 
     return NULL;
@@ -454,10 +445,10 @@ emer_stopped:
         }
 
         for (int id = 0; id < 2; id++) {
-            int actual_speed = encoder_get_speed(id);
-            int expected_speed = (8600./3200.) * mcs->target_speed[id];  // xxx  defines, or drive cal
-            if ((expected_speed < 0 && actual_speed > expected_speed / 2) ||
-                (expected_speed > 0 && actual_speed < expected_speed / 2))
+            int actual_enc_speed = encoder_get_speed(id);
+            int expected_enc_speed = EXP_ENC_SPEED(mcs->target_speed[id]);
+            if ((expected_enc_speed < 0 && actual_enc_speed > expected_enc_speed / 2) ||
+                (expected_enc_speed > 0 && actual_enc_speed < expected_enc_speed / 2))
             {
                 if (enc_low_speed_start_time[id] == 0) {
                     enc_low_speed_start_time[id] = microsec_timer();
@@ -468,7 +459,7 @@ emer_stopped:
             if (enc_low_speed_start_time[id] != 0 &&
                 microsec_timer() - enc_low_speed_start_time[id] > 1000000)   // 1 sec
             {
-                DO_EMER_STOP("enc-%d speed actual=%d exp=%d\n", id, actual_speed, expected_speed);
+                DO_EMER_STOP("enc-%d speed actual=%d exp=%d\n", id, actual_enc_speed, expected_enc_speed);
             }
         }
 

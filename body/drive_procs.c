@@ -1,38 +1,37 @@
 #include "common.h"
 
-static int drive_proc_0(void);
+/*
+int drive_fwd(double feet, double mph);
+int drive_rew(double feet, double mph);
+int drive_rotate(double degrees, double rpm);
+int drive_stop(void);
+*/
 
-int (*drive_procs_tbl[100])(void) = {
-    drive_cal_proc,
-    drive_proc_0
-        };
+#define GET_ARG(n,default)  (dpm->arg[n] == 0 ? (default) : dpm->arg[n])
+#define STEP(drvfunc) if ((drvfunc) < 0) return -1;
 
-// ------------------------------------------------------------------
-
-static int drive_proc_0(void)
+int drive_proc(struct msg_drive_proc_s *dpm)
 {
-    int i;
-
-    INFO("starting %s\n", __func__);
-
-#if 0
-    for (i = 0; i < 10; i++) {
-        if (drive_fwd(1.20, 5) < 0) return -1;
-        if (drive_rew(1.20, 5) < 0) return -1;
-    }    
-#endif
-#if 0
-    if (drive_xxx(2.2,1.2, 100) < 0) return -1;
-#endif
-#if 0
-    double revs = 1;
-    if (drive_rotate(1.2, revs * M_PI * 9.75 / 12 * 0.776) < 0) return -1;
-#endif
-
-    if (drive_fwd(1.20, 10) < 0) return -1;
-
-    if (drive_stop() < 0) return -1;
+    switch (dpm->proc_id) {
+    case 0: {
+        if (drive_cal_proc() < 0) return -1;
+        break; }
+    case 1: {
+        double feet = GET_ARG(0, 6.0);
+        double mph  = GET_ARG(1, 1.2);
+        STEP(drive_fwd(feet, mph));
+        STEP(drive_stop());
+        break; }
+    case 2: {
+        double feet = GET_ARG(0, 1.0);
+        double mph  = GET_ARG(1, 1.2);
+        STEP(drive_rev(feet, mph));
+        STEP(drive_stop());
+        break; }
+    default:
+        ERROR("invalid proc_id %d\n", dpm->proc_id);
+        break;
+    }
 
     return 0;
 }
-
