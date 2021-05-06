@@ -1,5 +1,3 @@
-// xxx be nice to accumulate the total distance
-
 #include "common.h"
 
 //
@@ -93,28 +91,37 @@ void drive_emer_stop(void)
 
 int drive_fwd(double feet, double mph)
 {
+    INFO("feet = %0.1f  mph = %0.1f\n", feet, mph);
     return drive_common(mph, mph, feet);
 }
 
 int drive_rev(double feet, double mph)
 {
+    INFO("feet = %0.1f  mph = %0.1f\n", feet, mph);
     return drive_common(-mph, -mph, feet);
 }
 
 int drive_rotate(double degrees, double rpm)
 {
-    return -1;  // xxx tbd return drive_common(mph, -mph, feet);
+    ERROR("xxx not ready\n");
+    return -1;
 }
 
 int drive_stop(void)
 {
-    uint64_t start_us;
-
-    INFO("called\n");
+    uint64_t     start_us;
+    int          enc_id;
+    int          enc_pos;
+    mc_status_t *mcs = mc_get_status();
 
     // disable proximty sensors
     proximity_disable(0);
     proximity_disable(1);
+
+    // choose which encoder to use to measure the stopping distance, and
+    // record that encoder's value prior to setting motor speeds to 0
+    enc_id = ((abs(mcs->target_speed[0]) >= abs(mcs->target_speed[1])) ? 0 : 1);
+    enc_pos = encoder_get_position(enc_id);
 
     // set all motor speeds to 0
     if (mc_set_speed_all(0,0) < 0) {
@@ -131,7 +138,9 @@ int drive_stop(void)
             return -1;
         }
         if (encoder_get_speed(0) == 0 && encoder_get_speed(1) == 0) {
-            INFO("stepped after %lld us\n", microsec_timer()-start_us);
+            INFO("distance = %0.2f ft  duration = %0.2f s\n",
+                 ENC_POS_TO_FEET(encoder_get_position(enc_id) - enc_pos),
+                 (microsec_timer() - start_us) / 1000000.);
             break;
         }
         usleep(10000);  // 10 ms

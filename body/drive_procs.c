@@ -13,18 +13,18 @@ int drive_stop(void);
 int drive_proc(struct msg_drive_proc_s *dpm)
 {
     switch (dpm->proc_id) {
-    case 0: {
+    case 1: {
         if (drive_cal_proc() < 0) return -1;
         break; }
-    case 1: {
+    case 2: {
         double feet = GET_ARG(0, 6.0);
-        double mph  = GET_ARG(1, 1.2);
+        double mph  = GET_ARG(1, 1.1);
         STEP(drive_fwd(feet, mph));
         STEP(drive_stop());
         break; }
-    case 2: {
+    case 3: {
         double feet = GET_ARG(0, 1.0);
-        double mph  = GET_ARG(1, 1.2);
+        double mph  = GET_ARG(1, 1.1);
         STEP(drive_rev(feet, mph));
         STEP(drive_stop());
         break; }
