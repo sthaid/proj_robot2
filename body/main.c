@@ -1,5 +1,3 @@
-// xxx msg to abort a drive proc, and possibly when a client exits
-
 #include "common.h"
 
 //
