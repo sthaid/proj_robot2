@@ -60,7 +60,7 @@ void oled_ctlr_exit(char *str);
 oled_strs_t *oled_get_strs(void);
 
 // drive.c
-#define MIN_MTR_SPEED 700
+#define MIN_MTR_SPEED 650
 #define MAX_MTR_SPEED 2000
 int drive_init(void);
 void drive_run(struct msg_drive_proc_s *dpm);

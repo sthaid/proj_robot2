@@ -9,8 +9,8 @@
 
 #define EMER_STOP_OCCURRED (emer_stop_thread_state == EMER_STOP_THREAD_DISABLED)
 
-#define ENC_POS_TO_FEET(pos)         ((pos) * ((1/979.62) * (.080*M_PI) * 3.28084))
-#define EXP_ENC_SPEED(mtr_tgt_speed) ((8600./3200.) * (mtr_tgt_speed))
+#define ENC_POS_TO_FEET(pos)         ((pos) * ((1/2248.86) * (.080*M_PI) * 3.28084))
+#define EXP_ENC_SPEED(mtr_tgt_speed) ((7871./3200.) * (mtr_tgt_speed))  // xxx check
 
 //
 // variables

@@ -118,12 +118,16 @@ double MPU9250_imu_mag_to_heading(int mx, int my, int mx_cal, int my_cal)
 #include <string.h>
 #include <time.h>
 
+#include <misc.h>
+
 #define MAG_CAL_FILENAME "MPU9250_imu_magnetometer.cal"
 
 int main(int argc, char **argv)
 {
+    setlinebuf(stdout);
+
     if (argc != 2) {
-        printf("USAGE: %s <cal|mag|accel>\n", argv[0]);
+        printf("USAGE: %s <cal|mag|accel|gyro>\n", argv[0]);
         return 1;
     }
 
@@ -214,6 +218,35 @@ int main(int argc, char **argv)
 
             // sleep 5 ms
             usleep(5000);
+        }
+    } else if (strcmp(argv[1], "gyro") == 0) {
+        int x, y, z;
+        uint64_t time_last = microsec_timer();
+        uint64_t time_last_print = microsec_timer();
+        uint64_t time_now, delta_t;
+        double sum = 0;
+
+        // XXX tbd
+
+        while (true) {
+            usleep(5000);
+
+            MPU9250_imu_get_rotation(&x, &y, &z);
+
+            time_now = microsec_timer();
+            delta_t = time_now - time_last;
+            time_last = time_now;
+
+            sum += z * (delta_t / 1000000.);
+
+            //printf("%6d %6d %6d\n", x, y, z);
+            //printf("sum %0.3f\n", sum);
+
+            if (time_now - time_last_print > 1000000) {
+                printf("sum %0.3f\n", sum / -47597.);
+                time_last_print = time_now;
+                sum -= 10;
+            }
         }
     } else {
         printf("ERROR: invalid arg '%s'\n", argv[1]);

@@ -18,13 +18,13 @@ int drive_proc(struct msg_drive_proc_s *dpm)
         break; }
     case 2: {
         double feet = GET_ARG(0, 6.0);
-        double mph  = GET_ARG(1, 1.1);
+        double mph  = GET_ARG(1, 0.5);
         STEP(drive_fwd(feet, mph));
         STEP(drive_stop());
         break; }
     case 3: {
         double feet = GET_ARG(0, 1.0);
-        double mph  = GET_ARG(1, 1.1);
+        double mph  = GET_ARG(1, 0.5);
         STEP(drive_rev(feet, mph));
         STEP(drive_stop());
         break; }
