@@ -72,7 +72,7 @@ void drive_cal_tbl_print(void)
 
 int drive_cal_proc(void)
 {
-    int speed_tbl[] = {MAX_MTR_SPEED, MIN_MTR_SPEED, -MIN_MTR_SPEED, -MAX_MTR_SPEED};
+    int speed_tbl[] = {-MAX_MTR_SPEED, -MIN_MTR_SPEED, MIN_MTR_SPEED, MAX_MTR_SPEED};
 
     #define MAX_SPEED_TBL (sizeof(speed_tbl)/sizeof(speed_tbl[0]))
 
@@ -86,6 +86,7 @@ int drive_cal_proc(void)
         int left_enc, right_enc;
 
         // set both motors to speed, and wait to stabilize
+        INFO("calibrating motor speed %d\n", speed);
         mc_set_speed_all(speed,speed);
         if (drive_sleep(2000000) < 0) {   // 2 secs
             return -1;
@@ -106,8 +107,8 @@ int drive_cal_proc(void)
 
         // save results in drive_cal_tbl
         drive_cal_tbl[i].speed     = speed;
-        drive_cal_tbl[i].left_mph  = -(( left_enc/2248.86) * (.080*M_PI) / (duration_us/1000000.)) * 2.23694;
-        drive_cal_tbl[i].right_mph = -((right_enc/2248.86) * (.080*M_PI) / (duration_us/1000000.)) * 2.23694;
+        drive_cal_tbl[i].left_mph  = (( left_enc/2248.86) * (.080*M_PI) / (duration_us/1000000.)) * 2.23694;
+        drive_cal_tbl[i].right_mph = ((right_enc/2248.86) * (.080*M_PI) / (duration_us/1000000.)) * 2.23694;
     }
 
     // debug print the cal_tbl
