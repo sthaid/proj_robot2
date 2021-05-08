@@ -473,9 +473,10 @@ static void update_display(int maxy, int maxx)
         if (idx < 0) continue;
         char *str = logmsg_strs[idx%MAX_LOGMSG_STRS];
         bool is_error_str = (strstr(str, "ERROR") != NULL);
-        if (is_error_str) attron(COLOR_PAIR(COLOR_PAIR_RED));
+        bool is_warn_str = (strstr(str, "WARN") != NULL);
+        if (is_error_str || is_warn_str) attron(COLOR_PAIR(COLOR_PAIR_RED));
         mvprintw(19+i, 0, "%s", str);
-        if (is_error_str) attroff(COLOR_PAIR(COLOR_PAIR_RED));
+        if (is_error_str || is_warn_str) attroff(COLOR_PAIR(COLOR_PAIR_RED));
     }
 
     // display cmdline
