@@ -45,14 +45,29 @@ int MPU9250_imu_get_acceleration(int *ax_arg, int *ay_arg, int *az_arg)
     return 0;
 }
 
-int MPU9250_imu_get_rotation(int *x_arg, int *y_arg, int *z_arg)
+int MPU9250_imu_get_rotation(int *rx_arg, int *ry_arg, int *rz_arg)
 {
-    int16_t x, y, z;
+    int16_t rx, ry, rz;
 
-    mpu9250->getRotation(&x, &y, &z);
-    *x_arg = x;
-    *y_arg = y;
-    *z_arg = z;
+    mpu9250->getRotation(&rx, &ry, &rz);
+    *rx_arg = rx;
+    *ry_arg = ry;
+    *rz_arg = rz;
+    return 0;
+}
+
+int MPU9250_imu_get_accel_and_rot(int *ax_arg, int *ay_arg, int *az_arg,
+                                  int *rx_arg, int *ry_arg, int *rz_arg)
+{
+    int16_t ax, ay, az, rx, ry, rz;
+    
+    mpu9250->getMotion6(&ax, &ay, &az, &rx, &ry, &rz);
+    *ax_arg = ax;
+    *ay_arg = ay;
+    *az_arg = az;
+    *rx_arg = rx;
+    *ry_arg = ry;
+    *rz_arg = rz;
     return 0;
 }
 
@@ -139,7 +154,7 @@ int main(int argc, char **argv)
     if (strcmp(argv[1], "cal") == 0) {
         int mx_cal, my_cal, mz_cal;
 
-        // get magnetometer calibration  xxx explain
+        // get magnetometer calibration
         MPU9250_imu_calibrate_magnetometer(&mx_cal, &my_cal, &mz_cal);
 
         // write magnetometer calibration file
@@ -226,8 +241,6 @@ int main(int argc, char **argv)
         uint64_t time_now, delta_t;
         double sum = 0;
 
-        // XXX tbd
-
         while (true) {
             usleep(5000);
 
@@ -239,13 +252,9 @@ int main(int argc, char **argv)
 
             sum += z * (delta_t / 1000000.);
 
-            //printf("%6d %6d %6d\n", x, y, z);
-            //printf("sum %0.3f\n", sum);
-
             if (time_now - time_last_print > 1000000) {
-                printf("sum %0.3f\n", sum / -47597.);
+                printf("sum %0.3f\n", sum / -131.);
                 time_last_print = time_now;
-                sum -= 10;
             }
         }
     } else {
