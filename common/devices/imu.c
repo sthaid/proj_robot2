@@ -129,8 +129,8 @@ static void * magnetometer_thread(void *cx)
         }
         mag_cal_ctrl_last = mag_cal_ctrl_lcl;
 
-        // delay 10 ms
-        usleep(10000);
+        // no delay needed because the call to read the
+        // magnetometer includes a 10 ms delay
     }
 
     return NULL;
