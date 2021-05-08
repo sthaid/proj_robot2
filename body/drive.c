@@ -366,7 +366,7 @@ static void *drive_thread(void *cx)
         encoder_enable(1);
         proximity_disable(0);
         proximity_disable(1);
-        imu_accel_enable();
+        imu_set_accel_rot_ctrl(true);
 
         // enable emer_stop_thread
         emer_stop_thread_state = EMER_STOP_THREAD_ENABLED;
@@ -383,7 +383,7 @@ static void *drive_thread(void *cx)
         encoder_disable(1);
         proximity_disable(0);
         proximity_disable(1);
-        imu_accel_disable();
+        imu_set_accel_rot_ctrl(false);
 
         // clear drive_proc_msg
         drive_proc_msg = NULL;
