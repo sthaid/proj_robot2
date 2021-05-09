@@ -432,9 +432,10 @@ static void update_display(int maxy, int maxx)
     // display IMU values
     // row 11
     mvprintw(11, 0,
-        "IMU:  Heading=%3.0f - Accel Ena=%d AlertCount=%d AlertLastValue=%4.2f AlertLimit=%4.2f",
-        x->heading,
-        x->accel_enabled,
+        "IMU:  Heading=%3.0f - AccelRotEna=%d  Rot=%0.0f  Accel=%d  %0.1f  %0.1f",
+        x->mag_heading,
+        x->accel_rot_enabled,
+        x->rotation,
         x->accel_alert_count, 
         x->accel_alert_last_value,
         x->accel_alert_limit);

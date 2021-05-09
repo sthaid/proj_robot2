@@ -364,8 +364,9 @@ static struct msg_status_s * generate_msg_status(void)
         accel_alert_count++;
         accel_alert_last_value = val;
     }
-    x.heading                = imu_get_magnetometer();
-    x.accel_enabled          = imu_get_accel_rot_ctrl();
+    x.mag_heading            = imu_get_magnetometer();
+    x.rotation               = imu_get_rotation();
+    x.accel_rot_enabled      = imu_get_accel_rot_ctrl();
     x.accel_alert_count      = accel_alert_count;
     x.accel_alert_last_value = accel_alert_last_value;
     x.accel_alert_limit      = imu_get_accel_alert_limit();

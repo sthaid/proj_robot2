@@ -73,8 +73,9 @@ typedef struct {
                 double sig;
             } prox[2];
             // imu
-            double heading;
-            int accel_enabled;
+            double mag_heading;
+            double rotation;
+            int accel_rot_enabled;
             int accel_alert_count;
             double accel_alert_last_value;
             double accel_alert_limit;

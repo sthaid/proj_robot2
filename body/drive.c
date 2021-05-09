@@ -38,6 +38,10 @@ int drive_init(void)
     // register for left-button press, this will trigger an emergency stop
     button_register_cb(0, emer_stop_button_cb);
 
+    // set mtr ctlr accel/decel limits, and debug mode
+    mc_set_accel(3, 3);
+    mc_debug_mode(true);  // xxx temp
+
     // read the drive.cal file
     drive_cal_file_read();
     drive_cal_tbl_print();
@@ -72,6 +76,7 @@ int drive_sleep(uint64_t duration_us)
 
     while (true) {
         if (EMER_STOP_OCCURRED) {
+            ERROR("EMER_STOP_OCCURRED\n");
             return -1;
         }
         if (microsec_timer() > done_us) {
@@ -125,6 +130,7 @@ int drive_stop(void)
 
     // set all motor speeds to 0
     if (mc_set_speed_all(0,0) < 0) {
+        ERROR("failed to set mtr speeds to 0 0\n");
         return -1;
     }
 
@@ -132,13 +138,15 @@ int drive_stop(void)
     start_us = microsec_timer();
     while (true) {
         if (EMER_STOP_OCCURRED) {
+            ERROR("EMER_STOP_OCCURRED\n");
             return -1;
         }
-        if (microsec_timer()-start_us > 1000000) {  // 1sec
+        if (microsec_timer()-start_us > 1500000) {  // 1.5 sec
+            ERROR("failed to stop within 1.5 seconds\n");
             return -1;
         }
         if (encoder_get_speed(0) == 0 && encoder_get_speed(1) == 0) {
-            INFO("distance = %0.2f ft  duration = %0.2f s\n",
+            INFO("stopping distance = %0.2f ft  duration = %0.2f s\n",
                  ENC_POS_TO_FEET(encoder_get_position(enc_id) - enc_pos),
                  (microsec_timer() - start_us) / 1000000.);
             break;
@@ -234,14 +242,12 @@ static int drive_common(double left_mtr_mph, double right_mtr_mph, double feet)
         return -1;
     }
 
-    // reset encoders
-    encoder_pos_reset(0);
-    encoder_pos_reset(1);
-
-    // get last enc values and current time
+    // get last enc values and current time, and
+    // get the start encoder val for the ref mtr
     int      last_ref_enc_val  = encoder_get_position(ref_mtr_id);
     int      last_sync_enc_val = encoder_get_position(sync_mtr_id);
     uint64_t last_enc_val_time = microsec_timer();
+    int      start_ref_enc_val =  encoder_get_position(ref_mtr_id);
 
     // enable or disabled the proximity sensors based on whether the
     // robot is spinning, moving forward, or moving reverse
@@ -262,6 +268,7 @@ static int drive_common(double left_mtr_mph, double right_mtr_mph, double feet)
     // start motors
     INFO("xxx set speed %d %d\n", left_mtr_speed, right_mtr_speed);
     if (mc_set_speed_all(left_mtr_speed, right_mtr_speed) < 0) {
+        ERROR("failed to set mtr speeds to %d %d\n", left_mtr_speed, right_mtr_speed);
         return -1;
     }
 
@@ -274,12 +281,14 @@ static int drive_common(double left_mtr_mph, double right_mtr_mph, double feet)
     while (true) {
         // check if the emer_stop_thread shut down the motors
         if (EMER_STOP_OCCURRED) {
+            ERROR("EMER_STOP_OCCURRED\n");
             return -1;
         }
 
         // if the ref mtr has travelled the desired number of feet then
-        // break (return)
-        double ref_mtr_feet_travelled = ENC_POS_TO_FEET(encoder_get_position(ref_mtr_id));
+        // return success
+        double ref_mtr_feet_travelled = 
+                    ENC_POS_TO_FEET(encoder_get_position(ref_mtr_id) - start_ref_enc_val);
         if (fabs(ref_mtr_feet_travelled) > feet) {
             break;  // return success
         }
@@ -320,7 +329,10 @@ static int drive_common(double left_mtr_mph, double right_mtr_mph, double feet)
                 if (sync_mtr_speed_adj > 3) sync_mtr_speed_adj = 3;
                 if (sync_mtr_speed_adj < -3) sync_mtr_speed_adj = -3;
                 sync_mtr_speed += sync_mtr_speed_adj;
-                mc_set_speed(sync_mtr_id, sync_mtr_speed);
+                if (mc_set_speed(sync_mtr_id, sync_mtr_speed) < 0) {
+                    ERROR("failed to set mtr speed id=%d speed=%d\n", sync_mtr_id, sync_mtr_speed);
+                    return -1;
+                }
                 INFO("xxx adjusted sync mtr speed by %d\n", sync_mtr_speed_adj);
             }
         } while (0);
@@ -368,7 +380,13 @@ static void *drive_thread(void *cx)
         proximity_disable(1);
         imu_set_accel_rot_ctrl(true);
 
+        // reset encoders, and imu rotatation
+        encoder_pos_reset(0);
+        encoder_pos_reset(1);
+        imu_reset_rotation();
+
         // enable emer_stop_thread
+        // xxx delay or ack it is running
         emer_stop_thread_state = EMER_STOP_THREAD_ENABLED;
 
         // call the drive proc

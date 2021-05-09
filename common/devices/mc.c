@@ -17,7 +17,7 @@
 //
 
 // default accel/decel settings
-#define DEFAULT_ACCEL   5
+#define DEFAULT_ACCEL   3
 
 // convert mtr ctlr cmd value to string
 #define CMD_STR(x) \
@@ -102,8 +102,6 @@
 static struct info_s {
     char devname[100];   // for example: "/dev/ttyACM0"
     int fd;
-    int accel;
-    int decel;
     int target_speed;
     struct {
         int error_status;
@@ -115,8 +113,8 @@ static struct info_s {
 static int max_info;
 
 static mc_status_t     status;
-static int             accel  = DEFAULT_ACCEL;
-static int             decel  = DEFAULT_ACCEL;
+//static int             accel  = DEFAULT_ACCEL;
+//static int             decel  = DEFAULT_ACCEL;
 static pthread_mutex_t mutex  = PTHREAD_MUTEX_INITIALIZER;
 
 //
@@ -186,6 +184,9 @@ int mc_init(int max_info_arg, ...)  // char *devname, ...
         }
     }
 
+    // set default accel/decel
+    mc_set_accel(DEFAULT_ACCEL, DEFAULT_ACCEL);
+
     // initialize state to DISABLED
     SET_STATE(MC_STATE_DISABLED);
 
@@ -245,11 +246,6 @@ void mc_disable_all(void)
         x->target_speed = 0;
         status.target_speed[id] = 0;
 
-        if (x->decel != decel) {
-            mc_set_motor_limit(id, MTRLIM_MAX_DECEL_FWD_AND_REV, decel);
-            x->decel = decel;
-        }
-
         mc_stop(id);
     }
 
@@ -282,16 +278,6 @@ int mc_set_speed(int id, int speed)
     x->target_speed = speed;
     status.target_speed[id] = speed;
 
-    // ensure that the motor limit accel/decel variables are set
-    if (x->accel != accel) {
-        mc_set_motor_limit(id, MTRLIM_MAX_ACCEL_FWD_AND_REV, accel);
-        x->accel = accel;
-    } 
-    if (x->decel != decel) {
-        mc_set_motor_limit(id, MTRLIM_MAX_DECEL_FWD_AND_REV, decel);
-        x->decel = decel;
-    } 
-
     // set the motor's speed
     mc_speed(id, speed);
 
@@ -322,15 +308,6 @@ int mc_set_speed_all(int speed0, ...)
         x->target_speed = speed;
         status.target_speed[id] = speed;
 
-        if (x->accel != accel) {
-            mc_set_motor_limit(id, MTRLIM_MAX_ACCEL_FWD_AND_REV, accel);
-            x->accel = accel;
-        } 
-        if (x->decel != decel) {
-            mc_set_motor_limit(id, MTRLIM_MAX_DECEL_FWD_AND_REV, decel);
-            x->decel = decel;
-        } 
-
         mc_speed(id, speed);
     }
     va_end(ap);
@@ -342,10 +319,18 @@ int mc_set_speed_all(int speed0, ...)
 
 // -----------------  API - MISC ROUTINES  ---------------------------------
 
-void mc_set_accel(int accel_arg, int decel_arg)
+void mc_set_accel(int accel, int decel)
 {
-    accel = accel_arg;
-    decel = decel_arg;
+    int id;
+
+    for (id = 0; id < max_info; id++) {
+        if (mc_set_motor_limit(id, MTRLIM_MAX_ACCEL_FWD_AND_REV, accel) < 0) {
+            FATAL("failed to set MTRLIM_MAX_ACCEL_FWD_AND_REV on %d\n", id);
+        }
+        if (mc_set_motor_limit(id, MTRLIM_MAX_DECEL_FWD_AND_REV, decel) < 0) {
+            FATAL("failed to set MTRLIM_MAX_DECEL_FWD_AND_REV on %d\n", id);
+        }
+    }
 }
 
 mc_status_t *mc_get_status(void)
