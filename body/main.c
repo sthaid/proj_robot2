@@ -333,7 +333,7 @@ static struct msg_status_s * generate_msg_status(void)
     x.enc_poll_intvl_us     = encoder_get_poll_intvl_us();
     for (id = 0; id < 2; id++) {
         x.enc[id].enabled  = encoder_get_enabled(id);
-        x.enc[id].position = encoder_get_position(id);
+        x.enc[id].position = encoder_get_count(id);
         x.enc[id].speed    = encoder_get_speed(id);
         x.enc[id].errors   = encoder_get_errors(id);
     }

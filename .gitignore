@@ -27,6 +27,6 @@ devel/tests/zz_other/realtime/module/rt_gpio_test_module.mod
 devel/tests/zz_other/realtime/module/rt_gpio_test_module.mod.c
 
 body/body
-body/drive.cal
+body/body.log
 
 body_test/bt

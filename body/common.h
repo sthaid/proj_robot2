@@ -60,18 +60,17 @@ void oled_ctlr_exit(char *str);
 oled_strs_t *oled_get_strs(void);
 
 // drive.c
-#define MIN_MTR_SPEED 650
-#define MAX_MTR_SPEED 2000
 int drive_init(void);
 void drive_run(struct msg_drive_proc_s *dpm);
-int drive_sleep(uint64_t duration_us);
 void drive_emer_stop(void);
+bool drive_emer_stop_occurred(void);
 
 // drive.c routines called from drive_procs.c
 int drive_fwd(double feet, double mph);
 int drive_rev(double feet, double mph);
-int drive_rotate(double degrees, double rpm);
-int drive_stop(void);
+int drive_straight(double feet, double mph, int *avg_lspeed, int *avg_rspeed);
+int drive_rotate(double degrees, double fudge);
+int drive_rotate_to_heading(double heading, double fudge);
 
 // drive_procs.c
 int drive_proc(struct msg_drive_proc_s *dpm);
@@ -81,7 +80,6 @@ int drive_cal_file_read(void);
 int drive_cal_file_write(void);
 void drive_cal_tbl_print(void);
 int drive_cal_proc(void);
-int drive_cal_cvt_mph_to_left_motor_speed(double mph, int *left_mtr_speed);
-int drive_cal_cvt_mph_to_right_motor_speed(double mph, int *right_mtr_speed);
+void drive_cal_cvt_mph_to_mtr_speeds(double mph, int *lspeed, int *rspeed);
 
 #endif

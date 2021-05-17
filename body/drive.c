@@ -6,11 +6,13 @@
 
 #define EMER_STOP_THREAD_DISABLED  0
 #define EMER_STOP_THREAD_ENABLED   1
+#define EMER_STOP_OCCURRED         (emer_stop_thread_state == EMER_STOP_THREAD_DISABLED)
 
-#define EMER_STOP_OCCURRED (emer_stop_thread_state == EMER_STOP_THREAD_DISABLED)
+#define STOP_MOTORS_PRINT_NONE     0
+#define STOP_MOTORS_PRINT_DISTANCE 1
+#define STOP_MOTORS_PRINT_ROTATION 2
 
-#define ENC_POS_TO_FEET(pos)         ((pos) * ((1/2248.86) * (.080*M_PI) * 3.28084))
-#define EXP_ENC_SPEED(mtr_tgt_speed) ((8000./3200.) * (mtr_tgt_speed))
+#define MC_ACCEL 5
 
 //
 // variables
@@ -23,7 +25,8 @@ static int                       emer_stop_thread_state;
 // prototypes
 //
 
-static int drive_common(double left_mtr_mph, double right_mtr_mph, double feet);
+static int stop_motors(int print);
+static int mtr_speed_compensation(bool init, double rotation_target);
 
 static void *drive_thread(void *cx);
 static void *emer_stop_thread(void *cx);
@@ -39,11 +42,14 @@ int drive_init(void)
     button_register_cb(0, emer_stop_button_cb);
 
     // set mtr ctlr accel/decel limits, and debug mode
-    mc_set_accel(3, 3);
+    mc_set_accel(MC_ACCEL, MC_ACCEL);
     mc_debug_mode(true);  // xxx temp
 
-    // read the drive.cal file
-    drive_cal_file_read();
+    // read the drive.cal file, and print
+    if (drive_cal_file_read() < 0) {
+        ERROR("drive_cal_file_read failed\n");
+        return -1;
+    }
     drive_cal_tbl_print();
 
     // create drive_thread and emer_stop_thread
@@ -68,28 +74,15 @@ void drive_run(struct msg_drive_proc_s *drive_proc_msg_arg)
     drive_proc_msg = &static_drive_proc_msg;
 }
 
-// this is public because it is called from drive_cal.c,
-// there should not be a need to call this from drive_procs.c
-int drive_sleep(uint64_t duration_us)
-{
-    uint64_t done_us = microsec_timer() + duration_us;
-
-    while (true) {
-        if (EMER_STOP_OCCURRED) {
-            ERROR("EMER_STOP_OCCURRED\n");
-            return -1;
-        }
-        if (microsec_timer() > done_us) {
-            return 0;
-        }
-        usleep(10000);  // 10 ms
-    }
-}
-
 void drive_emer_stop(void)
 {
     ERROR("emergency stop\n");
     mc_disable_all();
+}
+
+bool drive_emer_stop_occurred(void)
+{
+    return EMER_STOP_OCCURRED;
 }
 
 // -----------------  DRIVE PROCS SUPPORT ROUTINES  -------------------------
@@ -97,36 +90,340 @@ void drive_emer_stop(void)
 int drive_fwd(double feet, double mph)
 {
     INFO("feet = %0.1f  mph = %0.1f\n", feet, mph);
-    return drive_common(mph, mph, feet);
+    return drive_straight(feet, mph, NULL, NULL);
 }
 
 int drive_rev(double feet, double mph)
 {
     INFO("feet = %0.1f  mph = %0.1f\n", feet, mph);
-    return drive_common(-mph, -mph, feet);
+    return drive_straight(feet, -mph, NULL, NULL);
 }
 
-int drive_rotate(double degrees, double rpm)
+// XXX later
+int drive_rotate(double desired_degrees, double fudge)
 {
-    ERROR("xxx not ready\n");
-    return -1;
+    double left_mtr_start_mph  = (desired_degrees > 0 ? 0.5 : -0.5);
+    double right_mtr_start_mph = -left_mtr_start_mph;
+    double left_mtr_mph        = (desired_degrees > 0 ? 0.3 : -0.3);
+    double right_mtr_mph       = -left_mtr_mph;
+    int    lspeed, rspeed;
+    double start_degrees, rotated_degrees;
+
+    // XXX 
+    // - slow down when approaching tgt
+    // - try to eliminate MIN_DEGREES
+    //#define FUDGE 3.3  // xxx  also move ?
+    #define MIN_DEGREES 10   // xxx move to MIN_MPH file
+
+    if (fudge == 0) {
+        if (desired_degrees > 0) {
+            fudge = 1.5;
+        } else { 
+            fudge = 1.5;
+        }
+    }
+
+    INFO("desired_degrees = %0.1f  fudge = %0.1f\n", desired_degrees, fudge);
+
+    // check for desired_degrees too small to attempt to rotate xxx
+    if (fabs(desired_degrees) < MIN_DEGREES) {
+        ERROR("invalid desired_degrees %0.1f\n", desired_degrees);
+        return -1;
+    }
+
+    // enable both front and read proximity sensors
+    proximity_enable(0);   // front
+    proximity_enable(1);   // rear
+
+    // get imu rotation value prior to starting motors
+    start_degrees = imu_get_rotation();
+
+    // start motors
+    lspeed = MTR_MPH_TO_SPEED(left_mtr_start_mph);
+    rspeed = MTR_MPH_TO_SPEED(right_mtr_start_mph);
+    if (mc_set_speed_all(lspeed, rspeed) < 0) {
+        ERROR("failed to set mtr speeds to %d %d\n", lspeed, rspeed);
+        return -1;
+    }
+    usleep(200000);
+
+    // slow down motors
+    lspeed = MTR_MPH_TO_SPEED(left_mtr_mph);
+    rspeed = MTR_MPH_TO_SPEED(right_mtr_mph);
+    if (mc_set_speed_all(lspeed, rspeed) < 0) {
+        ERROR("failed to set mtr speeds to %d %d\n", lspeed, rspeed);
+        return -1;
+    }
+
+
+    // wait for rotation to complete
+    int ms = 0;
+    while (true) {
+        // check if the emer_stop_thread shut down the motors
+        if (EMER_STOP_OCCURRED) {
+            ERROR("EMER_STOP_OCCURRED\n");
+            return -1;
+        }
+
+        // check if rotation completed
+        rotated_degrees = imu_get_rotation() - start_degrees;
+        if ((ms % 1000) == 0) {
+            INFO("XXX ROTATED DEGREES  %0.1f\n", rotated_degrees);
+        }
+        if (fabs(rotated_degrees) > (fabs(desired_degrees) - fudge)) {
+            break;
+        }
+
+        // motor speed compensation ...
+        // xxx tbd
+
+        // sleep for 1 ms
+        usleep(1000);
+        ms += 1;
+    }
+
+    // stop motors
+    if (stop_motors(STOP_MOTORS_PRINT_ROTATION) < 0) {
+        return -1;
+    }
+
+    // print result
+    rotated_degrees = imu_get_rotation() - start_degrees;
+    INFO("done: desired = %0.1f  actual = %0.1f  deviation = %0.1f\n",
+         desired_degrees, rotated_degrees, rotated_degrees - desired_degrees);
+
+    // success
+    return 0;
 }
 
-int drive_stop(void)
+// XXX later
+int drive_rotate_to_heading(double desired_heading, double fudge)
 {
-    uint64_t     start_us;
-    int          enc_id;
-    int          enc_pos;
-    mc_status_t *mcs = mc_get_status();
+    double current_heading, delta;
+    double left_mtr_mph, right_mtr_mph;
+    int    left_mtr_speed, right_mtr_speed;
+    bool   clockwise;
 
-    // disable proximty sensors
-    proximity_disable(0);
-    proximity_disable(1);
+    // XXX fudge
+    #undef FUDGE
+    #define FUDGE 8  // xxx  also move ?
+    if (fudge == 0) {
+        fudge = FUDGE;
+    }
+    INFO("desired_heading = %0.1f  fudge = %0.1f\n", desired_heading, fudge);
 
-    // choose which encoder to use to measure the stopping distance, and
-    // record that encoder's value prior to setting motor speeds to 0
-    enc_id = ((abs(mcs->target_speed[0]) >= abs(mcs->target_speed[1])) ? 0 : 1);
-    enc_pos = encoder_get_position(enc_id);
+    // determine the delta rotation to reach the desired heading
+    current_heading = imu_get_magnetometer();
+    delta = current_heading - desired_heading;
+    delta = (delta < -180 ? delta+360 : delta >= 180 ? delta-360 : delta);
+    INFO("delta %0.1f\n", delta);
+
+    // if the delta rotation needed is small then return
+    if (fabs(delta) < 5) {
+        INFO("return due to small delta\n");
+        return 0;
+    }
+
+    // determine the left and right mtr mph
+    clockwise = (delta < 0);
+    left_mtr_mph  = (clockwise ? +0.5 : -0.5);
+    right_mtr_mph = (clockwise ? -0.5 : +0.5);
+
+//XXX also get half speeds
+// XXX adjust calibration code
+    
+    // convert the mph to left/right mtr ctlr speed
+    left_mtr_speed = MTR_MPH_TO_SPEED(left_mtr_mph);
+    right_mtr_speed = MTR_MPH_TO_SPEED(right_mtr_mph);
+
+    // enable both front and read proximity sensors
+    proximity_enable(0);   // front
+    proximity_enable(1);   // rear
+
+    // start motors
+    if (mc_set_speed_all(left_mtr_speed, right_mtr_speed) < 0) {
+        ERROR("failed to set mtr speeds to %d %d\n", left_mtr_speed, right_mtr_speed);
+        return -1;
+    }
+
+    // wait for rotation to complete
+    int ms = 0;
+    while (true) {
+        // check if the emer_stop_thread shut down the motors
+        if (EMER_STOP_OCCURRED) {
+            ERROR("EMER_STOP_OCCURRED\n");
+            return -1;
+        }
+
+
+        // check if rotation to heading has completed
+        current_heading = imu_get_magnetometer();
+        delta = current_heading - desired_heading;
+        delta = (delta < -180 ? delta+360 : delta >= 180 ? delta-360 : delta);
+
+        if (ms >= 200  && fabs(delta) < 30) {
+            INFO("SLOW DOWN\n");
+            mc_set_speed_all(left_mtr_speed/2, right_mtr_speed/2);
+        }
+
+        INFO("XXX CURRENT HEADING  %0.1f   DELTA %0.1f\n", current_heading, delta);
+        if (clockwise) {
+            if (delta + fudge > 0) break;
+        } else {
+            if (delta - fudge < 0) break;
+        }
+
+        // motor speed compensation ...
+        // xxx tbd
+
+        // sleep for 1 ms
+        usleep(1000);
+        ms += 1;
+    }
+
+    // stop motors
+    if (stop_motors(STOP_MOTORS_PRINT_ROTATION) < 0) {
+        return -1;
+    }
+
+    // print result
+    current_heading = imu_get_magnetometer();
+    delta = current_heading - desired_heading;
+    delta = (delta < -180 ? delta+360 : delta >= 180 ? delta-360 : delta);
+    INFO("done: desired = %0.1f  current = %0.1f  deviation = %0.1f\n",
+         desired_heading, current_heading, delta);
+
+    // success
+    return 0;
+}
+
+int drive_straight(double desired_feet, double mph, int *avg_lspeed_arg, int *avg_rspeed_arg)
+{
+    int lspeed, rspeed;
+    double actual_feet, initial_degrees, rot_degrees;
+    int initial_left_enc_count, initial_right_enc_count;
+    int avg_lspeed_sum=0, avg_rspeed_sum=0, avg_speed_cnt=0, avg_lspeed, avg_rspeed;
+
+    #define BOOST_MPH  0.5
+
+    INFO("desired_feet = %0.1f  mph = %0.1f\n", desired_feet, mph);
+
+    // preset avg mtr speed return values
+    if (avg_lspeed_arg) *avg_lspeed_arg = 0;
+    if (avg_rspeed_arg) *avg_rspeed_arg = 0;
+
+    // if mph is zero then return
+    if (mph == 0) {
+        INFO("return because mph equals 0\n");
+        return 0;
+    }
+
+    // get initial rotation and enc counts
+    initial_degrees         = imu_get_rotation();
+    initial_left_enc_count  = encoder_get_count(0);
+    initial_right_enc_count = encoder_get_count(1);
+
+    // if moving fwd then enable front prox sensor, else enable rear
+    if (mph > 0) {
+        proximity_enable(0);    // enable front
+        proximity_disable(1);   // disable rear
+    } else {
+        proximity_disable(0);   // disable front
+        proximity_enable(1);    // enable rear
+    }
+
+    // if mph is too low for starting then set mtr speeds for BOOST_MPH mph for 200 ms
+    if (fabs(mph) < BOOST_MPH) {
+        drive_cal_cvt_mph_to_mtr_speeds(mph > 0 ? BOOST_MPH : -BOOST_MPH, &lspeed, &rspeed);
+        INFO("boot start - setting mtr speeds = %d %d\n", lspeed, rspeed);
+        if (mc_set_speed_all(lspeed, rspeed) < 0) {
+            ERROR("failed to set boost mtr speeds to %d %d\n", lspeed, rspeed);
+            return -1;
+        }
+        usleep(200000);
+    }
+
+    // get left and right mtr speeds from mph, and
+    // set mtr speeds
+    drive_cal_cvt_mph_to_mtr_speeds(mph, &lspeed, &rspeed);
+    INFO("setting mtr speeds = %d %d\n", lspeed, rspeed);
+    if (mc_set_speed_all(lspeed, rspeed) < 0) {
+        ERROR("failed to set boost mtr speeds to %d %d\n", lspeed, rspeed);
+        return -1;
+    }
+
+    // wait for distance_travelled to meet requested distance
+    int ms = 0;
+    while (true) {
+        // check if the emer_stop_thread shut down the motors
+        if (EMER_STOP_OCCURRED) {
+            ERROR("EMER_STOP_OCCURRED\n");
+            return -1;
+        }
+
+        // check for distance travelled completed
+        actual_feet = ( ENC_COUNT_TO_FEET(encoder_get_count(0) - initial_left_enc_count) + 
+                        ENC_COUNT_TO_FEET(encoder_get_count(1) - initial_right_enc_count) ) / 2;
+        if (fabs(actual_feet) >= desired_feet) {
+            break;
+        }
+
+        // perform motor speed compensation, and
+        // maintain sums for calculation of avg mtr speeds
+        if ((ms % 100) == 0) {
+            int adj = mtr_speed_compensation(ms==0, initial_degrees);
+            if (adj) {
+                lspeed += adj;
+                //INFO("*** adjusting left_mtr_speed by %d  new=%d\n", adj, lspeed);
+                mc_set_speed(0, lspeed);
+            }
+
+            avg_lspeed_sum += lspeed;
+            avg_rspeed_sum += rspeed;
+            avg_speed_cnt++;
+        }
+
+        // sleep for 1 ms
+        usleep(1000);
+        ms += 1;
+    }
+
+    // stop motors
+    if (stop_motors(STOP_MOTORS_PRINT_DISTANCE) < 0) {
+        return -1;
+    }
+
+    // calculate the avg speeds, and return the values if caller desires
+    avg_lspeed = (avg_speed_cnt ? avg_lspeed_sum / avg_speed_cnt : 0);
+    avg_rspeed = (avg_speed_cnt ? avg_rspeed_sum / avg_speed_cnt : 0);
+    if (avg_lspeed_arg) *avg_lspeed_arg = avg_lspeed;
+    if (avg_rspeed_arg) *avg_rspeed_arg = avg_rspeed;
+
+    // print results
+    actual_feet = ( ENC_COUNT_TO_FEET(encoder_get_count(0) - initial_left_enc_count) + 
+                    ENC_COUNT_TO_FEET(encoder_get_count(1) - initial_right_enc_count) ) / 2;
+    rot_degrees = imu_get_rotation() - initial_degrees;
+    INFO("done: desired_feet = %0.1f  actual_feet = %0.1f  delta_feet = %0.1f  rot = %0.1f\n",
+         desired_feet, actual_feet, desired_feet-actual_feet, rot_degrees);
+    INFO("      average mtr speeds = %d %d\n", avg_lspeed, avg_rspeed);
+    INFO("      actual  mtr speeds = %d %d\n", lspeed, rspeed);
+    INFO("      delta   mtr speeds = %d %d\n", avg_lspeed-lspeed, avg_rspeed-rspeed);
+
+    // success
+    return 0;
+}
+
+static int stop_motors(int print)
+{
+    uint64_t start_us;
+    int      left_enc_count, right_enc_count;
+    double   rotation;
+
+    // get encoder counts, and rotation  prior to stopping, these will
+    // be used to determine the stopping distance and rotation below
+    left_enc_count = encoder_get_count(0);
+    right_enc_count = encoder_get_count(1);
+    rotation = imu_get_rotation();
 
     // set all motor speeds to 0
     if (mc_set_speed_all(0,0) < 0) {
@@ -134,7 +431,7 @@ int drive_stop(void)
         return -1;
     }
 
-    // wait up to 1 second for encoder speed to drop to 0
+    // wait up to 1.5 second for encoder speed to drop to 0
     start_us = microsec_timer();
     while (true) {
         if (EMER_STOP_OCCURRED) {
@@ -146,204 +443,72 @@ int drive_stop(void)
             return -1;
         }
         if (encoder_get_speed(0) == 0 && encoder_get_speed(1) == 0) {
-            INFO("stopping distance = %0.2f ft  duration = %0.2f s\n",
-                 ENC_POS_TO_FEET(encoder_get_position(enc_id) - enc_pos),
-                 (microsec_timer() - start_us) / 1000000.);
             break;
         }
-        usleep(10000);  // 10 ms
+        usleep(1000);  // 1 ms
+    }
+
+    // print the amount of distance or rotation during the stop motors
+    if (print == STOP_MOTORS_PRINT_DISTANCE) {
+        double stopping_distance = 
+            ( fabs(ENC_COUNT_TO_FEET(encoder_get_count(0) - left_enc_count)) + 
+              fabs(ENC_COUNT_TO_FEET(encoder_get_count(1) - right_enc_count)) )
+            / 2;
+        INFO("done: stopping distance = %0.2f ft  duration = %0.2f s\n",
+             stopping_distance, (microsec_timer() - start_us) / 1000000.);
+    } else if (print == STOP_MOTORS_PRINT_ROTATION) {
+        double stopping_rotation = imu_get_rotation() - rotation;
+        INFO("done: stopping rotation = %0.2f degs  duration = %0.2f s\n",
+             stopping_rotation, (microsec_timer() - start_us) / 1000000.);
     }
 
     // success
     return 0;
 }
 
-static int drive_common(double left_mtr_mph, double right_mtr_mph, double feet)
+// returns adjustment value that can be applied either
+// directly to the left mtr, or negated to the right mtr
+static int mtr_speed_compensation(bool init, double rotation_target)
 {
-    // The larger of left_mtr_mph or right_mtr_mph will be the reference motor. The other 
-    // motor will sync its distance to the reference motor.
-    //
-    // The mph values will only be used when determining the initial motor
-    // speed. And for the desired ratio of the encoder speeds. The speed ratio is
-    // used to determine the target distance for the syncing motor.
-    //
-    // After the initial acceleration completes the process of syncing to the
-    // reference motor will start. Every 100 ms:
-    // - the predicted future position of the reference motor is calculated
-    //   (for 500 ms in future)
-    // - the desired future position of the syncing motor is calculaed;
-    //   by multiplying the predicted future position of the reference motor 
-    //   by the speed ratio
-    // - the predicted future position of the syncing motor is calculated
-    // - if the predicted and desired future syncing motor positions are close
-    //   then no motor speed adjustment is made; otherwise the speed of the 
-    //   syncing motor is increased or decreased by 1
+    #define PREDICTION_INTERVAL_SECS  0.5
+    #define TUNE  3.0
 
-    // The turn radius of a point at the center of the wheelbase is:
-    //
-    //                R + W/2
-    //     Vratio =  ----------
-    //                R - W/2
-    //
-    //                 Vratio + 1
-    //      R = (W/2) ------------
-    //                 Vratio - 1
-    //
-    //      Vratio      Radius
-    //      ------      ------ 
-    //      infinite    0.50 W   (one wheel has zero velocity)
-    //        4         0.83 W   
-    //        3         1.00 W
-    //        2         1.50 W
-    //        1.5       2.50 W
-    //        1.25      4.50 W
-    //        1         infinite  (straight line)
-    //       -1         0         (spinning)
+    uint64_t        time_now;
+    double          rotation_now, rotation_rate, rotation_predicted;
+    double          duration_secs;
+    int             compensation;
 
-    int      left_mtr_speed, right_mtr_speed;
-    int      ref_mtr_id, sync_mtr_id;
-    int      ref_mtr_speed, sync_mtr_speed;
-    double   ref_mtr_mph, sync_mtr_mph;
+    static double   rotation_last;
+    static uint64_t time_last;
 
-    // convert the mph to left/right mtr ctlr speed
-    if (drive_cal_cvt_mph_to_left_motor_speed(left_mtr_mph, &left_mtr_speed) < 0) {
-        ERROR("failed to get left_speed for %0.1f mph\n", left_mtr_mph);
-        return -1;
-    }
-    if (drive_cal_cvt_mph_to_right_motor_speed(right_mtr_mph, &right_mtr_speed) < 0) {
-        ERROR("failed to get right_speed for %0.1f mph\n", right_mtr_mph);
-        return -1;
+    time_now = microsec_timer();
+
+    if (init) {
+        time_last = time_now;
+        rotation_last = imu_get_rotation();
+        return 0;
     }
 
-    // init variables relating to the reference and syncing mtrs
-    // note: id==0 is left mtr; id==1 is right mtr
-    if (fabs(left_mtr_mph) >= fabs(right_mtr_mph)) {
-        ref_mtr_id     = 0;
-        ref_mtr_mph    = left_mtr_mph;
-        ref_mtr_speed  = left_mtr_speed;
-        sync_mtr_id    = 1;
-        sync_mtr_mph   = right_mtr_mph;
-        sync_mtr_speed = right_mtr_speed;
-    } else {
-        ref_mtr_id     = 1;
-        ref_mtr_mph    = right_mtr_mph;
-        ref_mtr_speed  = right_mtr_speed;
-        sync_mtr_id    = 0;
-        sync_mtr_mph   = left_mtr_mph;
-        sync_mtr_speed = left_mtr_speed;
+    duration_secs      = (time_now - time_last) / 1000000.;
+    rotation_now       = imu_get_rotation();
+    rotation_rate      = (rotation_now - rotation_last) / duration_secs;
+    rotation_predicted = rotation_now + rotation_rate * PREDICTION_INTERVAL_SECS;
+
+    compensation = nearbyint( (rotation_target - rotation_predicted) * TUNE );
+
+    //INFO("dur = %0.3f  rot_now = %0.3f  rot_rate = %0.3f rot_pred = %0.3f comp = %d\n",
+    //     duration_secs, rotation_now, rotation_rate, rotation_predicted, compensation);
+
+    if (compensation > 10) {
+        compensation = 10;
+    } else if (compensation < -10) {
+        compensation = -10;
     }
 
-    // validate that the mtr speeds exceed the minimum allowed
-    if (abs(ref_mtr_speed) < MIN_MTR_SPEED || abs(ref_mtr_speed) > MAX_MTR_SPEED ||
-        abs(sync_mtr_speed) < MIN_MTR_SPEED || abs(sync_mtr_speed) > MAX_MTR_SPEED)
-    {
-        ERROR("invalid mtr_speed, ref_mtr_speed=%d sync_mtr_speed=%d\n", 
-              ref_mtr_speed, sync_mtr_speed);
-        return -1;
-    }
+    time_last = time_now;
+    rotation_last = rotation_now;
 
-    // get last enc values and current time, and
-    // get the start encoder val for the ref mtr
-    int      last_ref_enc_val  = encoder_get_position(ref_mtr_id);
-    int      last_sync_enc_val = encoder_get_position(sync_mtr_id);
-    uint64_t last_enc_val_time = microsec_timer();
-    int      start_ref_enc_val =  encoder_get_position(ref_mtr_id);
-
-    // enable or disabled the proximity sensors based on whether the
-    // robot is spinning, moving forward, or moving reverse
-    if (ref_mtr_mph * sync_mtr_mph < 0) {
-        // spinning
-        proximity_enable(0);   // enable front
-        proximity_enable(1);   // enable rear
-    } else if (ref_mtr_mph > 0) {
-        // moving forward
-        proximity_enable(0);   // enable front
-        proximity_disable(1);  // disable rear
-    } else {
-        // moving reverse
-        proximity_disable(0);  // disable front
-        proximity_enable(1);   // enable rear
-    }
-
-    // start motors
-    INFO("xxx set speed %d %d\n", left_mtr_speed, right_mtr_speed);
-    if (mc_set_speed_all(left_mtr_speed, right_mtr_speed) < 0) {
-        ERROR("failed to set mtr speeds to %d %d\n", left_mtr_speed, right_mtr_speed);
-        return -1;
-    }
-
-    // loop, at 10 ms intervals:
-    // - check if EMER_STOP_OCCURRED; if so, return error
-    // - check if the ref_mtr has travelled the desired distance; if so, return success
-    // - every 100 ms make minor adjustments to the sync_mtr_speed, so that the sync
-    //   mtr encoder position tracks the ref mtr encoder position
-    int ms = 0;
-    while (true) {
-        // check if the emer_stop_thread shut down the motors
-        if (EMER_STOP_OCCURRED) {
-            ERROR("EMER_STOP_OCCURRED\n");
-            return -1;
-        }
-
-        // if the ref mtr has travelled the desired number of feet then
-        // return success
-        double ref_mtr_feet_travelled = 
-                    ENC_POS_TO_FEET(encoder_get_position(ref_mtr_id) - start_ref_enc_val);
-        if (fabs(ref_mtr_feet_travelled) > feet) {
-            break;  // return success
-        }
-
-        // every 100 ms check for the need to adjust the sync mtr speed
-        // so that the sync mtr's encoder position tracks the ref mtr's
-        // encoder position 
-        if (ms != 0 && ((ms % 100) == 0)) do {
-            uint64_t time_now = microsec_timer();
-            int      curr_ref_enc_val, curr_sync_enc_val;
-            int      ref_enc_rate, sync_enc_rate;
-            int      predicted_future_ref_enc_val;
-            int      predicted_future_sync_enc_val;
-            int      desired_future_sync_enc_val;
-            
-            // get current encoder values;
-            // calculate encoder rates;
-            // save last encoder values and last time
-            curr_ref_enc_val = encoder_get_position(ref_mtr_id);
-            curr_sync_enc_val = encoder_get_position(sync_mtr_id);
-
-            ref_enc_rate = 1000000LL * (curr_ref_enc_val - last_ref_enc_val) / (time_now - last_enc_val_time);
-            sync_enc_rate = 1000000LL * (curr_sync_enc_val - last_sync_enc_val) / (time_now - last_enc_val_time);
-
-            last_ref_enc_val  = curr_ref_enc_val;
-            last_sync_enc_val = curr_sync_enc_val;
-            last_enc_val_time = time_now;
-
-            // calc the predicted and desired encoder values for 0.5 secs in the future
-            predicted_future_ref_enc_val  = curr_ref_enc_val + 0.5 * ref_enc_rate;
-            predicted_future_sync_enc_val = curr_sync_enc_val + 0.5 * sync_enc_rate;
-            desired_future_sync_enc_val   = predicted_future_ref_enc_val * (sync_mtr_mph / ref_mtr_mph);
-
-            // adjust ths sync_mtr_speed, if necessary, based on the sync mtr's 
-            // desired and predicted encoder positions in 0.5 secs on the future
-            int sync_mtr_speed_adj = (desired_future_sync_enc_val - predicted_future_sync_enc_val) / 50;
-            if (sync_mtr_speed_adj) {
-                if (sync_mtr_speed_adj > 3) sync_mtr_speed_adj = 3;
-                if (sync_mtr_speed_adj < -3) sync_mtr_speed_adj = -3;
-                sync_mtr_speed += sync_mtr_speed_adj;
-                if (mc_set_speed(sync_mtr_id, sync_mtr_speed) < 0) {
-                    ERROR("failed to set mtr speed id=%d speed=%d\n", sync_mtr_id, sync_mtr_speed);
-                    return -1;
-                }
-                INFO("xxx adjusted sync mtr speed by %d\n", sync_mtr_speed_adj);
-            }
-        } while (0);
-
-        // sleep for 10 ms
-        usleep(10000);  // 10 ms
-        ms += 10;
-    }
-
-    // success
-    return 0;
+    return compensation;
 }
 
 // -----------------  THREADS  ----------------------------------------------
@@ -379,10 +544,11 @@ static void *drive_thread(void *cx)
         proximity_disable(0);
         proximity_disable(1);
         imu_set_accel_rot_ctrl(true);
+        // XXX wait for these all to enable
 
         // reset encoders, and imu rotatation
-        encoder_pos_reset(0);
-        encoder_pos_reset(1);
+        encoder_count_reset(0);
+        encoder_count_reset(1);
         imu_reset_rotation();
 
         // enable emer_stop_thread
@@ -472,10 +638,10 @@ emer_stopped:
         }
 
         for (int id = 0; id < 2; id++) {
-            int actual_enc_speed = encoder_get_speed(id);
-            int expected_enc_speed = EXP_ENC_SPEED(mcs->target_speed[id]);
-            if ((expected_enc_speed < 0 && actual_enc_speed > expected_enc_speed / 2) ||
-                (expected_enc_speed > 0 && actual_enc_speed < expected_enc_speed / 2))
+            double enc_mph = ENC_SPEED_TO_MPH(encoder_get_speed(id));
+            double mtr_mph = MTR_SPEED_TO_MPH(mcs->target_speed[id]);  // xxx or use drive cal
+            if ((mtr_mph >= 0 && enc_mph < mtr_mph / 2) ||
+                (mtr_mph <  0 && enc_mph > mtr_mph / 2))
             {
                 if (enc_low_speed_start_time[id] == 0) {
                     enc_low_speed_start_time[id] = microsec_timer();
@@ -486,7 +652,7 @@ emer_stopped:
             if (enc_low_speed_start_time[id] != 0 &&
                 microsec_timer() - enc_low_speed_start_time[id] > 1000000)   // 1 sec
             {
-                DO_EMER_STOP("enc-%d speed actual=%d exp=%d\n", id, actual_enc_speed, expected_enc_speed);
+                DO_EMER_STOP("enc=%d mtr_mph=%0.1f enc_mph=%0.1f\n", id, mtr_mph, enc_mph);
             }
         }
 

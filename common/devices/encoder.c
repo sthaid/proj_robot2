@@ -13,7 +13,7 @@
 #include <misc.h>
 
 // notes:
-// - 32 bit position var overflow after 69 hours full speed:
+// - 32 bit encoder count overflow after 69 hours full speed:
 //      980 cnt/rev * 500 rpm / 60 ~=  8000 count/sec
 //      2e9 / 8000 / 3600 = 69 hours
 // - encoder_tbl is from
@@ -41,11 +41,11 @@ static struct info_s {
     bool enabled;
     bool was_disabled;
     int  last_val;
-    int  pos;
-    int  pos_offset;
+    int  count;
+    int  count_offset;
     int  errors;
     struct history_s {
-        int pos;
+        int count;
         uint64_t time;
     } history[MAX_HISTORY];
     int history_tail;
@@ -94,7 +94,7 @@ int encoder_init(int max_info_arg, ...)  // int gpio_a, int gpio_b, ...
     }
 
     // create the thread to process the encoder gpio values, and to
-    // keep track of accumulated shaft position
+    // keep track of accumulated encoder count
     pthread_create(&tid, NULL,*encoder_thread, NULL);
 
     // success
@@ -112,9 +112,9 @@ void encoder_disable(int id)
     info_tbl[id].was_disabled = true;
 }
 
-void encoder_pos_reset(int id)
+void encoder_count_reset(int id)
 {
-    info_tbl[id].pos_offset = info_tbl[id].pos;
+    info_tbl[id].count_offset = info_tbl[id].count;
 }    
 
 bool encoder_get_enabled(int id)
@@ -122,9 +122,9 @@ bool encoder_get_enabled(int id)
     return info_tbl[id].enabled;
 }
 
-int encoder_get_position(int id)
+int encoder_get_count(int id)
 {
-    return info_tbl[id].pos - info_tbl[id].pos_offset;
+    return info_tbl[id].count - info_tbl[id].count_offset;
 }
 
 int encoder_get_speed(int id)
@@ -145,7 +145,7 @@ int encoder_get_speed(int id)
         return 0;
     }
 
-    speed = 1000000LL * (info->pos - h.pos) / delta_t;
+    speed = 1000000LL * (info->count - h.count) / delta_t;
     return speed;
 }
 
@@ -234,12 +234,12 @@ static void *encoder_thread(void *cx)
             if (x == 2) {
                 info->errors++;
             } else {
-                info->pos += x;
+                info->count += x;
             }
 
-            // save history of position values, used to determine speed
+            // save history of encoder count values, used to determine speed
             int tail = info->history_tail;
-            info->history[tail].pos = info->pos;
+            info->history[tail].count = info->count;
             info->history[tail].time = time_now;
             __sync_synchronize();
             info->history_tail = (tail + 1) % MAX_HISTORY;

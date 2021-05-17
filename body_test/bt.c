@@ -50,6 +50,7 @@ static int                 logmsg_strs_count;
 static void initialize(void);
 static void sig_hndlr(int sig);
 static void blank_line(void);
+static void info(char *fmt, ...) __attribute__ ((format (printf, 1, 2)));
 static void error(char *fmt, ...) __attribute__ ((format (printf, 1, 2)));
 static void fatal(char *fmt, ...) __attribute__ ((format (printf, 1, 2)));
 static int getsockaddr(char * node, int port, struct sockaddr_in * ret_addr);
@@ -154,6 +155,30 @@ static void blank_line(void)
         printf("%s\n", "");
     } else {
         safe_strcpy(logmsg_strs[logmsg_strs_count%MAX_LOGMSG_STRS], "");
+        __sync_fetch_and_add(&logmsg_strs_count, 1);
+    }
+}
+
+static void info(char *fmt, ...)
+{
+    va_list ap;
+    int cnt;
+    char err_str[100];
+
+    va_start(ap, fmt);
+    cnt = sprintf(err_str, "BODY_TEST INFO: ");
+    cnt += vsnprintf(err_str+cnt, sizeof(err_str)-cnt, fmt, ap);
+    va_end(ap);
+
+    if (err_str[cnt-1] == '\n') {
+        err_str[cnt-1] = '\0';
+        cnt--;
+    }
+
+    if (curses_active == false) {
+        printf("%s\n", err_str);
+    } else {
+        safe_strcpy(logmsg_strs[logmsg_strs_count%MAX_LOGMSG_STRS], err_str);
         __sync_fetch_and_add(&logmsg_strs_count, 1);
     }
 }
@@ -525,6 +550,8 @@ static int process_cmdline(void)
 
     proc_id = 0;
 
+    info("cmd: %s", cmdline);
+
     if (strcmp(cmd, "q") == 0) {
         return -1;  // terminate pgm
     } else if (strcmp(cmd, "mc_debug") == 0) {
@@ -532,9 +559,14 @@ static int process_cmdline(void)
         send_msg(MSG_ID_MC_DEBUG_CTL, &x, sizeof(x));
     } else if (strcmp(cmd, "log_mark") == 0) {
         send_msg(MSG_ID_LOG_MARK, NULL, 0);
-    } else if ( (strcmp(cmd, "cal") == 0 && (proc_id = 1)) ||
-                (strcmp(cmd, "fwd") == 0 && (proc_id = 2)) ||
-                (strcmp(cmd, "rev") == 0 && (proc_id = 3)) )
+    } else if ( (strcmp(cmd, "cal")  == 0 && (proc_id = 1))  ||
+                (strcmp(cmd, "fwd")  == 0 && (proc_id = 2))  ||
+                (strcmp(cmd, "rev")  == 0 && (proc_id = 3))  ||
+                (strcmp(cmd, "rot")  == 0 && (proc_id = 4))  ||
+                (strcmp(cmd, "hdg")  == 0 && (proc_id = 5))  ||
+                (strcmp(cmd, "tst1") == 0 && (proc_id = 11)) ||
+                (strcmp(cmd, "tst2") == 0 && (proc_id = 12))
+                        )
     {
         struct msg_drive_proc_s x = { proc_id, {arg[0], arg[1], arg[2], arg[3]} };
         send_msg(MSG_ID_DRIVE_PROC, &x, sizeof(x));

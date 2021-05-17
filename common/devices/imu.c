@@ -186,10 +186,7 @@ static double rotation_offset;
 
 void imu_set_accel_rot_ctrl(bool enable)
 {
-    accel_alet_g_value = 0;
     accel_alert = 0;
-    rotation = 0;
-    rotation_offset = 0;
     __sync_synchronize();
 
     accel_rot_enabled = enable;
@@ -261,8 +258,8 @@ static void * accel_rot_thread(void *cx)
         process_raw_accel_values(ax, ay, az);
         process_raw_rot_values(rx, ry, rz);
 
-        // sleep 10 ms
-        usleep(10000);
+        // sleep 5 ms
+        usleep(5000);
     }
 
     return NULL;
@@ -312,5 +309,5 @@ static void process_raw_rot_values(int rx, int ry, int rz)
         return;
     }
 
-    rotation += (rz * (-1./131.) + 0.067) * delta_t;
+    rotation += (rz * (-1./131.) + 0.0689) * delta_t;
 }
