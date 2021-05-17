@@ -258,8 +258,8 @@ static void * accel_rot_thread(void *cx)
         process_raw_accel_values(ax, ay, az);
         process_raw_rot_values(rx, ry, rz);
 
-        // sleep 5 ms
-        usleep(5000);
+        // sleep 1 ms
+        usleep(1000);
     }
 
     return NULL;

@@ -43,7 +43,7 @@ int drive_init(void)
 
     // set mtr ctlr accel/decel limits, and debug mode
     mc_set_accel(MC_ACCEL, MC_ACCEL);
-    mc_debug_mode(true);  // xxx temp
+    mc_debug_mode(true);  // XXX temp
 
     // read the drive.cal file, and print
     if (drive_cal_file_read() < 0) {
@@ -99,6 +99,41 @@ int drive_rev(double feet, double mph)
     return drive_straight(feet, -mph, NULL, NULL);
 }
 
+// XXX move to misc
+typedef struct {
+    double x;
+    double y;
+} interp_point_t;
+
+double interp(interp_point_t *p, int n, double x)
+{
+    if (x < p[0].x) {
+        return p[0].y;
+    }
+    if (x > p[n-1].x) {
+        return p[n-1].y;
+    }
+
+    for (int i = 0; i < n-1; i++) {
+        double min_x = p[i].x;
+        double max_x = p[i+1].x;
+        double min_y = p[i].y;
+        double max_y = p[i+1].y;
+        double interp_y;
+
+        if (x >= min_x && x <= max_x) {
+            //                      (x - min_x)
+            // interp_y = min_y + --------------- * (max_y - min_y)
+            //                    (max_x - min_x)
+            interp_y = min_y + ((x - min_x) / (max_x - min_x)) * (max_y - min_y);
+            return interp_y;
+        }
+    }
+
+    FATAL("bug\n");
+    return 0;
+}
+
 // XXX later
 int drive_rotate(double desired_degrees, double fudge)
 {
@@ -109,36 +144,29 @@ int drive_rotate(double desired_degrees, double fudge)
     int    lspeed, rspeed;
     double start_degrees, rotated_degrees;
 
-    // XXX 
-    // - slow down when approaching tgt
-    // - try to eliminate MIN_DEGREES
-    //#define FUDGE 3.3  // xxx  also move ?
-    #define MIN_DEGREES 10   // xxx move to MIN_MPH file
-
-    if (fudge == 0) {
-        if (desired_degrees > 0) {
-            fudge = 1.5;
-        } else { 
-            fudge = 1.5;
-        }
-    }
-
     INFO("desired_degrees = %0.1f  fudge = %0.1f\n", desired_degrees, fudge);
 
-    // check for desired_degrees too small to attempt to rotate xxx
-    if (fabs(desired_degrees) < MIN_DEGREES) {
-        ERROR("invalid desired_degrees %0.1f\n", desired_degrees);
-        return -1;
+    // if caller has not supplied fudge then use builtin value
+    if (fudge == 0) {
+        static interp_point_t fudge_points[] = {
+                { 15,   3.2  },
+                { 30,   3.0  },
+                { 90,   2.5  },
+                { 180,  1.5  },
+                { 270,  0.75 },
+                { 360,  0.0  }, };
+        fudge = interp(fudge_points, sizeof(fudge_points)/sizeof(interp_point_t), fabs(desired_degrees));
+        INFO("XXX fudge = %0.2f\n", fudge);
     }
 
     // enable both front and read proximity sensors
-    proximity_enable(0);   // front
-    proximity_enable(1);   // rear
+    proximity_enable(0);   // enable front
+    proximity_enable(1);   // enable rear
 
     // get imu rotation value prior to starting motors
     start_degrees = imu_get_rotation();
 
-    // start motors
+    // start motors using boost speed, and delay 200 ms
     lspeed = MTR_MPH_TO_SPEED(left_mtr_start_mph);
     rspeed = MTR_MPH_TO_SPEED(right_mtr_start_mph);
     if (mc_set_speed_all(lspeed, rspeed) < 0) {
@@ -154,7 +182,6 @@ int drive_rotate(double desired_degrees, double fudge)
         ERROR("failed to set mtr speeds to %d %d\n", lspeed, rspeed);
         return -1;
     }
-
 
     // wait for rotation to complete
     int ms = 0;
@@ -173,9 +200,6 @@ int drive_rotate(double desired_degrees, double fudge)
         if (fabs(rotated_degrees) > (fabs(desired_degrees) - fudge)) {
             break;
         }
-
-        // motor speed compensation ...
-        // xxx tbd
 
         // sleep for 1 ms
         usleep(1000);
@@ -206,7 +230,7 @@ int drive_rotate_to_heading(double desired_heading, double fudge)
 
     // XXX fudge
     #undef FUDGE
-    #define FUDGE 8  // xxx  also move ?
+    #define FUDGE 8  // XXX  also move ?
     if (fudge == 0) {
         fudge = FUDGE;
     }
@@ -274,7 +298,7 @@ int drive_rotate_to_heading(double desired_heading, double fudge)
         }
 
         // motor speed compensation ...
-        // xxx tbd
+        // XXX tbd
 
         // sleep for 1 ms
         usleep(1000);
@@ -552,8 +576,10 @@ static void *drive_thread(void *cx)
         imu_reset_rotation();
 
         // enable emer_stop_thread
-        // xxx delay or ack it is running
+        // XXX delay or ack it is running
         emer_stop_thread_state = EMER_STOP_THREAD_ENABLED;
+
+        usleep(100000);//xxx
 
         // call the drive proc
         drive_proc(drive_proc_msg);
@@ -639,7 +665,7 @@ emer_stopped:
 
         for (int id = 0; id < 2; id++) {
             double enc_mph = ENC_SPEED_TO_MPH(encoder_get_speed(id));
-            double mtr_mph = MTR_SPEED_TO_MPH(mcs->target_speed[id]);  // xxx or use drive cal
+            double mtr_mph = MTR_SPEED_TO_MPH(mcs->target_speed[id]);  // XXX or use drive cal
             if ((mtr_mph >= 0 && enc_mph < mtr_mph / 2) ||
                 (mtr_mph <  0 && enc_mph > mtr_mph / 2))
             {
