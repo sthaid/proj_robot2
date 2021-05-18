@@ -66,10 +66,10 @@ static void * current_thread(void *cx)
     while (true) {
         for (int id = 0; id < max_info; id++) {
             info_tbl[id].current_smoothed = 
-                0.98 * info_tbl[id].current_smoothed + 
-                0.02 * read_current_unsmoothed(id);
+                0.99 * info_tbl[id].current_smoothed + 
+                0.01 * read_current_unsmoothed(id);
         }
-        usleep(10000);   // 10 ms
+        usleep(10000);  // 10 ms
     }
 
     return NULL;

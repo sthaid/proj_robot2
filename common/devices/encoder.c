@@ -257,10 +257,10 @@ static void *encoder_thread(void *cx)
             }
         }
 
-        // sleep for 10 us xxx or 20
+        // sleep for 10 us (measured actual sleep is 20 us)
         ts.tv_sec = 0;
-        ts.tv_nsec = 10000;  //  10 us
-        nanosleep(&ts, NULL);
+        ts.tv_nsec = 10000;
+        nanosleep(&ts, NULL);  // 10 us
     }
 
     return NULL;

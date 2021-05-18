@@ -101,7 +101,7 @@ static void *oled_ctlr_thread(void *cx)
         }
 
         // sleep 100 ms
-        usleep(100000);
+        usleep(100000);  // 100 ms
         count++;
     }
 

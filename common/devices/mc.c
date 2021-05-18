@@ -418,7 +418,7 @@ static void *monitor_thread(void *cx)
         }
 
         // sleep for 100 ms
-        usleep(100000);
+        usleep(100000);  // 100 ms
     }
 
     return NULL;
