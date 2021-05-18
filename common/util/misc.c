@@ -292,3 +292,35 @@ int do_send(int sockfd, void * send_buff, size_t len)
 
     return len;
 }
+
+// -----------------  MATH  ----------------------------------------------
+
+double interpolate(interp_point_t *p, int n, double x)
+{
+    if (x < p[0].x) {
+        return p[0].y;
+    }
+    if (x > p[n-1].x) {
+        return p[n-1].y;
+    }
+
+    for (int i = 0; i < n-1; i++) {
+        double min_x = p[i].x;
+        double max_x = p[i+1].x;
+        double min_y = p[i].y;
+        double max_y = p[i+1].y;
+        double interp_y;
+
+        if (x >= min_x && x <= max_x) {
+            //                      (x - min_x)
+            // interp_y = min_y + --------------- * (max_y - min_y)
+            //                    (max_x - min_x)
+            interp_y = min_y + ((x - min_x) / (max_x - min_x)) * (max_y - min_y);
+            return interp_y;
+        }
+    }
+
+    FATAL("bug\n");
+    return 0;
+}
+

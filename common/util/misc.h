@@ -122,6 +122,15 @@ char * sock_addr_to_str(char * s, int slen, struct sockaddr * addr);
 int do_recv(int sockfd, void * recv_buff, size_t len);
 int do_send(int sockfd, void * send_buff, size_t len);
 
+// -----------------  MATH  ----------------------------------------------
+
+typedef struct {
+    double x;
+    double y;
+} interp_point_t;
+
+double interpolate(interp_point_t *p, int n, double x);
+
 #ifdef __cplusplus
 }
 #endif

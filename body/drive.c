@@ -1,3 +1,6 @@
+// XXX mag cal routine
+// XXX drive_turn
+
 #include "common.h"
 
 //
@@ -43,7 +46,7 @@ int drive_init(void)
 
     // set mtr ctlr accel/decel limits, and debug mode
     mc_set_accel(MC_ACCEL, MC_ACCEL);
-    mc_debug_mode(true);  // xxx temp
+    mc_debug_mode(true);  // XXX temp
 
     // read the drive.cal file, and print
     if (drive_cal_file_read() < 0) {
@@ -99,7 +102,6 @@ int drive_rev(double feet, double mph)
     return drive_straight(feet, -mph, NULL, NULL);
 }
 
-// XXX later
 int drive_rotate(double desired_degrees, double fudge)
 {
     double left_mtr_start_mph  = (desired_degrees > 0 ? 0.5 : -0.5);
@@ -109,43 +111,36 @@ int drive_rotate(double desired_degrees, double fudge)
     int    lspeed, rspeed;
     double start_degrees, rotated_degrees;
 
-    // XXX 
-    // - slow down when approaching tgt
-    // - try to eliminate MIN_DEGREES
-    //#define FUDGE 3.3  // xxx  also move ?
-    #define MIN_DEGREES 10   // xxx move to MIN_MPH file
-
-    if (fudge == 0) {
-        if (desired_degrees > 0) {
-            fudge = 1.5;
-        } else { 
-            fudge = 1.5;
-        }
-    }
-
     INFO("desired_degrees = %0.1f  fudge = %0.1f\n", desired_degrees, fudge);
 
-    // check for desired_degrees too small to attempt to rotate xxx
-    if (fabs(desired_degrees) < MIN_DEGREES) {
-        ERROR("invalid desired_degrees %0.1f\n", desired_degrees);
-        return -1;
+    // if caller has not supplied fudge factor then use builtin value
+    if (fudge == 0) {
+        static interp_point_t fudge_points[] = {
+                { 15,   3.2  },
+                { 30,   3.0  },
+                { 90,   2.5  },
+                { 180,  1.5  },
+                { 270,  0.75 },
+                { 360,  0.0  }, };
+        fudge = interpolate(fudge_points, sizeof(fudge_points)/sizeof(interp_point_t), fabs(desired_degrees));
+        INFO("builtin fudge = %0.2f\n", fudge);
     }
 
     // enable both front and read proximity sensors
-    proximity_enable(0);   // front
-    proximity_enable(1);   // rear
+    proximity_enable(0);   // enable front
+    proximity_enable(1);   // enable rear
 
     // get imu rotation value prior to starting motors
     start_degrees = imu_get_rotation();
 
-    // start motors
+    // start motors using boost speed, and delay 200 ms
     lspeed = MTR_MPH_TO_SPEED(left_mtr_start_mph);
     rspeed = MTR_MPH_TO_SPEED(right_mtr_start_mph);
     if (mc_set_speed_all(lspeed, rspeed) < 0) {
         ERROR("failed to set mtr speeds to %d %d\n", lspeed, rspeed);
         return -1;
     }
-    usleep(200000);
+    usleep(200000);  // 200 ms
 
     // slow down motors
     lspeed = MTR_MPH_TO_SPEED(left_mtr_mph);
@@ -154,7 +149,6 @@ int drive_rotate(double desired_degrees, double fudge)
         ERROR("failed to set mtr speeds to %d %d\n", lspeed, rspeed);
         return -1;
     }
-
 
     // wait for rotation to complete
     int ms = 0;
@@ -168,14 +162,11 @@ int drive_rotate(double desired_degrees, double fudge)
         // check if rotation completed
         rotated_degrees = imu_get_rotation() - start_degrees;
         if ((ms % 1000) == 0) {
-            INFO("XXX ROTATED DEGREES  %0.1f\n", rotated_degrees);
+            INFO("rotated %0.1f deg\n", rotated_degrees);
         }
         if (fabs(rotated_degrees) > (fabs(desired_degrees) - fudge)) {
             break;
         }
-
-        // motor speed compensation ...
-        // xxx tbd
 
         // sleep for 1 ms
         usleep(1000);
@@ -196,58 +187,119 @@ int drive_rotate(double desired_degrees, double fudge)
     return 0;
 }
 
-// XXX later
-int drive_rotate_to_heading(double desired_heading, double fudge)
+// xxx move
+static double sanitize_heading(double hdg, double base)
 {
-    double current_heading, delta;
-    double left_mtr_mph, right_mtr_mph;
-    int    left_mtr_speed, right_mtr_speed;
-    bool   clockwise;
-
-    // XXX fudge
-    #undef FUDGE
-    #define FUDGE 8  // xxx  also move ?
-    if (fudge == 0) {
-        fudge = FUDGE;
-    }
-    INFO("desired_heading = %0.1f  fudge = %0.1f\n", desired_heading, fudge);
-
-    // determine the delta rotation to reach the desired heading
-    current_heading = imu_get_magnetometer();
-    delta = current_heading - desired_heading;
-    delta = (delta < -180 ? delta+360 : delta >= 180 ? delta-360 : delta);
-    INFO("delta %0.1f\n", delta);
-
-    // if the delta rotation needed is small then return
-    if (fabs(delta) < 5) {
-        INFO("return due to small delta\n");
+    if (base != 0 && base != -180) {
+        FATAL("bug, invalid base %0.1f\n", base);
         return 0;
     }
 
-    // determine the left and right mtr mph
-    clockwise = (delta < 0);
-    left_mtr_mph  = (clockwise ? +0.5 : -0.5);
-    right_mtr_mph = (clockwise ? -0.5 : +0.5);
+    if (hdg >= base && hdg < base + 360) {
+        // already okay
+    } else {
+        while (hdg < base) {
+            hdg += 360;
+        }
+        while (hdg >= base + 360) {
+            hdg -= 360;
+        }
+    }
+    return hdg;
+}
 
-//XXX also get half speeds
-// XXX adjust calibration code
-    
-    // convert the mph to left/right mtr ctlr speed
-    left_mtr_speed = MTR_MPH_TO_SPEED(left_mtr_mph);
-    right_mtr_speed = MTR_MPH_TO_SPEED(right_mtr_mph);
+int drive_rotate_to_heading(double desired_heading, double fudge, bool disable_sdr)
+{
+    double current_heading, delta;
+    double left_mtr_mph, right_mtr_mph;
+    double left_mtr_start_mph, right_mtr_start_mph;
+    int    ms, lspeed, rspeed;
+    bool   clockwise;
+
+    // XXX fudge
+    if (fudge == 0) {
+        fudge = 8;
+    }
+
+    // sanitize the desired_heading into range 0 - 359.99
+    desired_heading = sanitize_heading(desired_heading, 0);
+
+    // determine the delta rotation to reach the desired heading
+    current_heading = imu_get_magnetometer();
+    delta = sanitize_heading(desired_heading - current_heading, -180);
+    INFO("desired_heading = %0.1f  current_heading = %0.1f  delta = %0.1f  fudge = %0.1f\n", 
+         desired_heading, current_heading, delta, fudge);
+
+    // return immedeately if current heading is already very close to desired
+    if (fabs(delta) < 2) {
+        INFO("immedeate return due to small delta %0.1f\n", delta);
+        return 0;
+    }
 
     // enable both front and read proximity sensors
     proximity_enable(0);   // front
     proximity_enable(1);   // rear
 
-    // start motors
-    if (mc_set_speed_all(left_mtr_speed, right_mtr_speed) < 0) {
-        ERROR("failed to set mtr speeds to %d %d\n", left_mtr_speed, right_mtr_speed);
+    // if the delta rotation needed is small then rotate away
+    // from desired_heading to provide a larger delta, to improve accuracy
+#if 1
+    if (fabs(delta) < 30 && disable_sdr == false) {
+        double tmp_hdg = sanitize_heading( (delta > 0 ? desired_heading - 30 : desired_heading + 30), 0 );
+        INFO("small delta %0.1f, rotating from current %0.1f to tmp_hdg %0.1f\n",
+             delta, current_heading, tmp_hdg);
+        if (drive_rotate_to_heading(tmp_hdg, 0, true) < 0) {
+            ERROR("small delta rotate failed\n");
+            return -1;
+        }
+    }
+#else
+    if (fabs(delta) < 30) {
+        left_mtr_start_mph  = (delta > 0 ? -0.5 : 0.5);
+        right_mtr_start_mph = -left_mtr_start_mph;
+        lspeed = MTR_MPH_TO_SPEED(left_mtr_start_mph);
+        rspeed = MTR_MPH_TO_SPEED(right_mtr_start_mph);
+        if (mc_set_speed_all(lspeed, rspeed) < 0) {
+            return -1;
+        }
+        for (ms = 0; ms < 500; ms++) {
+            if (EMER_STOP_OCCURRED) {
+                ERROR("EMER_STOP_OCCURRED\n");
+                return -1;
+            }
+            usleep(1000);  // 1 ms
+        }
+        if (stop_motors(STOP_MOTORS_PRINT_NONE) < 0) {
+            return -1;
+        }
+    }
+#endif
+
+    // determine the left and right mtr mph
+    clockwise = (delta > 0);
+    left_mtr_start_mph  = (clockwise ? 0.5 : -0.5);
+    right_mtr_start_mph = -left_mtr_start_mph;
+    left_mtr_mph        = (clockwise ? 0.3 : -0.3);
+    right_mtr_mph       = -left_mtr_mph;
+
+    // start motors using boost speed, and delay 200 ms
+    lspeed = MTR_MPH_TO_SPEED(left_mtr_start_mph);
+    rspeed = MTR_MPH_TO_SPEED(right_mtr_start_mph);
+    if (mc_set_speed_all(lspeed, rspeed) < 0) {
+        ERROR("failed to set mtr speeds to %d %d\n", lspeed, rspeed);
+        return -1;
+    }
+    usleep(200000);  // 200 ms
+
+    // slow down motors
+    lspeed = MTR_MPH_TO_SPEED(left_mtr_mph);
+    rspeed = MTR_MPH_TO_SPEED(right_mtr_mph);
+    if (mc_set_speed_all(lspeed, rspeed) < 0) {
+        ERROR("failed to set mtr speeds to %d %d\n", lspeed, rspeed);
         return -1;
     }
 
     // wait for rotation to complete
-    int ms = 0;
+    ms = 0;
     while (true) {
         // check if the emer_stop_thread shut down the motors
         if (EMER_STOP_OCCURRED) {
@@ -255,26 +307,17 @@ int drive_rotate_to_heading(double desired_heading, double fudge)
             return -1;
         }
 
-
         // check if rotation to heading has completed
         current_heading = imu_get_magnetometer();
-        delta = current_heading - desired_heading;
-        delta = (delta < -180 ? delta+360 : delta >= 180 ? delta-360 : delta);
-
-        if (ms >= 200  && fabs(delta) < 30) {
-            INFO("SLOW DOWN\n");
-            mc_set_speed_all(left_mtr_speed/2, right_mtr_speed/2);
+        delta = sanitize_heading(desired_heading - current_heading, -180);
+        if ((ms % 1000) == 0) {
+            INFO("current %0.1f deg   delta %0.1f\n", current_heading, delta);
         }
-
-        INFO("XXX CURRENT HEADING  %0.1f   DELTA %0.1f\n", current_heading, delta);
         if (clockwise) {
-            if (delta + fudge > 0) break;
+            if (delta < fudge) break;
         } else {
-            if (delta - fudge < 0) break;
+            if (delta > -fudge) break;
         }
-
-        // motor speed compensation ...
-        // xxx tbd
 
         // sleep for 1 ms
         usleep(1000);
@@ -288,8 +331,7 @@ int drive_rotate_to_heading(double desired_heading, double fudge)
 
     // print result
     current_heading = imu_get_magnetometer();
-    delta = current_heading - desired_heading;
-    delta = (delta < -180 ? delta+360 : delta >= 180 ? delta-360 : delta);
+    delta = sanitize_heading(current_heading - desired_heading, -180);
     INFO("done: desired = %0.1f  current = %0.1f  deviation = %0.1f\n",
          desired_heading, current_heading, delta);
 
@@ -340,7 +382,7 @@ int drive_straight(double desired_feet, double mph, int *avg_lspeed_arg, int *av
             ERROR("failed to set boost mtr speeds to %d %d\n", lspeed, rspeed);
             return -1;
         }
-        usleep(200000);
+        usleep(200000);  // 200 ms
     }
 
     // get left and right mtr speeds from mph, and
@@ -384,7 +426,7 @@ int drive_straight(double desired_feet, double mph, int *avg_lspeed_arg, int *av
         }
 
         // sleep for 1 ms
-        usleep(1000);
+        usleep(1000);  // 1 ms
         ms += 1;
     }
 
@@ -534,7 +576,14 @@ static void *drive_thread(void *cx)
             usleep(10000);  // 10 ms
         }
 
-        // enable motor-ctlr and sensors
+        // reset encoders, and imu rotatation
+        encoder_count_reset(0);
+        encoder_count_reset(1);
+        imu_reset_rotation();
+
+        // enable motor-ctlr and sensors (except proximity is left disabled),
+        // enable emer_stop_thread, and
+        // wait for 15 ms to allow time for the enables to take affect
         if (mc_enable_all() < 0) {
             drive_proc_msg = NULL;
             continue;
@@ -544,24 +593,15 @@ static void *drive_thread(void *cx)
         proximity_disable(0);
         proximity_disable(1);
         imu_set_accel_rot_ctrl(true);
-        // XXX wait for these all to enable
-
-        // reset encoders, and imu rotatation
-        encoder_count_reset(0);
-        encoder_count_reset(1);
-        imu_reset_rotation();
-
-        // enable emer_stop_thread
-        // xxx delay or ack it is running
         emer_stop_thread_state = EMER_STOP_THREAD_ENABLED;
+        usleep(15000);  // 15 ms
 
         // call the drive proc
         drive_proc(drive_proc_msg);
 
-        // disable emer_stop_thread
-        emer_stop_thread_state = EMER_STOP_THREAD_DISABLED;
-
+        // disable emer_stop_thread, and
         // disable motor-ctlr and sensors
+        emer_stop_thread_state = EMER_STOP_THREAD_DISABLED;
         mc_disable_all();
         encoder_disable(0);
         encoder_disable(1);
@@ -639,7 +679,7 @@ emer_stopped:
 
         for (int id = 0; id < 2; id++) {
             double enc_mph = ENC_SPEED_TO_MPH(encoder_get_speed(id));
-            double mtr_mph = MTR_SPEED_TO_MPH(mcs->target_speed[id]);  // xxx or use drive cal
+            double mtr_mph = MTR_SPEED_TO_MPH(mcs->target_speed[id]);  // XXX or use drive cal
             if ((mtr_mph >= 0 && enc_mph < mtr_mph / 2) ||
                 (mtr_mph <  0 && enc_mph > mtr_mph / 2))
             {
@@ -656,7 +696,7 @@ emer_stopped:
             }
         }
 
-        usleep(10000);  // 10 ms
+        usleep(1000);  // 1 ms
     }
 
     return NULL;

@@ -247,7 +247,7 @@ static void * accel_rot_thread(void *cx)
         // if accel/rotation monitoring is not enabled then delay and continue,
         // skipping the processing that follows
         if (!accel_rot_enabled) {
-            usleep(10000);
+            usleep(10000);  // 10 ms
             continue;
         }
 
@@ -258,8 +258,8 @@ static void * accel_rot_thread(void *cx)
         process_raw_accel_values(ax, ay, az);
         process_raw_rot_values(rx, ry, rz);
 
-        // sleep 5 ms
-        usleep(5000);
+        // sleep 1 ms
+        usleep(1000);  // 1 ms
     }
 
     return NULL;

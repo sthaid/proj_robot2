@@ -127,7 +127,7 @@ static void *button_thread(void *cx)
         }
 
         // sleep for 10 ms
-        usleep(10000);
+        usleep(10000);  // 10 ms
     }
 
     return NULL;

@@ -163,7 +163,7 @@ static void *proximity_thread(void *cx)
             poll_rate = 0;
             t_last = timer_get();;
             poll_count = 0;
-            usleep(10000);
+            usleep(10000);  // 10 ms
             continue;
         }
 
@@ -198,7 +198,7 @@ static void *proximity_thread(void *cx)
         }
 
         // sleep for 100 us
-        usleep(100);
+        usleep(100);  // 100 us
     }
 
     return NULL;

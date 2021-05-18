@@ -27,7 +27,7 @@ int drive_proc(struct msg_drive_proc_s *dpm)
     case 5: {
         double heading = GET_ARG(0, 0);
         double fudge   = GET_ARG(1, 0);
-        STEP(drive_rotate_to_heading(heading, fudge));
+        STEP(drive_rotate_to_heading(heading, fudge, false));
         break; }
     case 11: {
         double mph;
@@ -41,6 +41,13 @@ int drive_proc(struct msg_drive_proc_s *dpm)
         STEP(drive_rotate(180, 0));
         STEP(drive_fwd(5, 0.6));
         STEP(drive_rotate(180, 0));
+        break; }
+    case 13: {
+        STEP(drive_rotate_to_heading(156, 0, false));
+        STEP(drive_fwd(5, 0.6));
+        STEP(drive_rotate_to_heading(156+180, 0, false));
+        STEP(drive_fwd(5, 0.6));
+        STEP(drive_rotate_to_heading(156, 0, false));
         break; }
     default:
         ERROR("invalid proc_id %d\n", dpm->proc_id);
