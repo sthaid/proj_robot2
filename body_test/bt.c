@@ -500,9 +500,18 @@ static void update_display(int maxy, int maxx)
         char *str = logmsg_strs[idx%MAX_LOGMSG_STRS];
         bool is_error_str = (strstr(str, "ERROR") != NULL);
         bool is_warn_str = (strstr(str, "WARN") != NULL);
-        if (is_error_str || is_warn_str) attron(COLOR_PAIR(COLOR_PAIR_RED));
+        bool is_body_test_str = (strstr(str, "BODY_TEST") != NULL);
+        if (is_error_str || is_warn_str) {
+	    attron(COLOR_PAIR(COLOR_PAIR_RED));
+	} else if (is_body_test_str) {
+	    attron(COLOR_PAIR(COLOR_PAIR_CYAN));
+	}
         mvprintw(19+i, 0, "%s", str);
-        if (is_error_str || is_warn_str) attroff(COLOR_PAIR(COLOR_PAIR_RED));
+        if (is_error_str || is_warn_str) {
+	    attroff(COLOR_PAIR(COLOR_PAIR_RED));
+	} else if (is_body_test_str) {
+	    attroff(COLOR_PAIR(COLOR_PAIR_CYAN));
+	}
     }
 
     // display cmdline
@@ -535,22 +544,25 @@ static int input_handler(int input_char)
 
 static int process_cmdline(void)
 {
-    int    cnt;
     double arg[4];
     char   cmd[100];
-    int    proc_id;
+    int    proc_id = 0;
+
+    static char last_cmdline[100];
+
+    if (strcmp(cmdline, "r") == 0) {
+	strcpy(cmdline, last_cmdline);
+    }
 
     cmd[0] = '\0';
     memset(arg, 0, sizeof(arg));
-    cnt = sscanf(cmdline, "%s %lf %lf %lf %lf", cmd, &arg[0], &arg[1], &arg[2], &arg[3]); 
-    if (cnt == 0 || cmd[0] == '\0') {
+    sscanf(cmdline, "%s %lf %lf %lf %lf", cmd, &arg[0], &arg[1], &arg[2], &arg[3]); 
+    if (cmd[0] == '\0') {
 	blank_line();
         return 0;
     }
 
-    proc_id = 0;
-
-    info("cmd: %s", cmdline);
+    info("CMD: %s", cmdline);
 
     if (strcmp(cmd, "q") == 0) {
         return -1;  // terminate pgm
@@ -565,7 +577,8 @@ static int process_cmdline(void)
                 (strcmp(cmd, "rot")  == 0 && (proc_id = 4))  ||
                 (strcmp(cmd, "hdg")  == 0 && (proc_id = 5))  ||
                 (strcmp(cmd, "tst1") == 0 && (proc_id = 11)) ||
-                (strcmp(cmd, "tst2") == 0 && (proc_id = 12))
+                (strcmp(cmd, "tst2") == 0 && (proc_id = 12)) ||
+                (strcmp(cmd, "tst3") == 0 && (proc_id = 13))
                         )
     {
         struct msg_drive_proc_s x = { proc_id, {arg[0], arg[1], arg[2], arg[3]} };
@@ -573,6 +586,8 @@ static int process_cmdline(void)
     } else {
         error("invalid cmd: %s", cmdline);
     }
+
+    strcpy(last_cmdline, cmdline);
 
     return 0;
 }
