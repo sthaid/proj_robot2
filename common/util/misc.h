@@ -130,6 +130,7 @@ typedef struct {
 } interp_point_t;
 
 double interpolate(interp_point_t *p, int n, double x);
+double sanitize_heading(double hdg, double base);
 
 #ifdef __cplusplus
 }

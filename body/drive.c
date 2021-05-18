@@ -187,27 +187,6 @@ int drive_rotate(double desired_degrees, double fudge)
     return 0;
 }
 
-// xxx move
-static double sanitize_heading(double hdg, double base)
-{
-    if (base != 0 && base != -180) {
-        FATAL("bug, invalid base %0.1f\n", base);
-        return 0;
-    }
-
-    if (hdg >= base && hdg < base + 360) {
-        // already okay
-    } else {
-        while (hdg < base) {
-            hdg += 360;
-        }
-        while (hdg >= base + 360) {
-            hdg -= 360;
-        }
-    }
-    return hdg;
-}
-
 int drive_rotate_to_heading(double desired_heading, double fudge, bool disable_sdr)
 {
     double current_heading, delta;
@@ -216,7 +195,7 @@ int drive_rotate_to_heading(double desired_heading, double fudge, bool disable_s
     int    ms, lspeed, rspeed;
     bool   clockwise;
 
-    // XXX fudge
+    // if caller has not supplied fudge factor then use builtin value
     if (fudge == 0) {
         fudge = 8;
     }
@@ -242,7 +221,6 @@ int drive_rotate_to_heading(double desired_heading, double fudge, bool disable_s
 
     // if the delta rotation needed is small then rotate away
     // from desired_heading to provide a larger delta, to improve accuracy
-#if 1
     if (fabs(delta) < 30 && disable_sdr == false) {
         double tmp_hdg = sanitize_heading( (delta > 0 ? desired_heading - 30 : desired_heading + 30), 0 );
         INFO("small delta %0.1f, rotating from current %0.1f to tmp_hdg %0.1f\n",
@@ -252,27 +230,6 @@ int drive_rotate_to_heading(double desired_heading, double fudge, bool disable_s
             return -1;
         }
     }
-#else
-    if (fabs(delta) < 30) {
-        left_mtr_start_mph  = (delta > 0 ? -0.5 : 0.5);
-        right_mtr_start_mph = -left_mtr_start_mph;
-        lspeed = MTR_MPH_TO_SPEED(left_mtr_start_mph);
-        rspeed = MTR_MPH_TO_SPEED(right_mtr_start_mph);
-        if (mc_set_speed_all(lspeed, rspeed) < 0) {
-            return -1;
-        }
-        for (ms = 0; ms < 500; ms++) {
-            if (EMER_STOP_OCCURRED) {
-                ERROR("EMER_STOP_OCCURRED\n");
-                return -1;
-            }
-            usleep(1000);  // 1 ms
-        }
-        if (stop_motors(STOP_MOTORS_PRINT_NONE) < 0) {
-            return -1;
-        }
-    }
-#endif
 
     // determine the left and right mtr mph
     clockwise = (delta > 0);

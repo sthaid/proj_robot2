@@ -324,3 +324,23 @@ double interpolate(interp_point_t *p, int n, double x)
     return 0;
 }
 
+double sanitize_heading(double hdg, double base)
+{
+    if (base != 0 && base != -180) {
+        FATAL("bug, invalid base %0.1f\n", base);
+        return 0;
+    }
+
+    if (hdg >= base && hdg < base + 360) {
+        // already okay
+    } else {
+        while (hdg < base) {
+            hdg += 360;
+        }
+        while (hdg >= base + 360) {
+            hdg -= 360;
+        }
+    }
+    return hdg;
+}
+
