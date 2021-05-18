@@ -99,42 +99,6 @@ int drive_rev(double feet, double mph)
     return drive_straight(feet, -mph, NULL, NULL);
 }
 
-// XXX move to misc
-typedef struct {
-    double x;
-    double y;
-} interp_point_t;
-
-double interp(interp_point_t *p, int n, double x)
-{
-    if (x < p[0].x) {
-        return p[0].y;
-    }
-    if (x > p[n-1].x) {
-        return p[n-1].y;
-    }
-
-    for (int i = 0; i < n-1; i++) {
-        double min_x = p[i].x;
-        double max_x = p[i+1].x;
-        double min_y = p[i].y;
-        double max_y = p[i+1].y;
-        double interp_y;
-
-        if (x >= min_x && x <= max_x) {
-            //                      (x - min_x)
-            // interp_y = min_y + --------------- * (max_y - min_y)
-            //                    (max_x - min_x)
-            interp_y = min_y + ((x - min_x) / (max_x - min_x)) * (max_y - min_y);
-            return interp_y;
-        }
-    }
-
-    FATAL("bug\n");
-    return 0;
-}
-
-// XXX later
 int drive_rotate(double desired_degrees, double fudge)
 {
     double left_mtr_start_mph  = (desired_degrees > 0 ? 0.5 : -0.5);
@@ -146,7 +110,7 @@ int drive_rotate(double desired_degrees, double fudge)
 
     INFO("desired_degrees = %0.1f  fudge = %0.1f\n", desired_degrees, fudge);
 
-    // if caller has not supplied fudge then use builtin value
+    // if caller has not supplied fudge factor then use builtin value
     if (fudge == 0) {
         static interp_point_t fudge_points[] = {
                 { 15,   3.2  },
@@ -155,7 +119,7 @@ int drive_rotate(double desired_degrees, double fudge)
                 { 180,  1.5  },
                 { 270,  0.75 },
                 { 360,  0.0  }, };
-        fudge = interp(fudge_points, sizeof(fudge_points)/sizeof(interp_point_t), fabs(desired_degrees));
+        fudge = interpolate(fudge_points, sizeof(fudge_points)/sizeof(interp_point_t), fabs(desired_degrees));
         INFO("XXX fudge = %0.2f\n", fudge);
     }
 
@@ -579,7 +543,7 @@ static void *drive_thread(void *cx)
         // XXX delay or ack it is running
         emer_stop_thread_state = EMER_STOP_THREAD_ENABLED;
 
-        usleep(100000);//xxx
+        usleep(100000);//XXX
 
         // call the drive proc
         drive_proc(drive_proc_msg);
