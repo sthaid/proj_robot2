@@ -412,6 +412,22 @@ int drive_straight(double desired_feet, double mph, int *avg_lspeed_arg, int *av
     return 0;
 }
 
+// XXX needs work
+int drive_mag_cal(void)
+{
+    // enable magnetometer calibration
+    imu_set_mag_cal_ctrl(MAG_CAL_CTRL_ENABLED);
+
+    // rotate 10 times
+//xxx check rc
+    drive_rotate(10 * 360, 0);
+
+    // disable magnetometer calibration, and save calibration file
+    imu_set_mag_cal_ctrl(MAG_CAL_CTRL_DISABLED_SAVE);
+
+    return 0;
+}
+
 static int stop_motors(int print)
 {
     uint64_t start_us;

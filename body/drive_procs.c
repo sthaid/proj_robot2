@@ -6,8 +6,11 @@
 int drive_proc(struct msg_drive_proc_s *dpm)
 {
     switch (dpm->proc_id) {
+    case 99: {
+        STEP(drive_mag_cal());  // xxx 99
+        break; }
     case 1: {
-        if (drive_cal_proc() < 0) return -1;
+        STEP(drive_cal_proc());
         break; }
     case 2: {
         double feet = GET_ARG(0, 5.0);
@@ -43,6 +46,7 @@ int drive_proc(struct msg_drive_proc_s *dpm)
         STEP(drive_rotate(180, 0));
         break; }
     case 13: {
+        // XXX instead start at current hdg
         STEP(drive_rotate_to_heading(156, 0, false));
         STEP(drive_fwd(5, 0.6));
         STEP(drive_rotate_to_heading(156+180, 0, false));

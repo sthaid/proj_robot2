@@ -71,6 +71,8 @@ int drive_rev(double feet, double mph);
 int drive_straight(double feet, double mph, int *avg_lspeed, int *avg_rspeed);
 int drive_rotate(double degrees, double fudge);
 int drive_rotate_to_heading(double heading, double fudge, bool disable_sdr);
+int drive_mag_cal(void);
+
 
 // drive_procs.c
 int drive_proc(struct msg_drive_proc_s *dpm);
