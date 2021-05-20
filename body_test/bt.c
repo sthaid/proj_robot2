@@ -571,14 +571,16 @@ static int process_cmdline(void)
         send_msg(MSG_ID_MC_DEBUG_CTL, &x, sizeof(x));
     } else if (strcmp(cmd, "log_mark") == 0) {
         send_msg(MSG_ID_LOG_MARK, NULL, 0);
-    } else if ( (strcmp(cmd, "cal")  == 0 && (proc_id = 1))  ||
-                (strcmp(cmd, "fwd")  == 0 && (proc_id = 2))  ||
-                (strcmp(cmd, "rev")  == 0 && (proc_id = 3))  ||
-                (strcmp(cmd, "rot")  == 0 && (proc_id = 4))  ||
-                (strcmp(cmd, "hdg")  == 0 && (proc_id = 5))  ||
-                (strcmp(cmd, "tst1") == 0 && (proc_id = 11)) ||
-                (strcmp(cmd, "tst2") == 0 && (proc_id = 12)) ||
-                (strcmp(cmd, "tst3") == 0 && (proc_id = 13))
+    } else if ( (strcmp(cmd, "cal")   == 0 && (proc_id = 1))  ||
+                (strcmp(cmd, "mcal")  == 0 && (proc_id = 2))  ||
+                (strcmp(cmd, "fwd")   == 0 && (proc_id = 5))  ||
+                (strcmp(cmd, "rev")   == 0 && (proc_id = 6))  ||
+                (strcmp(cmd, "rot")   == 0 && (proc_id = 7))  ||
+                (strcmp(cmd, "hdg")   == 0 && (proc_id = 8))  ||
+                (strcmp(cmd, "rad")   == 0 && (proc_id = 9))  ||
+                (strcmp(cmd, "tst21") == 0 && (proc_id = 21)) ||
+                (strcmp(cmd, "tst22") == 0 && (proc_id = 22)) ||
+                (strcmp(cmd, "tst23") == 0 && (proc_id = 23)) 
                         )
     {
         struct msg_drive_proc_s x = { proc_id, {arg[0], arg[1], arg[2], arg[3]} };
