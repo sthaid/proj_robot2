@@ -353,17 +353,32 @@ int drive_radius(double desired_degrees, double radius_feet, double fudge)
 
     // if caller has not supplied fudge factor then use builtin value
     if (fudge == 0) {
-#if 0  // XXX
-        static interp_point_t fudge_points[] = {
-                { 15,   3.2  },
-                { 30,   3.0  },
-                { 90,   2.5  },
-                { 180,  1.5  },
-                { 270,  0.75 },
+        static interp_point_t fudge_points_radius_0[] = {  // r = 0 ft
+                { 45,   5.0  },
+                { 90,   4.0  },
+                { 180,  3.0  },
                 { 360,  0.0  }, };
-        fudge = interpolate(fudge_points, sizeof(fudge_points)/sizeof(interp_point_t), fabs(desired_degrees));
+        static interp_point_t fudge_points_radius_1_0[] = {  // r = 1.0 ft
+                { 45,   4.0  },
+                { 90,   3.5  },
+                { 180,  3.0  },
+                { 360,  0.0  }, };
+        static interp_point_t fudge_points_radius_1_5[] = {  // r = 1.5 ft
+                { 45,   2.5  },
+                { 90,   2.5  },
+                { 180,  3.0  },
+                { 360,  0.0  }, };
+        interp_point_t * fudge_points;
+
+        if (radius_feet == 0) {
+            fudge_points = fudge_points_radius_0;
+        } else if (radius_feet < 1.25) {
+            fudge_points = fudge_points_radius_1_0;
+        } else {
+            fudge_points = fudge_points_radius_1_5;
+        }
+        fudge = interpolate(fudge_points, 4, fabs(desired_degrees));
         INFO("builtin fudge = %0.2f\n", fudge);
-#endif
     }
 
     // determine speed of motors based on radius, with the following criteria:
