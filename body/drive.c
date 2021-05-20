@@ -1,7 +1,4 @@
-// XXX comments
-// XXX drive_turn  or drive_radious
-// XXX test 23
-// XXX disable prox sensors when rotating to heading or just rotating
+// xxx comments
 
 #include "common.h"
 
@@ -31,7 +28,16 @@ static int                       emer_stop_thread_state;
 //
 
 static int stop_motors(int print);
-static int mtr_speed_compensation(bool init, double rotation_target);
+
+static int drive_straight(double desired_feet, double mph, int *avg_lspeed_arg, int *avg_rspeed_arg);
+static int drive_straight_mtr_speed_comp(bool init, double rotation_target);
+
+static void drive_straight_cal_cvt_mph_to_mtr_speeds(double mph, int *lspeed, int *rspeed);
+static int drive_straight_cal_file_read(void);
+static int drive_straight_cal_file_write(void);
+static void drive_straight_cal_tbl_print(void);
+static int drive_straight_cal_proc(void);
+static void drive_straight_cal_tbl_init_default(void);
 
 static void *drive_thread(void *cx);
 static void *emer_stop_thread(void *cx);
@@ -50,12 +56,12 @@ int drive_init(void)
     mc_set_accel(MC_ACCEL, MC_ACCEL);
     mc_debug_mode(true);  // xxx temp
 
-    // read the drive.cal file, and print
-    if (drive_cal_file_read() < 0) {
-        ERROR("drive_cal_file_read failed\n");
+    // read the drive_straight.cal file, and print
+    if (drive_straight_cal_file_read() < 0) {
+        ERROR("drive_straight_cal_file_read failed\n");
         return -1;
     }
-    drive_cal_tbl_print();
+    drive_straight_cal_tbl_print();
 
     // create drive_thread and emer_stop_thread
     pthread_create(&tid, NULL, emer_stop_thread, NULL);
@@ -92,7 +98,10 @@ bool drive_emer_stop_occurred(void)
 
 // -----------------  ROUTINES CALLED FROM DRIVE_PROCS.C  -------------------
 
-// xxx drive_straight_cal
+int drive_straight_cal(void)
+{
+    return drive_straight_cal_proc();
+}
 
 int drive_mag_cal(void)
 {
@@ -149,15 +158,9 @@ int drive_rotate(double desired_degrees, double fudge)
         INFO("builtin fudge = %0.2f\n", fudge);
     }
 
-#if 0
-    // enable both front and read proximity sensors
-    proximity_enable(0);   // enable front
-    proximity_enable(1);   // enable rear
-#else
-    // disable both front and read proximity sensors
+    // disable both front and read proximity sensors when rotating
     proximity_disable(0);   // disable front
     proximity_disable(1);   // disable rear
-#endif
 
     // get imu rotation value prior to starting motors
     start_degrees = imu_get_rotation();
@@ -244,15 +247,9 @@ int drive_rotate_to_heading(double desired_heading, double fudge, bool disable_s
         return 0;
     }
 
-#if 0
-    // enable both front and read proximity sensors
-    proximity_enable(0);   // front
-    proximity_enable(1);   // rear
-#else
-    // disable both front and read proximity sensors
+    // disable both front and read proximity sensors when rotating
     proximity_disable(0);   // disable front
     proximity_disable(1);   // disable rear
-#endif
 
     // if the delta rotation needed is small then rotate away
     // from desired_heading to provide a larger delta, to improve accuracy
@@ -356,7 +353,7 @@ int drive_radius(double desired_degrees, double radius_feet, double fudge)
 
     // if caller has not supplied fudge factor then use builtin value
     if (fudge == 0) {
-#if 1  // xxx
+#if 1  // XXX
         static interp_point_t fudge_points[] = {
                 { 15,   3.2  },
                 { 30,   3.0  },
@@ -370,7 +367,7 @@ int drive_radius(double desired_degrees, double radius_feet, double fudge)
     }
 
     // determine motor speeds based on radius
-
+    // XXX comments
     if (radius_feet == 0) {
         mtr_a_mph = 0.5;
         mtr_b_mph = 0;
@@ -466,126 +463,6 @@ int drive_radius(double desired_degrees, double radius_feet, double fudge)
     return 0;
 }
 
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
-// xxx make subsection for drive_straight 
-
-// xxx when drive_cal is here this can be static
-int drive_straight(double desired_feet, double mph, int *avg_lspeed_arg, int *avg_rspeed_arg)
-{
-    int lspeed, rspeed;
-    double actual_feet, initial_degrees, rot_degrees;
-    int initial_left_enc_count, initial_right_enc_count;
-    int avg_lspeed_sum=0, avg_rspeed_sum=0, avg_speed_cnt=0, avg_lspeed, avg_rspeed;
-
-    #define BOOST_MPH  0.5
-
-    INFO("desired_feet = %0.1f  mph = %0.1f\n", desired_feet, mph);
-
-    // preset avg mtr speed return values
-    if (avg_lspeed_arg) *avg_lspeed_arg = 0;
-    if (avg_rspeed_arg) *avg_rspeed_arg = 0;
-
-    // if mph is zero then return
-    if (mph == 0) {
-        INFO("return because mph equals 0\n");
-        return 0;
-    }
-
-    // get initial rotation and enc counts
-    initial_degrees         = imu_get_rotation();
-    initial_left_enc_count  = encoder_get_count(0);
-    initial_right_enc_count = encoder_get_count(1);
-
-    // if moving fwd then enable front prox sensor, else enable rear
-    if (mph > 0) {
-        proximity_enable(0);    // enable front
-        proximity_disable(1);   // disable rear
-    } else {
-        proximity_disable(0);   // disable front
-        proximity_enable(1);    // enable rear
-    }
-
-    // if mph is too low for starting then set mtr speeds for BOOST_MPH mph for 200 ms
-    if (fabs(mph) < BOOST_MPH) {
-        drive_cal_cvt_mph_to_mtr_speeds(mph > 0 ? BOOST_MPH : -BOOST_MPH, &lspeed, &rspeed);
-        INFO("boot start - setting mtr speeds = %d %d\n", lspeed, rspeed);
-        if (mc_set_speed_all(lspeed, rspeed) < 0) {
-            ERROR("failed to set boost mtr speeds to %d %d\n", lspeed, rspeed);
-            return -1;
-        }
-        usleep(200000);  // 200 ms
-    }
-
-    // get left and right mtr speeds from mph, and
-    // set mtr speeds
-    drive_cal_cvt_mph_to_mtr_speeds(mph, &lspeed, &rspeed);
-    INFO("setting mtr speeds = %d %d\n", lspeed, rspeed);
-    if (mc_set_speed_all(lspeed, rspeed) < 0) {
-        ERROR("failed to set boost mtr speeds to %d %d\n", lspeed, rspeed);
-        return -1;
-    }
-
-    // wait for distance_travelled to meet requested distance
-    int ms = 0;
-    while (true) {
-        // check if the emer_stop_thread shut down the motors
-        if (EMER_STOP_OCCURRED) {
-            ERROR("EMER_STOP_OCCURRED\n");
-            return -1;
-        }
-
-        // check for distance travelled completed
-        actual_feet = ( ENC_COUNT_TO_FEET(encoder_get_count(0) - initial_left_enc_count) + 
-                        ENC_COUNT_TO_FEET(encoder_get_count(1) - initial_right_enc_count) ) / 2;
-        if (fabs(actual_feet) >= desired_feet) {
-            break;
-        }
-
-        // perform motor speed compensation, and
-        // maintain sums for calculation of avg mtr speeds
-        if ((ms % 100) == 0) {
-            int adj = mtr_speed_compensation(ms==0, initial_degrees);
-            if (adj) {
-                lspeed += adj;
-                //INFO("*** adjusting left_mtr_speed by %d  new=%d\n", adj, lspeed);
-                mc_set_speed(0, lspeed);
-            }
-
-            avg_lspeed_sum += lspeed;
-            avg_rspeed_sum += rspeed;
-            avg_speed_cnt++;
-        }
-
-        // sleep for 1 ms
-        usleep(1000);  // 1 ms
-        ms += 1;
-    }
-
-    // stop motors
-    if (stop_motors(STOP_MOTORS_PRINT_DISTANCE) < 0) {
-        return -1;
-    }
-
-    // calculate the avg speeds, and return the values if caller desires
-    avg_lspeed = (avg_speed_cnt ? avg_lspeed_sum / avg_speed_cnt : 0);
-    avg_rspeed = (avg_speed_cnt ? avg_rspeed_sum / avg_speed_cnt : 0);
-    if (avg_lspeed_arg) *avg_lspeed_arg = avg_lspeed;
-    if (avg_rspeed_arg) *avg_rspeed_arg = avg_rspeed;
-
-    // print results
-    actual_feet = ( ENC_COUNT_TO_FEET(encoder_get_count(0) - initial_left_enc_count) + 
-                    ENC_COUNT_TO_FEET(encoder_get_count(1) - initial_right_enc_count) ) / 2;
-    rot_degrees = imu_get_rotation() - initial_degrees;
-    INFO("done: desired_feet = %0.1f  actual_feet = %0.1f  delta_feet = %0.1f  rot = %0.1f\n",
-         desired_feet, actual_feet, desired_feet-actual_feet, rot_degrees);
-    INFO("      average mtr speeds = %d %d\n", avg_lspeed, avg_rspeed);
-    INFO("      actual  mtr speeds = %d %d\n", lspeed, rspeed);
-    INFO("      delta   mtr speeds = %d %d\n", avg_lspeed-lspeed, avg_rspeed-rspeed);
-
-    // success
-    return 0;
-}
-
 static int stop_motors(int print)
 {
     uint64_t start_us;
@@ -639,10 +516,127 @@ static int stop_motors(int print)
     return 0;
 }
 
+// -----------------  DRIVE STRAIGHT SUPPORT  -------------------------------
+
+static int drive_straight(double desired_feet, double mph, int *avg_lspeed_arg, int *avg_rspeed_arg)
+{
+    int lspeed, rspeed;
+    double actual_feet, initial_degrees, rot_degrees;
+    int initial_left_enc_count, initial_right_enc_count;
+    int avg_lspeed_sum=0, avg_rspeed_sum=0, avg_speed_cnt=0, avg_lspeed, avg_rspeed;
+
+    #define BOOST_MPH  0.5
+
+    INFO("desired_feet = %0.1f  mph = %0.1f\n", desired_feet, mph);
+
+    // preset avg mtr speed return values
+    if (avg_lspeed_arg) *avg_lspeed_arg = 0;
+    if (avg_rspeed_arg) *avg_rspeed_arg = 0;
+
+    // if mph is zero then return
+    if (mph == 0) {
+        INFO("return because mph equals 0\n");
+        return 0;
+    }
+
+    // get initial rotation and enc counts
+    initial_degrees         = imu_get_rotation();
+    initial_left_enc_count  = encoder_get_count(0);
+    initial_right_enc_count = encoder_get_count(1);
+
+    // if moving fwd then enable front prox sensor, else enable rear
+    if (mph > 0) {
+        proximity_enable(0);    // enable front
+        proximity_disable(1);   // disable rear
+    } else {
+        proximity_disable(0);   // disable front
+        proximity_enable(1);    // enable rear
+    }
+
+    // if mph is too low for starting then set mtr speeds for BOOST_MPH mph for 200 ms
+    if (fabs(mph) < BOOST_MPH) {
+        drive_straight_cal_cvt_mph_to_mtr_speeds(mph > 0 ? BOOST_MPH : -BOOST_MPH, &lspeed, &rspeed);
+        INFO("boot start - setting mtr speeds = %d %d\n", lspeed, rspeed);
+        if (mc_set_speed_all(lspeed, rspeed) < 0) {
+            ERROR("failed to set boost mtr speeds to %d %d\n", lspeed, rspeed);
+            return -1;
+        }
+        usleep(200000);  // 200 ms
+    }
+
+    // get left and right mtr speeds from mph, and
+    // set mtr speeds
+    drive_straight_cal_cvt_mph_to_mtr_speeds(mph, &lspeed, &rspeed);
+    INFO("setting mtr speeds = %d %d\n", lspeed, rspeed);
+    if (mc_set_speed_all(lspeed, rspeed) < 0) {
+        ERROR("failed to set boost mtr speeds to %d %d\n", lspeed, rspeed);
+        return -1;
+    }
+
+    // wait for distance_travelled to meet requested distance
+    int ms = 0;
+    while (true) {
+        // check if the emer_stop_thread shut down the motors
+        if (EMER_STOP_OCCURRED) {
+            ERROR("EMER_STOP_OCCURRED\n");
+            return -1;
+        }
+
+        // check for distance travelled completed
+        actual_feet = ( ENC_COUNT_TO_FEET(encoder_get_count(0) - initial_left_enc_count) + 
+                        ENC_COUNT_TO_FEET(encoder_get_count(1) - initial_right_enc_count) ) / 2;
+        if (fabs(actual_feet) >= desired_feet) {
+            break;
+        }
+
+        // perform motor speed compensation, and
+        // maintain sums for calculation of avg mtr speeds
+        if ((ms % 100) == 0) {
+            int adj = drive_straight_mtr_speed_comp(ms==0, initial_degrees);
+            if (adj) {
+                lspeed += adj;
+                //INFO("*** adjusting left_mtr_speed by %d  new=%d\n", adj, lspeed);
+                mc_set_speed(0, lspeed);
+            }
+
+            avg_lspeed_sum += lspeed;
+            avg_rspeed_sum += rspeed;
+            avg_speed_cnt++;
+        }
+
+        // sleep for 1 ms
+        usleep(1000);  // 1 ms
+        ms += 1;
+    }
+
+    // stop motors
+    if (stop_motors(STOP_MOTORS_PRINT_DISTANCE) < 0) {
+        return -1;
+    }
+
+    // calculate the avg speeds, and return the values if caller desires
+    avg_lspeed = (avg_speed_cnt ? avg_lspeed_sum / avg_speed_cnt : 0);
+    avg_rspeed = (avg_speed_cnt ? avg_rspeed_sum / avg_speed_cnt : 0);
+    if (avg_lspeed_arg) *avg_lspeed_arg = avg_lspeed;
+    if (avg_rspeed_arg) *avg_rspeed_arg = avg_rspeed;
+
+    // print results
+    actual_feet = ( ENC_COUNT_TO_FEET(encoder_get_count(0) - initial_left_enc_count) + 
+                    ENC_COUNT_TO_FEET(encoder_get_count(1) - initial_right_enc_count) ) / 2;
+    rot_degrees = imu_get_rotation() - initial_degrees;
+    INFO("done: desired_feet = %0.1f  actual_feet = %0.1f  delta_feet = %0.1f  rot = %0.1f\n",
+         desired_feet, actual_feet, desired_feet-actual_feet, rot_degrees);
+    INFO("      average mtr speeds = %d %d\n", avg_lspeed, avg_rspeed);
+    INFO("      actual  mtr speeds = %d %d\n", lspeed, rspeed);
+    INFO("      delta   mtr speeds = %d %d\n", avg_lspeed-lspeed, avg_rspeed-rspeed);
+
+    // success
+    return 0;
+}
+
 // returns adjustment value that can be applied either
 // directly to the left mtr, or negated to the right mtr
-// xxx rename
-static int mtr_speed_compensation(bool init, double rotation_target)
+static int drive_straight_mtr_speed_comp(bool init, double rotation_target)
 {
     #define PREDICTION_INTERVAL_SECS  0.5
     #define TUNE  3.0
@@ -683,6 +677,193 @@ static int mtr_speed_compensation(bool init, double rotation_target)
     rotation_last = rotation_now;
 
     return compensation;
+}
+
+// - - - - - - - - -  DRIVE STRAIGHT SUPPORT - CALIBRATION   - - - - - -
+
+#define MAX_DRIVE_STRAIGHT_CAL_TBL   30
+#define DRIVE_STRAIGHT_CAL_FILENAME  "drive_straight.cal"
+
+static struct drive_straight_cal_s {
+    double mph;
+    int    lspeed;
+    int    rspeed;
+} drive_straight_cal_tbl[MAX_DRIVE_STRAIGHT_CAL_TBL];
+
+static void drive_straight_cal_cvt_mph_to_mtr_speeds(double mph, int *lspeed, int *rspeed)
+{
+    int idx, min_idx=-1;
+    double min_delta = 1000000;
+    double delta;
+
+    // loop over the drive_straight_cal_tbl and find the entry with mph nearest
+    // what caller is requesting
+    for (idx = 0; idx < MAX_DRIVE_STRAIGHT_CAL_TBL; idx++) {
+        struct drive_straight_cal_s *x = &drive_straight_cal_tbl[idx];
+        if (x->mph == 0) {
+            break;
+        }
+        delta = fabs(mph - x->mph);
+        if (delta < min_delta) {
+            min_delta = delta;
+            min_idx = idx;
+        }
+    }
+
+    // return the lspeed and rspeed
+    if (idx == -1) {
+        FATAL("bug\n");
+    }
+    *lspeed = drive_straight_cal_tbl[min_idx].lspeed;
+    *rspeed = drive_straight_cal_tbl[min_idx].rspeed;
+
+    // debug print result
+    INFO("requested mph = %0.1f  nearest_mph = %0.1f  l/rspeed = %d %d\n",
+         mph, drive_straight_cal_tbl[min_idx].mph, *lspeed, *rspeed);
+}
+
+static int drive_straight_cal_file_read(void)
+{
+    FILE *fp;
+    int idx=0;
+    char s[100];
+
+    fp = fopen(DRIVE_STRAIGHT_CAL_FILENAME, "r");
+    if (fp == NULL) {
+        WARN("failed to open %s, using default drive_straight_cal_tbl, %s\n", 
+             DRIVE_STRAIGHT_CAL_FILENAME, strerror(errno));
+        drive_straight_cal_tbl_init_default();
+        return 0;
+    }
+    while (fgets(s, sizeof(s), fp)) {
+        if (idx == MAX_DRIVE_STRAIGHT_CAL_TBL) {
+            ERROR("too man entries in %s\n", DRIVE_STRAIGHT_CAL_FILENAME);
+            return -1;
+        }
+
+        struct drive_straight_cal_s *x = &drive_straight_cal_tbl[idx];
+        if (sscanf(s, "%lf %d %d", &x->mph, &x->lspeed, &x->rspeed)!= 3) {
+            ERROR("invalid line: %s\n", s);
+            return -1;
+        }
+        idx++;
+    }
+    fclose(fp);
+
+    return 0;
+}
+
+static int drive_straight_cal_file_write(void)
+{
+    FILE *fp;
+    int idx;
+
+    fp = fopen(DRIVE_STRAIGHT_CAL_FILENAME, "w");
+    if (fp == NULL) {
+        ERROR("failed to open %s for writing, %s\n", 
+              DRIVE_STRAIGHT_CAL_FILENAME, strerror(errno));
+        return -1;
+    }
+    for (idx = 0; idx < MAX_DRIVE_STRAIGHT_CAL_TBL; idx++) {
+        struct drive_straight_cal_s *x = &drive_straight_cal_tbl[idx];
+        if (x->mph == 0) {
+            break;
+        }
+        fprintf(fp, "%4.1f %5d %5d\n", x->mph, x->lspeed, x->rspeed);
+    }
+    fclose(fp);
+
+    return 0;
+}
+
+static void drive_straight_cal_tbl_print(void)
+{
+    int idx;
+
+    INFO(" MPH LSPEED RSPEED\n");
+    INFO(" --- ------ ------\n");
+    for (idx = 0; idx < MAX_DRIVE_STRAIGHT_CAL_TBL; idx++) {
+        struct drive_straight_cal_s *x = &drive_straight_cal_tbl[idx];
+        if (x->mph == 0) {
+            break;
+        }
+        INFO("%4.1f %6d %6d\n", x->mph, x->lspeed, x->rspeed);
+    }
+}
+
+static int drive_straight_cal_proc(void)
+{
+    int idx, lspeed, rspeed;
+    struct drive_straight_cal_s new_drive_straight_cal_tbl[MAX_DRIVE_STRAIGHT_CAL_TBL];
+
+    // xxx try cal over longer distance
+    #define CAL_FEET 5
+
+    // make copy of drive_straight_cal_tbl
+    memcpy(new_drive_straight_cal_tbl, drive_straight_cal_tbl, sizeof(drive_straight_cal_tbl));
+
+    // loop over the new_drive_straight_cal_tbl, 
+    // and update the lspeed and rspeed values
+    for (idx = 0; idx < MAX_DRIVE_STRAIGHT_CAL_TBL; idx++) {
+        struct drive_straight_cal_s *new = &new_drive_straight_cal_tbl[idx];
+        if (new->mph == 0) {
+            break;
+        }
+
+        INFO("calibrate mph %0.1f\n", new->mph);
+        if (drive_straight(CAL_FEET, new->mph, &lspeed, &rspeed) < 0) {
+            ERROR("drive_straight failed\n");
+            break;
+        }
+        new->lspeed = lspeed;
+        new->rspeed = rspeed;
+    }
+
+    // print the current and new drive_straight_cal_tbl values
+    INFO("          CURRENT           NEW            DELTA\n");
+    INFO(" MPH   LSPEED RSPEED   LSPEED RSPEED   LSPEED RSPEED\n");
+    INFO(" ---   ------ ------   ------ ------   ------ ------\n");
+    for (idx = 0; idx < MAX_DRIVE_STRAIGHT_CAL_TBL; idx++) {
+        struct drive_straight_cal_s *cur = &drive_straight_cal_tbl[idx];
+        struct drive_straight_cal_s *new = &new_drive_straight_cal_tbl[idx];
+        if (new->mph == 0) {
+            break;
+        }
+        INFO("%4.1f   %6d %6d   %6d %6d   %6d %6d\n", 
+             cur->mph, 
+             cur->lspeed, cur->rspeed,
+             new->lspeed, new->rspeed,
+             new->lspeed-cur->lspeed, new->rspeed-cur->rspeed);
+    }
+
+    // publish the new_drive_straight_cal_tbl to drive_straight_cal_tbl,
+    // write drive_straight_cal_tbl to file
+    memcpy(drive_straight_cal_tbl, new_drive_straight_cal_tbl, sizeof(drive_straight_cal_tbl));
+    drive_straight_cal_file_write();
+    return 0;
+}
+
+static void drive_straight_cal_tbl_init_default(void)
+{
+    int n, idx = 0;
+    struct drive_straight_cal_s *x;
+
+    // init drive_straight_cal_tbl to default, in case the drive cal file doesn't exist
+    for (n = 3; n <= 8; n++) {
+        double mph = 0.1 * n;
+
+        // add entries for mph
+        x = &drive_straight_cal_tbl[idx];
+        x->mph = mph;
+        x->lspeed = x->rspeed = MTR_MPH_TO_SPEED(x->mph);
+        idx++;
+
+        // add entries for -mph
+        x = &drive_straight_cal_tbl[idx];
+        x->mph = -mph;
+        x->lspeed = x->rspeed = MTR_MPH_TO_SPEED(x->mph);
+        idx++;
+    }
 }
 
 // -----------------  THREADS  ----------------------------------------------
