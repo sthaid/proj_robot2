@@ -1,5 +1,7 @@
-// XXX mag cal routine
-// XXX drive_turn
+// XXX comments
+// XXX drive_turn  or drive_radious
+// XXX test 23
+// XXX disable prox sensors when rotating to heading or just rotating
 
 #include "common.h"
 
@@ -46,7 +48,7 @@ int drive_init(void)
 
     // set mtr ctlr accel/decel limits, and debug mode
     mc_set_accel(MC_ACCEL, MC_ACCEL);
-    mc_debug_mode(true);  // XXX temp
+    mc_debug_mode(true);  // xxx temp
 
     // read the drive.cal file, and print
     if (drive_cal_file_read() < 0) {
@@ -88,7 +90,28 @@ bool drive_emer_stop_occurred(void)
     return EMER_STOP_OCCURRED;
 }
 
-// -----------------  DRIVE PROCS SUPPORT ROUTINES  -------------------------
+// -----------------  ROUTINES CALLED FROM DRIVE_PROCS.C  -------------------
+
+// xxx drive_straight_cal
+
+int drive_mag_cal(void)
+{
+    #define REVS 10
+
+    // enable magnetometer calibration
+    imu_set_mag_cal_ctrl(MAG_CAL_CTRL_ENABLED);
+
+    // rotate 10 times
+    if (drive_rotate(REVS * 360, 0) < 0) {
+        ERROR("drive_rotate for %d revs failed\n", REVS);
+        return -1;
+    }
+
+    // disable magnetometer calibration, and save calibration file
+    imu_set_mag_cal_ctrl(MAG_CAL_CTRL_DISABLED_SAVE);
+
+    return 0;
+}
 
 int drive_fwd(double feet, double mph)
 {
@@ -126,9 +149,15 @@ int drive_rotate(double desired_degrees, double fudge)
         INFO("builtin fudge = %0.2f\n", fudge);
     }
 
+#if 0
     // enable both front and read proximity sensors
     proximity_enable(0);   // enable front
     proximity_enable(1);   // enable rear
+#else
+    // disable both front and read proximity sensors
+    proximity_disable(0);   // disable front
+    proximity_disable(1);   // disable rear
+#endif
 
     // get imu rotation value prior to starting motors
     start_degrees = imu_get_rotation();
@@ -215,9 +244,15 @@ int drive_rotate_to_heading(double desired_heading, double fudge, bool disable_s
         return 0;
     }
 
+#if 0
     // enable both front and read proximity sensors
     proximity_enable(0);   // front
     proximity_enable(1);   // rear
+#else
+    // disable both front and read proximity sensors
+    proximity_disable(0);   // disable front
+    proximity_disable(1);   // disable rear
+#endif
 
     // if the delta rotation needed is small then rotate away
     // from desired_heading to provide a larger delta, to improve accuracy
@@ -296,6 +331,145 @@ int drive_rotate_to_heading(double desired_heading, double fudge, bool disable_s
     return 0;
 }
 
+int drive_radius(double desired_degrees, double radius_feet, double fudge)
+{
+    double left_mtr_mph, right_mtr_mph, mtr_a_mph, mtr_b_mph, boost;
+    int    lspeed, rspeed;
+    double start_degrees, rotated_degrees;
+
+    #define WHEEL_BASE_FEET (10./12.)
+
+    INFO("desired_degrees = %0.1f  radius_feet =  %0.1f  fudge = %0.1f\n", 
+         desired_degrees, radius_feet, fudge);
+
+    // validate radius arg
+    if (radius_feet < 0.8 && radius_feet != 0) {
+        ERROR("invalid radius %0.1f ft\n", radius_feet);
+        return -1;
+    }
+
+    // return immedeately if desired_degrees is small
+    if (fabs(desired_degrees) < 2) {
+        INFO("immedeate return due to small desired_degrees %0.1f\n", desired_degrees);
+        return 0;
+    }
+
+    // if caller has not supplied fudge factor then use builtin value
+    if (fudge == 0) {
+#if 1  // xxx
+        static interp_point_t fudge_points[] = {
+                { 15,   3.2  },
+                { 30,   3.0  },
+                { 90,   2.5  },
+                { 180,  1.5  },
+                { 270,  0.75 },
+                { 360,  0.0  }, };
+        fudge = interpolate(fudge_points, sizeof(fudge_points)/sizeof(interp_point_t), fabs(desired_degrees));
+        INFO("builtin fudge = %0.2f\n", fudge);
+#endif
+    }
+
+    // determine motor speeds based on radius
+
+    if (radius_feet == 0) {
+        mtr_a_mph = 0.5;
+        mtr_b_mph = 0;
+    } else {
+        double ratio = (WHEEL_BASE_FEET + radius_feet) / radius_feet;
+        mtr_a_mph = 0.3 * ratio;
+        mtr_b_mph = 0.3;
+        if (mtr_a_mph < 0.5) {
+            double x = 0.5 / mtr_a_mph;
+            mtr_a_mph *= x;
+            mtr_b_mph *= x;
+        }
+    }
+
+    if (desired_degrees > 0) {
+        left_mtr_mph  = mtr_a_mph;
+        right_mtr_mph = mtr_b_mph;
+    } else {
+        left_mtr_mph  = mtr_b_mph;
+        right_mtr_mph = mtr_a_mph;
+    }
+
+    boost = 1;
+    if (mtr_b_mph != 0 && mtr_b_mph < 0.5) {
+        boost = 0.5 / mtr_b_mph;
+    }
+
+    // enable front proximity sensors
+    proximity_enable(0);   // enable front
+    proximity_disable(1);  // disable rear
+
+    // get imu rotation value prior to starting motors
+    start_degrees = imu_get_rotation();
+
+    // if boost start is required then 
+    //   start motors using boost speed,
+    //   delay 200 ms
+    // endif
+    if (boost != 1) {
+        INFO("**** BOOST START %0.2f - MPH %0.2f %0.2f\n", boost, boost*left_mtr_mph, boost*right_mtr_mph);
+        lspeed = MTR_MPH_TO_SPEED(boost * left_mtr_mph);
+        rspeed = MTR_MPH_TO_SPEED(boost * right_mtr_mph);
+        if (mc_set_speed_all(lspeed, rspeed) < 0) {
+            ERROR("failed to set mtr speeds to %d %d\n", lspeed, rspeed);
+            return -1;
+        }
+        usleep(200000);  // 200 ms
+    }
+
+    // set motors to desired speed
+    INFO("**** NORMAL MPH  %0.2f %0.2f\n", left_mtr_mph, right_mtr_mph);
+    lspeed = MTR_MPH_TO_SPEED(left_mtr_mph);
+    rspeed = MTR_MPH_TO_SPEED(right_mtr_mph);
+    if (mc_set_speed_all(lspeed, rspeed) < 0) {
+        ERROR("failed to set mtr speeds to %d %d\n", lspeed, rspeed);
+        return -1;
+    }
+
+    // wait for rotation to complete
+    int ms = 0;
+    while (true) {
+        // check if the emer_stop_thread shut down the motors
+        if (EMER_STOP_OCCURRED) {
+            ERROR("EMER_STOP_OCCURRED\n");
+            return -1;
+        }
+
+        // check if rotation completed
+        rotated_degrees = imu_get_rotation() - start_degrees;
+        if ((ms % 1000) == 0) {
+            INFO("rotated %0.1f deg\n", rotated_degrees);
+        }
+        if (fabs(rotated_degrees) > (fabs(desired_degrees) - fudge)) {
+            break;
+        }
+
+        // sleep for 1 ms
+        usleep(1000);
+        ms += 1;
+    }
+
+    // stop motors
+    if (stop_motors(STOP_MOTORS_PRINT_ROTATION) < 0) {
+        return -1;
+    }
+
+    // print result
+    rotated_degrees = imu_get_rotation() - start_degrees;
+    INFO("done: desired = %0.1f  actual = %0.1f  deviation = %0.1f\n",
+         desired_degrees, rotated_degrees, rotated_degrees - desired_degrees);
+
+    // success
+    return 0;
+}
+
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+// xxx make subsection for drive_straight 
+
+// xxx when drive_cal is here this can be static
 int drive_straight(double desired_feet, double mph, int *avg_lspeed_arg, int *avg_rspeed_arg)
 {
     int lspeed, rspeed;
@@ -412,22 +586,6 @@ int drive_straight(double desired_feet, double mph, int *avg_lspeed_arg, int *av
     return 0;
 }
 
-// XXX needs work
-int drive_mag_cal(void)
-{
-    // enable magnetometer calibration
-    imu_set_mag_cal_ctrl(MAG_CAL_CTRL_ENABLED);
-
-    // rotate 10 times
-//xxx check rc
-    drive_rotate(10 * 360, 0);
-
-    // disable magnetometer calibration, and save calibration file
-    imu_set_mag_cal_ctrl(MAG_CAL_CTRL_DISABLED_SAVE);
-
-    return 0;
-}
-
 static int stop_motors(int print)
 {
     uint64_t start_us;
@@ -483,6 +641,7 @@ static int stop_motors(int print)
 
 // returns adjustment value that can be applied either
 // directly to the left mtr, or negated to the right mtr
+// xxx rename
 static int mtr_speed_compensation(bool init, double rotation_target)
 {
     #define PREDICTION_INTERVAL_SECS  0.5
@@ -652,7 +811,7 @@ emer_stopped:
 
         for (int id = 0; id < 2; id++) {
             double enc_mph = ENC_SPEED_TO_MPH(encoder_get_speed(id));
-            double mtr_mph = MTR_SPEED_TO_MPH(mcs->target_speed[id]);  // XXX or use drive cal
+            double mtr_mph = MTR_SPEED_TO_MPH(mcs->target_speed[id]);  // xxx or use drive cal
             if ((mtr_mph >= 0 && enc_mph < mtr_mph / 2) ||
                 (mtr_mph <  0 && enc_mph > mtr_mph / 2))
             {

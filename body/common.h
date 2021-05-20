@@ -66,12 +66,15 @@ void drive_emer_stop(void);
 bool drive_emer_stop_occurred(void);
 
 // drive.c routines called from drive_procs.c
+// xxx add drive_cal
+int drive_mag_cal(void);
 int drive_fwd(double feet, double mph);
 int drive_rev(double feet, double mph);
-int drive_straight(double feet, double mph, int *avg_lspeed, int *avg_rspeed);
 int drive_rotate(double degrees, double fudge);
 int drive_rotate_to_heading(double heading, double fudge, bool disable_sdr);
-int drive_mag_cal(void);
+int drive_radius(double desired_degrees, double radius_feet, double fudge);
+// xxx vvv will be static
+int drive_straight(double feet, double mph, int *avg_lspeed, int *avg_rspeed);
 
 
 // drive_procs.c
