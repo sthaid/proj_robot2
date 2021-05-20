@@ -1,4 +1,4 @@
-// xxx comments
+// xxx review and comment out debug prints
 
 #include "common.h"
 
@@ -353,7 +353,7 @@ int drive_radius(double desired_degrees, double radius_feet, double fudge)
 
     // if caller has not supplied fudge factor then use builtin value
     if (fudge == 0) {
-#if 1  // XXX
+#if 0  // XXX
         static interp_point_t fudge_points[] = {
                 { 15,   3.2  },
                 { 30,   3.0  },
@@ -366,8 +366,13 @@ int drive_radius(double desired_degrees, double radius_feet, double fudge)
 #endif
     }
 
-    // determine motor speeds based on radius
-    // XXX comments
+    // determine speed of motors based on radius, with the following criteria:
+    // - ratio of motor speeds chosen to achieve desired turn radius, where the
+    //   radius is measured from the inside wheel
+    // - speeds >= 0.3 mph
+    // - if both have speeds < 0.5 then increase the speeds so that the 
+    //   faster motor is 0.5
+    // - mtr_a_speed > mtr_b_speed
     if (radius_feet == 0) {
         mtr_a_mph = 0.5;
         mtr_b_mph = 0;
@@ -382,17 +387,22 @@ int drive_radius(double desired_degrees, double radius_feet, double fudge)
         }
     }
 
+    // a motor start boost is required if the slower of the 2 motors (mtr_b_mph) 
+    // is less than 0.5 mph; the startup boost will ensure that both motors start
+    // at >= 0.5 mph
+    boost = 1;
+    if (mtr_b_mph != 0 && mtr_b_mph < 0.5) {
+        boost = 0.5 / mtr_b_mph;
+    }
+
+    // assign the left/right mtr mph using the 2 motor speeds determined above, 
+    // and the direction of the rotation
     if (desired_degrees > 0) {
         left_mtr_mph  = mtr_a_mph;
         right_mtr_mph = mtr_b_mph;
     } else {
         left_mtr_mph  = mtr_b_mph;
         right_mtr_mph = mtr_a_mph;
-    }
-
-    boost = 1;
-    if (mtr_b_mph != 0 && mtr_b_mph < 0.5) {
-        boost = 0.5 / mtr_b_mph;
     }
 
     // enable front proximity sensors
