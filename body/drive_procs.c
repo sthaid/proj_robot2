@@ -91,7 +91,7 @@ int drive_proc(struct msg_drive_proc_s *dpm)
         double cycles = GET_ARG(0, 3);   // default cycles = 3
         double fudge  = GET_ARG(1, 0);
         for (int i = 0; i < cycles; i++) {
-            bool last = (cycles == 3);
+            bool last = (i == cycles-1);
             STEP(drive_fwd(3, 0.5, DONT_STOP_MOTORS));
             STEP(drive_radius(180, 1, DONT_STOP_MOTORS, fudge));
             STEP(drive_fwd(3, 0.5, DONT_STOP_MOTORS));
