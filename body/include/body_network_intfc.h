@@ -32,7 +32,7 @@ typedef struct {
     union {
         struct msg_drive_proc_s {
             int proc_id;
-	    double arg[4];
+	    double arg[8];
         } drive_proc;
         struct msg_mc_debug_ctl_s {
             int enable;

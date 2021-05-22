@@ -66,13 +66,13 @@ void drive_emer_stop(void);
 bool drive_emer_stop_occurred(void);
 
 // drive.c routines called from drive_procs.c
-int drive_straight_cal(void);
-int drive_mag_cal(void);
-int drive_fwd(double feet, double mph);
+int drive_straight_cal(double cal_feet);
+int drive_mag_cal(double num_rot);
+int drive_fwd(double feet, double mph, bool stop_motors_flag);
 int drive_rev(double feet, double mph);
 int drive_rotate(double degrees, double fudge);
-int drive_rotate_to_heading(double heading, double fudge, bool disable_sdr);
-int drive_radius(double desired_degrees, double radius_feet, double fudge);
+int drive_rotate_to_heading(double heading, double fudge);
+int drive_radius(double desired_degrees, double radius_feet, bool stop_motors_flag, double fudge);
 
 // drive_procs.c
 int drive_proc(struct msg_drive_proc_s *dpm);

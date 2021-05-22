@@ -22,21 +22,24 @@
 
 static struct msg_drive_proc_s * drive_proc_msg;
 static int                       emer_stop_thread_state;
+static mc_status_t             * mcs;
 
 //
 // prototypes
 //
 
+static int drive_rotate_to_heading_ex(double desired_heading, double fudge, bool do_sdr_check);
 static int stop_motors(int print);
 
-static int drive_straight(double desired_feet, double mph, int *avg_lspeed_arg, int *avg_rspeed_arg);
+static int drive_straight(double desired_feet, double mph, bool stop_motors_flag,
+                          int *avg_lspeed_arg, int *avg_rspeed_arg);
 static int drive_straight_mtr_speed_comp(bool init, double rotation_target);
 
 static void drive_straight_cal_cvt_mph_to_mtr_speeds(double mph, int *lspeed, int *rspeed);
 static int drive_straight_cal_file_read(void);
 static int drive_straight_cal_file_write(void);
 static void drive_straight_cal_tbl_print(void);
-static int drive_straight_cal_proc(void);
+static int drive_straight_cal_proc(double cal_feet);
 static void drive_straight_cal_tbl_init_default(void);
 
 static void *drive_thread(void *cx);
@@ -48,6 +51,9 @@ static void emer_stop_button_cb(int id, bool pressed, int pressed_duration_us);
 int drive_init(void)
 {
     pthread_t tid;
+
+    // get pointer to mtr ctlr status
+    mcs = mc_get_status();
 
     // register for left-button press, this will trigger an emergency stop
     button_register_cb(0, emer_stop_button_cb);
@@ -98,21 +104,19 @@ bool drive_emer_stop_occurred(void)
 
 // -----------------  ROUTINES CALLED FROM DRIVE_PROCS.C  -------------------
 
-int drive_straight_cal(void)
+int drive_straight_cal(double cal_feet)
 {
-    return drive_straight_cal_proc();
+    return drive_straight_cal_proc(cal_feet);
 }
 
-int drive_mag_cal(void)
+int drive_mag_cal(double num_rot)
 {
-    #define REVS 10
-
     // enable magnetometer calibration
     imu_set_mag_cal_ctrl(MAG_CAL_CTRL_ENABLED);
 
     // rotate 10 times
-    if (drive_rotate(REVS * 360, 0) < 0) {
-        ERROR("drive_rotate for %d revs failed\n", REVS);
+    if (drive_rotate(num_rot * 360, 0) < 0) {
+        ERROR("drive_rotate for %0.0f revs failed\n", num_rot);
         return -1;
     }
 
@@ -122,16 +126,16 @@ int drive_mag_cal(void)
     return 0;
 }
 
-int drive_fwd(double feet, double mph)
+int drive_fwd(double feet, double mph, bool stop_motors_flag)
 {
     INFO("feet = %0.1f  mph = %0.1f\n", feet, mph);
-    return drive_straight(feet, mph, NULL, NULL);
+    return drive_straight(feet, mph, stop_motors_flag, NULL, NULL);
 }
 
 int drive_rev(double feet, double mph)
 {
     INFO("feet = %0.1f  mph = %0.1f\n", feet, mph);
-    return drive_straight(feet, -mph, NULL, NULL);
+    return drive_straight(feet, -mph, true, NULL, NULL);
 }
 
 int drive_rotate(double desired_degrees, double fudge)
@@ -165,7 +169,14 @@ int drive_rotate(double desired_degrees, double fudge)
     // get imu rotation value prior to starting motors
     start_degrees = imu_get_rotation();
 
-    // start motors using boost speed, and delay 200 ms
+    // if either motor was left running then stop the motors
+    if (mcs->target_speed[0] != 0 || mcs->target_speed[1] != 0) {
+        if (stop_motors(STOP_MOTORS_PRINT_NONE) < 0) {
+            return -1;
+        }
+    }
+
+    // start motors using boost speed (0.5 mph), and delay 200 ms
     lspeed = MTR_MPH_TO_SPEED(left_mtr_start_mph);
     rspeed = MTR_MPH_TO_SPEED(right_mtr_start_mph);
     if (mc_set_speed_all(lspeed, rspeed) < 0) {
@@ -174,7 +185,7 @@ int drive_rotate(double desired_degrees, double fudge)
     }
     usleep(200000);  // 200 ms
 
-    // slow down motors
+    // slow down motors to 0.3 mph
     lspeed = MTR_MPH_TO_SPEED(left_mtr_mph);
     rspeed = MTR_MPH_TO_SPEED(right_mtr_mph);
     if (mc_set_speed_all(lspeed, rspeed) < 0) {
@@ -219,7 +230,12 @@ int drive_rotate(double desired_degrees, double fudge)
     return 0;
 }
 
-int drive_rotate_to_heading(double desired_heading, double fudge, bool disable_sdr)
+int drive_rotate_to_heading(double desired_heading, double fudge)
+{
+    return drive_rotate_to_heading_ex(desired_heading, fudge, true);
+}
+
+static int drive_rotate_to_heading_ex(double desired_heading, double fudge, bool do_sdr_check)
 {
     double current_heading, delta;
     double left_mtr_mph, right_mtr_mph;
@@ -253,11 +269,12 @@ int drive_rotate_to_heading(double desired_heading, double fudge, bool disable_s
 
     // if the delta rotation needed is small then rotate away
     // from desired_heading to provide a larger delta, to improve accuracy
-    if (fabs(delta) < 30 && disable_sdr == false) {
+    // (do_sdr_check = do small delta rotation check)
+    if (fabs(delta) < 30 && do_sdr_check == true) {
         double tmp_hdg = sanitize_heading( (delta > 0 ? desired_heading - 30 : desired_heading + 30), 0 );
         INFO("small delta %0.1f, rotating from current %0.1f to tmp_hdg %0.1f\n",
              delta, current_heading, tmp_hdg);
-        if (drive_rotate_to_heading(tmp_hdg, 0, true) < 0) {
+        if (drive_rotate_to_heading_ex(tmp_hdg, 0, false) < 0) {
             ERROR("small delta rotate failed\n");
             return -1;
         }
@@ -270,7 +287,14 @@ int drive_rotate_to_heading(double desired_heading, double fudge, bool disable_s
     left_mtr_mph        = (clockwise ? 0.3 : -0.3);
     right_mtr_mph       = -left_mtr_mph;
 
-    // start motors using boost speed, and delay 200 ms
+    // if either motor was left running then stop the motors
+    if (mcs->target_speed[0] != 0 || mcs->target_speed[1] != 0) {
+        if (stop_motors(STOP_MOTORS_PRINT_NONE) < 0) {
+            return -1;
+        }
+    }
+
+    // start motors using boost speed (0.5 mph), and delay 200 ms
     lspeed = MTR_MPH_TO_SPEED(left_mtr_start_mph);
     rspeed = MTR_MPH_TO_SPEED(right_mtr_start_mph);
     if (mc_set_speed_all(lspeed, rspeed) < 0) {
@@ -279,7 +303,7 @@ int drive_rotate_to_heading(double desired_heading, double fudge, bool disable_s
     }
     usleep(200000);  // 200 ms
 
-    // slow down motors
+    // slow down motors to 0.3 mph
     lspeed = MTR_MPH_TO_SPEED(left_mtr_mph);
     rspeed = MTR_MPH_TO_SPEED(right_mtr_mph);
     if (mc_set_speed_all(lspeed, rspeed) < 0) {
@@ -328,11 +352,12 @@ int drive_rotate_to_heading(double desired_heading, double fudge, bool disable_s
     return 0;
 }
 
-int drive_radius(double desired_degrees, double radius_feet, double fudge)
+int drive_radius(double desired_degrees, double radius_feet, bool stop_motors_flag, double fudge)
 {
     double left_mtr_mph, right_mtr_mph, mtr_a_mph, mtr_b_mph, boost;
     int    lspeed, rspeed;
     double start_degrees, rotated_degrees;
+    bool   boost_start_needed;
 
     #define WHEEL_BASE_FEET (10./12.)
 
@@ -353,32 +378,36 @@ int drive_radius(double desired_degrees, double radius_feet, double fudge)
 
     // if caller has not supplied fudge factor then use builtin value
     if (fudge == 0) {
-        static interp_point_t fudge_points_radius_0[] = {  // r = 0 ft
-                { 45,   5.0  },
-                { 90,   4.0  },
-                { 180,  3.0  },
-                { 360,  0.0  }, };
-        static interp_point_t fudge_points_radius_1_0[] = {  // r = 1.0 ft
-                { 45,   4.0  },
-                { 90,   3.5  },
-                { 180,  3.0  },
-                { 360,  0.0  }, };
-        static interp_point_t fudge_points_radius_1_5[] = {  // r = 1.5 ft
-                { 45,   2.5  },
-                { 90,   2.5  },
-                { 180,  3.0  },
-                { 360,  0.0  }, };
-        interp_point_t * fudge_points;
+        if (stop_motors_flag) {
+            static interp_point_t fudge_points_radius_0[] = {  // r = 0 ft
+                    { 45,   5.0  },
+                    { 90,   4.0  },
+                    { 180,  3.0  },
+                    { 360,  0.0  }, };
+            static interp_point_t fudge_points_radius_1_0[] = {  // r = 1.0 ft
+                    { 45,   4.0  },
+                    { 90,   3.5  },
+                    { 180,  3.0  },
+                    { 360,  0.0  }, };
+            static interp_point_t fudge_points_radius_1_5[] = {  // r = 1.5 ft
+                    { 45,   2.5  },
+                    { 90,   2.5  },
+                    { 180,  3.0  },
+                    { 360,  0.0  }, };
+            interp_point_t * fudge_points;
 
-        if (radius_feet == 0) {
-            fudge_points = fudge_points_radius_0;
-        } else if (radius_feet < 1.25) {
-            fudge_points = fudge_points_radius_1_0;
-        } else {
-            fudge_points = fudge_points_radius_1_5;
+            if (radius_feet == 0) {
+                fudge_points = fudge_points_radius_0;
+            } else if (radius_feet < 1.25) {
+                fudge_points = fudge_points_radius_1_0;
+            } else {
+                fudge_points = fudge_points_radius_1_5;
+            }
+            fudge = interpolate(fudge_points, 4, fabs(desired_degrees));
+            INFO("builtin fudge = %0.2f\n", fudge);
+        } else { // stop_motors_flag == false
+            fudge = -1;
         }
-        fudge = interpolate(fudge_points, 4, fabs(desired_degrees));
-        INFO("builtin fudge = %0.2f\n", fudge);
     }
 
     // determine speed of motors based on radius, with the following criteria:
@@ -405,7 +434,7 @@ int drive_radius(double desired_degrees, double radius_feet, double fudge)
     // a motor start boost is required if the slower of the 2 motors (mtr_b_mph) 
     // is less than 0.5 mph; the startup boost will ensure that both motors start
     // at >= 0.5 mph
-    boost = 1;
+    boost = 0;
     if (mtr_b_mph != 0 && mtr_b_mph < 0.5) {
         boost = 0.5 / mtr_b_mph;
     }
@@ -427,11 +456,27 @@ int drive_radius(double desired_degrees, double radius_feet, double fudge)
     // get imu rotation value prior to starting motors
     start_degrees = imu_get_rotation();
 
-    // if boost start is required then 
+    // if either motor was left running in reverse then
+    // return error because the motors should never be left running in reverse
+    if (mcs->target_speed[0] < 0 || mcs->target_speed[1] < 0) {
+        ERROR("motors should never be left running in reverse, %d %d\n",
+            mcs->target_speed[0], mcs->target_speed[1]);
+        return -1;
+    }
+
+    // boost_start_needed =
+    //   boost != 0 &&
+    //   ((left_mtr_mph != 0 && left mtr is currently not running) ||
+    //    (right_mtr_mph != 0 && right mtr is currently not running))
+    // 
+    // if boost_start_needed then 
     //   start motors using boost speed,
     //   delay 200 ms
     // endif
-    if (boost != 1) {
+    boost_start_needed = (boost != 0) &&
+                         ((left_mtr_mph != 0 && mcs->target_speed[0] == 0) ||
+                          (right_mtr_mph != 0 && mcs->target_speed[1] == 0));
+    if (boost_start_needed) {
         INFO("**** BOOST START %0.2f - MPH %0.2f %0.2f\n", boost, boost*left_mtr_mph, boost*right_mtr_mph);
         lspeed = MTR_MPH_TO_SPEED(boost * left_mtr_mph);
         rspeed = MTR_MPH_TO_SPEED(boost * right_mtr_mph);
@@ -475,8 +520,10 @@ int drive_radius(double desired_degrees, double radius_feet, double fudge)
     }
 
     // stop motors
-    if (stop_motors(STOP_MOTORS_PRINT_ROTATION) < 0) {
-        return -1;
+    if (stop_motors_flag) {
+        if (stop_motors(STOP_MOTORS_PRINT_ROTATION) < 0) {
+            return -1;
+        }
     }
 
     // print result
@@ -487,6 +534,8 @@ int drive_radius(double desired_degrees, double radius_feet, double fudge)
     // success
     return 0;
 }
+
+// - - - - - - - - - - - - - 
 
 static int stop_motors(int print)
 {
@@ -543,14 +592,14 @@ static int stop_motors(int print)
 
 // -----------------  DRIVE STRAIGHT SUPPORT  -------------------------------
 
-static int drive_straight(double desired_feet, double mph, int *avg_lspeed_arg, int *avg_rspeed_arg)
+static int drive_straight(double desired_feet, double mph, bool stop_motors_flag,
+                          int *avg_lspeed_arg, int *avg_rspeed_arg)
 {
-    int lspeed, rspeed;
+    int    lspeed, rspeed;
     double actual_feet, initial_degrees, rot_degrees;
-    int initial_left_enc_count, initial_right_enc_count;
-    int avg_lspeed_sum=0, avg_rspeed_sum=0, avg_speed_cnt=0, avg_lspeed, avg_rspeed;
-
-    #define BOOST_MPH  0.5
+    int    initial_left_enc_count, initial_right_enc_count;
+    int    avg_lspeed_sum=0, avg_rspeed_sum=0, avg_speed_cnt=0, avg_lspeed, avg_rspeed;
+    bool   boost_start_needed;
 
     INFO("desired_feet = %0.1f  mph = %0.1f\n", desired_feet, mph);
 
@@ -578,9 +627,34 @@ static int drive_straight(double desired_feet, double mph, int *avg_lspeed_arg, 
         proximity_enable(1);    // enable rear
     }
 
-    // if mph is too low for starting then set mtr speeds for BOOST_MPH mph for 200 ms
-    if (fabs(mph) < BOOST_MPH) {
-        drive_straight_cal_cvt_mph_to_mtr_speeds(mph > 0 ? BOOST_MPH : -BOOST_MPH, &lspeed, &rspeed);
+    // if either motor was left running in reverse then
+    // return error because the motors should never be left running in reverse
+    if (mcs->target_speed[0] < 0 || mcs->target_speed[1] < 0) {
+        ERROR("motors should never be left running in reverse, %d %d\n",
+            mcs->target_speed[0], mcs->target_speed[1]);
+        return -1;
+    }
+
+    // if request is to drive reverse and either motor was left running 
+    // then stop the motors
+    if ((mph < 0) && (mcs->target_speed[0] != 0 || mcs->target_speed[1] != 0)) {
+        if (stop_motors(STOP_MOTORS_PRINT_NONE) < 0) {
+            return -1;
+        }
+    }
+
+    // boost_start_needed =
+    //  fabs(mph) < 0.5 &&
+    //  (left mtr is currently not running || right mtr is currently not running)
+    // 
+    // if boost_start_needed then 
+    //   start motors using boost speed,
+    //   delay 200 ms
+    // endif
+    boost_start_needed = (fabs(mph) < 0.5) &&
+                         (mcs->target_speed[0] == 0 || mcs->target_speed[1] == 0);
+    if (boost_start_needed) {
+        drive_straight_cal_cvt_mph_to_mtr_speeds(mph > 0 ? 0.5 : -0.5, &lspeed, &rspeed);
         INFO("boot start - setting mtr speeds = %d %d\n", lspeed, rspeed);
         if (mc_set_speed_all(lspeed, rspeed) < 0) {
             ERROR("failed to set boost mtr speeds to %d %d\n", lspeed, rspeed);
@@ -635,8 +709,10 @@ static int drive_straight(double desired_feet, double mph, int *avg_lspeed_arg, 
     }
 
     // stop motors
-    if (stop_motors(STOP_MOTORS_PRINT_DISTANCE) < 0) {
-        return -1;
+    if (stop_motors_flag) {
+        if (stop_motors(STOP_MOTORS_PRINT_DISTANCE) < 0) {
+            return -1;
+        }
     }
 
     // calculate the avg speeds, and return the values if caller desires
@@ -816,13 +892,10 @@ static void drive_straight_cal_tbl_print(void)
     }
 }
 
-static int drive_straight_cal_proc(void)
+static int drive_straight_cal_proc(double cal_feet)
 {
     int idx, lspeed, rspeed;
     struct drive_straight_cal_s new_drive_straight_cal_tbl[MAX_DRIVE_STRAIGHT_CAL_TBL];
-
-    // xxx try cal over longer distance
-    #define CAL_FEET 5
 
     // make copy of drive_straight_cal_tbl
     memcpy(new_drive_straight_cal_tbl, drive_straight_cal_tbl, sizeof(drive_straight_cal_tbl));
@@ -836,7 +909,7 @@ static int drive_straight_cal_proc(void)
         }
 
         INFO("calibrate mph %0.1f\n", new->mph);
-        if (drive_straight(CAL_FEET, new->mph, &lspeed, &rspeed) < 0) {
+        if (drive_straight(cal_feet, new->mph, true, &lspeed, &rspeed) < 0) {
             ERROR("drive_straight failed\n");
             break;
         }
@@ -961,7 +1034,6 @@ static bool     stop_button_pressed;
 
 static void *emer_stop_thread(void *cx)
 {
-    mc_status_t *mcs = mc_get_status();
     int enc_left_errs, enc_right_errs;
     bool prox_front, prox_rear;
     double accel;
