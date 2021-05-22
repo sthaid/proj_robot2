@@ -58,9 +58,9 @@ int drive_init(void)
     // register for left-button press, this will trigger an emergency stop
     button_register_cb(0, emer_stop_button_cb);
 
-    // set mtr ctlr accel/decel limits, and debug mode
+    // set mtr ctlr accel/decel limits, and disable debug mode
     mc_set_accel(MC_ACCEL, MC_ACCEL);
-    mc_debug_mode(true);  // xxx temp
+    mc_debug_mode(false);
 
     // read the drive_straight.cal file, and print
     if (drive_straight_cal_file_read() < 0) {
