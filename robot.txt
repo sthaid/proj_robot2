@@ -1,8 +1,3 @@
-repos
-- remove old repo 
-- update new repo readme
-- update bashrc aliases
-
 body
 - review threads, make a list of there frequencies
 - shut down motors on high current for 1 second
@@ -27,6 +22,7 @@ brain:
   - shutdown body when not in use
 
 misc:
+- update readme.md in proj_robot
 - dbg
   - make a backup script, to google drive
   - safe_memcpy
