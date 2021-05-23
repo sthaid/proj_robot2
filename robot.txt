@@ -1,88 +1,72 @@
+repos
+- remove old repo 
+- update new repo readme
+- update bashrc aliases
+
+body
+- review threads, make a list of there frequencies
+- shut down motors on high current for 1 second
+- test accelerometer sensitivity for emer stop
+- check where timer_get is used, and minimize use
+- review all usleep and nanosleep for consistent and correct durations
+- include code version on oled, this could be build date/time 05/13
+- body_test 
+  - auto reconnect
+  - command recall
+- devel tests, do these all build and work
+
+brain:
+- respeaker microphone
+  - install rpi and respeaker hat
+  - study directions for respeaker
+- purchase Mini External USB Stereo Speaker
+  - PRODUCT ID: 3369
+- when voltage gets low:
+  - beep and shutdown the body
+- power saving
+  - shutdown body when not in use
+
+misc:
+- dbg
+  - make a backup script, to google drive
+  - safe_memcpy
+  - don't use memcpy in RW_MMIO
+  - funcs, startup should get BCM base address, and use in timer test
+- run the rt_gpio test pgms and check data on scope
+
+xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+xxxxxxxxxxxxxxxxxxxx  DOC BEGINS HERE  xxxxxxxxxxxxxxxxxxxxxx
+xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
 ===========================
-TITLE: INTRO - TODO
+TABLE OF CONTENTS
 ===========================
 
-https://www.raspberrypi.org/documentation/linux/usage/systemd.md
-Type=simple
-ExecStart
-ExecStop
-  or 
-KillSignal
+TITLE: INTRO - ROBOT CAPABILITY IDEAS
 
-StandardInput=null
-StandardOutput=file:/path
+TITLE: PARTS - SUPPLIERS
+TITLE: PARTS - ROBOT CHASIS
+TITLE: PARTS - MECHANICAL / MOTORS
+TITLE: PARTS - ELECTRONICS
+TITLE: PARTS - POWER SUPPLY
 
-front wheel,
-- make 1 inch spacer, and mount to spacer
+TITLE: SENSORS - SUMMARY
+TITLE: SENSORS - QUADRATURE ENCODER
+TITLE: SENSORS - I2C IMPLEMENTATION
+TITLE: SENSORS - NON I2C
 
-gpio init should always init the outputs and relay disabled
+TITLE: MOTOR_CTLR - POLOLU SIMPLE MOTOR CONTROLLER
+TITLE: MOTOR_CTLR - MOTOR SETUP
 
-dbg
-- make a backup script, to google drive
-- safe_memcpy
-- don't use memcpy in RW_MMIO
-- funcs, startup should get BCM base address, and use in timer test
+TITLE: RPI - HARDWARE INFO
+TITLE: RPI - INSTALL
+TITLE: RPI - GPIO
+TITLE: RPI - REAL TIME PERFORMANCE TIPS
+TITLE: RPI - GENERAL TIPS
 
-run the rt_gpio test pgms and check data on scope
-
-===========================
-TITLE: INFO - SAVE THIS STUFF
-===========================
-
-how to crimp ---
- - video  https://www.youtube.com/watch?v=jET1QTP1B7c
-
-power saving ideas
-- idle program when robot is not moving
-- switch off the top rpi (OR bottom)
-- https://www.raspberrypi.org/forums/viewtopic.php?t=257144
-- How to save Power on your Raspberry Pi
-    Switch OFF USB/LAN IC.
-    Turn OFF HDMI.
-    Throttle CPU.
-    Disable Wi-Fi & Bluetooth.
-    Disable on-board LEDs
-- https://mlagerberg.gitbooks.io/raspberry-pi/content/5.1-power-consumption.html
-- my measurement, idle and with relay disabled
-  0.23 amps on the 12volt supply at 12.1 v
-
-f connectors type yellow (#10 or #12), and crimp tool ---
-- f1 = 3/16  <== I have     4.75 mm
-- f2 = 1/4 inch             6.35 mm
-- my wire is #12
-
-misc for later
-- consider FATAL in all init routines
-- review all tests
-- work on mc
-- review use of printf
-   - cat tests use printf instead of INFO
-   - devices/encoder using printf, and mc.c
-
-alarm conditions to shut down motors
-- high accel
-- proximity alert
-- high motor current
-- motor-ctlr error condiiton
-- wheels turning too slowly  ?
-
-set a led or the oled display when pgm is online,
-  and show activity, rotating indicator
-
-Mini External USB Stereo Speaker
-   PRODUCT ID: 3369
-
-button
-  Grove - Button SKU 101020003
-  Grove - Dual Button
-     SKU 111020103
-
-tune proximity sensor
-- adjust software sensitivity, make this a param
-- not totally sure they are that much different, but ...
-   - the prox sensor on right is 20"
-                     on left is 24"
-
+TITLE: MISC - GIT TIPS
+TITLE: MISC - WIRING
+TITLE: MISC - SYSTEM TESTS
 
 ===========================
 TITLE: INTRO - ROBOT CAPABILITY IDEAS
@@ -150,12 +134,19 @@ TITLE: PARTS - MECHANICAL / MOTORS
 ===========================
 
 2 motors with quadrature encoders
+ - First Motor
    - 25D metal gearmotor
    - Pololu item #: 4843
    - voltage                    12 V
    - no-load performance        500 RPM  300 mA
    - stall extrapolation        6 kg⋅cm (85 oz⋅in), 5.6 A 
    - encoder: 980  counts per rev
+ - Replacement 
+   - https://www.pololu.com/product/4845
+   - Pololu item #:  4845
+   - 47:1
+   - Pololu Metal Gearmotors » 25D Metal Gearmotors » 12V High-Power (HP) 25D mm Gearmotors »
+     47:1 Metal Gearmotor 25Dx67L mm HP 12V with 48 CPR Encoder
 
 2 motor controllers,  either usb or i2c
    product   https://www.pololu.com/product/1362`0
@@ -175,7 +166,7 @@ TITLE: PARTS - ELECTRONICS
 
 2 Raspberry Pi model 4
     https://www.amazon.com/gp/product/B0899VXM8F/ref=ox_sc_act_title_2?smid=A3I5MJJ49RUSVZ&psc=1
-OLED Arduino
+
 2 MicroSd card
    https://www.amazon.com/gp/product/B07YFG7T8F/ref=ppx_yo_dt_b_search_asin_title?ie=UTF8&psc=1#
 
@@ -227,12 +218,11 @@ GPIO HAT, saw on Amazon
 GROVE HAT, bought 2nd one on Amazon
    https://www.amazon.com/gp/product/B07LD8C51J/ref=ppx_yo_dt_b_asin_title_o00_s00?ie=UTF8&psc=1
 
-Speaker                                          USE WHAT I HAVE
+Speaker
 
-servo motor                                      LATER
-
-Camera, mounted on pan servo                     LATER
-  also zoom
+Camera, 
+  mounted on pan servo
+  zoom capable
 
 ===========================
 TITLE: PARTS - POWER SUPPLY
@@ -526,6 +516,14 @@ DSD TECH 2 PCS IIC OLED Display 0.91 Inch for Arduino ARM
   - step 3
     - add test code to test/sensors/sensors.c
 
+- connections to grove i2c cable 
+               --------------------
+      WHITE   -|                  |
+      YELLOW  -|      TOP         | 
+      RED     -|                  |
+      BLACK   -|                  |
+               --------------------
+
 - - - - - - - - - - - - - - - - - - - - - 
 
 Grove - IMU 10DOF v2.0
@@ -632,6 +630,10 @@ Grove - latching relay
   https://www.mouser.com/datasheet/2/744/Seeed_103020010-1217533.pdf
   Grove - 2-Coil Latching Relay
      https://www.mouser.com/ProductDetail/Seeed-Studio/103020010?qs=1%252B9yuXKSi8C7XcS%2FsSDTng%3D%3D
+
+Grove - button(s)
+  Grove - Button SKU 101020003
+  Grove - Dual Button SKU 111020103
 
 ===========================
 TITLE: MOTOR_CTLR - POLOLU SIMPLE MOTOR CONTROLLER
@@ -802,19 +804,25 @@ Motor
 - Start Speed  :  0
 - Max Accel    :  10       = 0 to full speed in 320 ms
 - Max Deccel   :  10
-- Brake Dur    :  1000  ms = 1sec
-
+- Brake Dur    :  0
 - Current      :  5.0
 - Measure Current Offset Cal with Motor Voltage Off
 
 Advanced
-- Low Vin Shutoff    9.5
-- Low Vin Startup   10.5
+- Low Vin Shutoff   11.0
+- Low Vin Startup   12.0
 - High Vin Shutoff  15
 - Learn with Vin set to approx 12V
 
 Advanced / Miscellaneous
 - Command Timeout  2.0 secs
+
+USB Cables
+----------
+- usb-a to micro-b
+- usb cable lengths needed
+       25 cm  =  10 inch
+       40 cm  =  16 inch   1.5 ft okay
 
 ===========================
 TITLE: RPI - HARDWARE INFO
@@ -1098,16 +1106,13 @@ c beautifier
     -kr    Use Kernighan & Ritchie coding style
     -nut   Use spaces instead of tabs
 
-===========================
-TITLE: RPI - HAT CONNECTIONS
-===========================
+systemd
+- man systemd.service   exec   kill   unit   target
+- pkg-config systemd --variable=systemdsystemconfdir
+    ANSWER:  /etc/systemd/system
 
-test config gpio connections
-- relay    5
-- encoder  16, 17
-
-test config Seeed HAT Analog connections
-- analog   0
+pthread man pages
+- apt install glibc-docs
 
 ===========================
 TITLE: MISC - GIT TIPS
@@ -1142,7 +1147,7 @@ Create a private repo
     git push -u origin master
 
 ===========================
-TITLE: MISC - WIRING SPECS
+TITLE: MISC - WIRING
 ===========================
 
 Ampacity
@@ -1155,3 +1160,24 @@ Ampacity
 Connector Pitch
   2.54 mm  rpi hdr, and most others, except
   2.00 mm  grove connector
+
+how to crimp
+  video  https://www.youtube.com/watch?v=jET1QTP1B7c
+
+F connectors type yellow (#10 or #12)
+- f1 = 3/16  <== I have     4.75 mm
+- f2 = 1/4 inch             6.35 mm
+
+===========================
+TITLE: MISC - SYSTEM TESTS
+===========================
+
+Component Tests
+- motors & encoders    
+- proximity sensors
+- imu: gyro, accel, magnetometer                 
+- imu: pressure and temerature
+- current sensor       
+- oled                 
+- buttons              
+
