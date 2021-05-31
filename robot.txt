@@ -178,15 +178,15 @@ Steps on Raspberry Pi
   sudo apt-get install libfftw3-dev libconfig-dev libasound2-dev libgconf-2-4
   sudo apt-get install cmake
 
-  cd /home/haid/proj/proj_robot2/brain/respeaker
-  git clone https://github.com/introlab/odas.git
-  mkdir odas/build
-  cd odas/build
+  cd /home/haid/proj/proj_robot2/brain/devel/repos/odas
+  mkdir build
+  cd build
   cmake ..
   make
 
   vi config/odaslive/respeaker_4_mic_array.cfg
-     change 127.0.0.1 to IP addr where odad 
+   - change 127.0.0.1 to IP addr where ODAS Studio will be run
+   - change 'card = 1' to 'card = X', if needed; run arecord -l to determine card number
   bin/odaslive -c config/odaslive/respeaker_4_mic_array.cfg
 
   (** but first the ODAS Studio needs to be running **)
