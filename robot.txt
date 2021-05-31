@@ -1,3 +1,435 @@
+===========================
+TITLE: RPI - RESPEAKER
+===========================
+
+Instructions
+------------
+https://wiki.seeedstudio.com/ReSpeaker_4_Mic_Array_for_Raspberry_Pi/
+
+Build and Install Driver
+------------------------
+Steps:
+  sudo apt-get update
+  sudo apt-get upgrade
+  cd ~/proj/proj_robot2/brain/respeaker
+  git clone https://github.com/respeaker/seeed-voicecard.git
+  cd seeed-voicecard
+  sudo ./install.sh    # I needed to use --compat-kernel option
+  reboot
+
+Notes
+- after reboot kernel is now 5.4.51-v7l+
+- related directories and files
+    /var/log/seeed-voicecard.log
+    /usr/src/seeed-voicecard-0.3
+    /var/lib/dkms/seeed-voicecard/0.3/
+    /var/lib/dkms/seeed-voicecard/0.3/5.4.51-v7l+/armv7l/module
+       snd-soc-ac108.ko
+       snd-soc-seeed-voicecard.ko
+       snd-soc-wm8960.ko
+- lsmod shows these 3 modules are loaded
+
+Raspi-Config
+------------
+sudo raspi-config
+- System Options -> Audio 
+  - Enable Headphones   (did not work, the HDMI device remained selected)
+- Interface options
+  - Enable SPI 
+  - Enable I2C 
+
+Test I2c
+--------
+- Verify /dev/i2c-* exists
+- sudo apt install i2c-tools
+- add user to i2c group:  
+   sudo usermod -aG i2c haid
+   logout and back in
+   groups
+- i2cdetect -y 1
+- power down and plugin i2c device, (used temp sensor MCP9808_temp)
+- run test pgm to verify device     (cd ~/proj/proj_robot2/devel/tests/zz_other/i2c; make MCP9808_temp)
+
+Test Respeaker APA102 LEDs
+--------------------------
+Setup Steps
+  sudo usermod -aG gpio haid
+  sudo usermod -aG spi haid
+  logout and back in for these to take affect, then run 'groups' to verify
+
+  sudo apt install python-dev
+  sudo apt install python-virtualenv           # install python virtualenv tool
+  virtualenv --system-site-packages ~/env      # create a virtual python environment
+  source ~/env/bin/activate                    # activate the virtual environment
+  pip install numpy
+  pip install spidev gpiozero                  # install spidev and gpiozero
+
+  cd ~/proj/proj_robot2/brain/respeaker
+  git clone https://github.com/respeaker/4mics_hat.git
+  cd 4mics_hat
+  python pixels_demo.py
+
+Run Demo
+  source ~/env/bin/activate
+  cd ~/proj/proj_robot2/brain/respeaker/4mics_hat
+  python pixels_demo.py
+	brain/devel/leds/apa102_test
+	brain/devel/leds/save/
+	brain/devel/picovoice/picovoice_demo_mic
+	brain/devel/picovoice/save/
+	brain/devel/repos/4mics_hat/
+	brain/devel/repos/odas/
+	brain/devel/repos/picovoice/
+	brain/devel/repos/seeed-voicecard/
+	brain/save/
+
+Notes:
+- use 'deactivate' to exit python env
+
+ALSA  - Advanced Linux Sound Architecture
+-----------------------------------------
+Notes:
+- ALSA  = Advanced Linux Sound Architecture
+- PCM   = Pulse Code Moduleation
+- PGA   = Programable Gain Amplifier
+- some settings are in ~/.asoundrc
+
+Setup
+- sudo usermod -aG audio haid
+- sudo apt install audacity
+
+Changing default audio card (if needed), alternatively unplug hdmi display
+- aplay -l    # lists the PLAYBACK cards
+- vi /usr/share/alsa/alsa.conf
+     defaults.ctl.card 0    # may need to change these to 1 to default to headphones,
+     defaults.pcm.card 0    #  and get audacity output to work; or unplug HDMI device
+
+Programs
+- arecord       - command-line sound recorder for ALSA soundcard driver
+- aplay         - command-line sound player for ALSA soundcard driver
+- speaker-test -  command-line speaker test tone generator for ALSA
+- amixer        - command-line mixer for ALSA soundcard driver
+	brain/devel/leds/apa102_test
+	brain/devel/leds/save/
+	brain/devel/picovoice/picovoice_demo_mic
+	brain/devel/picovoice/save/
+	brain/devel/repos/4mics_hat/
+	brain/devel/repos/odas/
+	brain/devel/repos/picovoice/
+	brain/devel/repos/seeed-voicecard/
+	brain/save/
+- alsamixer     - soundcard mixer for ALSA soundcard driver, with ncurses interface
+- alsactl       - advanced controls for ALSA soundcard driver
+
+Examples:
+- aplay -L   # List all PCMs defined
+- aplay -l   # List all soundcards and digital audio devices
+- arecord -L
+- arecord -l
+
+- speaker-test -D sysdefault:CARD=Headphones -f 500 -t sine
+- speaker-test -D sysdefault:CARD=Device -f 500 -t sine
+- speaker-test -f 500 -t sine
+
+- arecord -D ac108 -f S32_LE -r 16000 -c 4 hello.wav
+- arecord -D ac108 hello.wav
+
+- aplay -D sysdefault:CARD=Headphones  hello.wav 
+- aplay -D sysdefault:CARD=Device  hello.wav 
+- aplay hello.wav
+
+- alsamixer
+- alsactl --file=ac108_asound.state store
+
+audacity
+- set mic  to ac108 4
+- set spkr to upmix  (may need to first change default audio card, or unplug hdmi display)
+
+Extract Voice
+-------------
+Notes:
+- http://www.portaudio.com/#:~:text=PortAudio%20is%20a%20free%2C%20cross,Unix%20(OSS%2FALSA).
+
+  PortAudio is a free, cross-platform, open-source, audio I/O library.  
+  It lets you write simple audio programs in 'C' or C++ that will compile and run on 
+  many platforms including Windows, Macintosh OS X, and Unix (OSS/ALSA). 
+  It is intended to promote the exchange of audio software between developers on different platforms. 
+  Many applications use PortAudio for Audio I/O.  
+
+Steps
+  sudo apt install portaudio19-dev
+  source ~/env/bin/activate
+  pip install pyaudio
+  # create get_index.py - see https://wiki.seeedstudio.com/ReSpeaker_4_Mic_Array_for_Raspberry_Pi/
+  python get_index.py
+  # create record.py  - see https://wiki.seeedstudio.com/ReSpeaker_4_Mic_Array_for_Raspberry_Pi/
+  python record.py     
+  aplay output.wav
+
+Real-time Sound Source Localization and Tracking
+------------------------------------------------
+Notes:
+- ODAS stands for "Open embeddeD Audition System"
+- Papers
+    https://arxiv.org/pdf/1812.00115.pdf
+    https://arxiv.org/pdf/2103.03954v1.pdf
+
+Steps on Raspberry Pi
+  sudo apt-get install libfftw3-dev libconfig-dev libasound2-dev libgconf-2-4
+  sudo apt-get install cmake
+
+  cd /home/haid/proj/proj_robot2/brain/respeaker
+  git clone https://github.com/introlab/odas.git
+  mkdir odas/build
+  cd odas/build
+  cmake ..
+  make
+
+  vi config/odaslive/respeaker_4_mic_array.cfg
+     change 127.0.0.1 to IP addr where odad 
+  bin/odaslive -c config/odaslive/respeaker_4_mic_array.cfg
+
+  (** but first the ODAS Studio needs to be running **)
+
+Steps on Desktop System to install ODAS Studio
+  Installation Instructions are here:  https://github.com/introlab/odas_web/tree/v0.3
+    1. Install Node.js v12
+    2. Clone the repository
+    3. Run npm install in the cloned repository base folder (it contains main.js)
+
+  1. Install Node.js v12
+       reference: https://computingforgeeks.com/how-to-install-nodejs-on-ubuntu-debian-linux-mint/
+   
+       sudo apt update
+       sudo apt -y upgrade
+       sudo apt -y install curl dirmngr apt-transport-https lsb-release ca-certificates
+       curl -sL https://deb.nodesource.com/setup_12.x | sudo -E bash -
+       sudo apt -y install nodejs
+       sudo apt -y  install gcc g++ make
+   
+       node --version    # v12.22.1
+       npm --version     # 6.14.12
+   
+       create hello.js ...
+           const http = require('http');
+           const hostname = '127.0.0.1';
+           const port = 3000;
+           const server = http.createServer((req, res) => {
+             res.statusCode = 200;
+             res.setHeader('Content-Type', 'text/plain');
+             res.end('Hello, World!\n');
+           });
+           server.listen(port, hostname, () => {
+             console.log(`Server running at http://${hostname}:${port}/`);
+           });
+   
+       node hello.js    # Server running at http://127.0.0.1:3000/
+       open link, should see "hello world" 
+
+  2. Clone the repository
+       git clone git@github.com:introlab/odas_web.git
+
+  3. Run npm install in the cloned repository base folder (it contains main.js)
+       sudo apt install python2.7
+       cd odas_web
+       # npm install fails due to a build error on Ubuntu 20.04, workaround
+       # vi packages.json   
+       #   change "grpc": "^1.21.1",
+       #   to     "grpc": "latest",
+       # refer to: https://docs.npmjs.com/cli/v7/configuring-npm/package-json#dependencies
+       PYTHON=/usr/bin/python2.7 npm install     # takes 5 minutes on my desktop
+
+Steps on Desktop System to run ODAS Studio
+  cd odas_web
+  npm start
+
+  # now, on the Raspberry Pi run
+  #   bin/odaslive -c config/odaslive/respeaker_4_mic_array.cfg
+  # using the modified respeaker_4_mic_array.cfg as described earlier
+
+  One way to test this is to use:
+     speaker-test -D sysdefault:CARD=Device -f 300 -t sine
+  and move the speaker around.
+
+Enabling Voice Recognition at Edge with Picovoice
+-------------------------------------------------
+https://wiki.seeedstudio.com/ReSpeaker_4_Mic_Array_for_Raspberry_Pi/#enabling-voice-recognition-at-edge-with-picovoice
+
+Notes:
+- Picovoice enables enterprises to innovate and differentiate rapidly with private voice AI. 
+  Build a unified AI strategy around your brand and products with our speech recognition 
+  and Natural-language understanding (NLU) technologies.
+- Seeed has partnered with Picovice to bring Speech Recognition solution on the edge using 
+  ReSpeaker 4 Mic for developers.
+- Picovoice is an end-to-end platform for building voice products on your terms. 
+  It enables creating voice experiences similar to Alexa and Google. But it entirely 
+  runs 100% on-device. There are advantages of Picovoice:
+  - Private: Everything is processed offline. Intrinsically HIPAA and GDPR compliant.
+  - Reliable: Runs without needing constant connectivity.
+  - Zero Latency: Edge-first architecture eliminates unpredictable network delay.
+  - Accurate: Resilient to noise and reverberation. It outperforms cloud-based alternatives by wide margins.
+  - Cross-Platform: Design once, deploy anywhere. Build using familiar languages and frameworks.
+
+Picovoice Demo
+- setup
+  - sudo apt install python3-pip
+  - sudo pip3 install pyaudio
+  - sudo pip3 install pvrespeakerdemo
+- picovoice_respeaker_demo
+- demo voice commands (wake word = picovoice)
+  - picovoice, turn on the lights
+  - picovoice, turn off the lights
+  - picovoice, set the lights to orange
+- demo built on Picovoice SDK
+    https://github.com/Picovoice/picovoice
+- demo source code
+    https://github.com/Picovoice/picovoice/tree/master/demo/respeaker
+
+Multi Wake Word Demo
+- setup 
+	brain/devel/leds/apa102_test
+	brain/devel/leds/save/
+	brain/devel/picovoice/picovoice_demo_mic
+	brain/devel/picovoice/save/
+	brain/devel/repos/4mics_hat/
+	brain/devel/repos/odas/
+	brain/devel/repos/picovoice/
+	brain/devel/repos/seeed-voicecard/
+	brain/save/
+  - sudo pip3 install ppnrespeakerdemo
+- porcupine_respeaker_demo
+- wake words to colors ...
+    alexa
+    bumblebee
+    computer
+    hey google
+    hey siri
+    jarvis
+    picovoice
+    porcupine
+    terminator
+- source code;
+    https://github.com/Picovoice/porcupine/tree/master/demo/respeaker
+
+xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+xxxx clean up starting here xxxx
+vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
+add sections for devel ..
+- repos
+- leds
+- picovoice
+
+Picovoice SDK - C Language
+--------------------------
+
+APA102 LEDS
+-----------
+~/proj/proj_robot2/brain/picovoice/test/demo/respeaker/pvrespeakerdemo/apa102.py
+
+spi:
+https://learn.sparkfun.com/tutorials/raspberry-pi-spi-and-i2c-tutorial/all
+/usr/include/linux/spi/spidev.h
+
+https://github.com/LdB-ECM/linux_device_access/blob/master/spi.c
+https://github.com/LdB-ECM/linux_device_access/blob/master/spi.c
+
+xxxx notes xxxx
+Broadcom BCM2711 SoC
+The Raspberry Pi 4 uses a Broadcom BCM2711 SoC with a 1.5 GHz 64-bit 
+quad-core ARM Cortex-A72 processor, with 1 MB shared L2 cache.
+
+ 672  sudo find /usr -type f -name porcupine_params.pv
+  673  ls /usr/local/lib/python3.7/dist-packages/pvporcupine/lib/common
+  674  ls /usr/local/lib/python3.7/dist-packages/pvporcupine/lib
+  675  ls /usr/local/lib/python3.7/dist-packages/pvporcupine/lib/raspberry-pi/
+  676  ls /usr/local/lib/python3.7/dist-packages/pvporcupine/lib/raspberry-pi/
+  677  ls /usr/local/lib/python3.7/dist-packages/pvporcupine
+  678  ls /usr/local/lib/python3.7/dist-packages/pvporcupine/resources/
+  679  ls /usr/local/lib/python3.7/dist-packages/pvporcupine/resources/keyword_files/
+  680  ls /usr/local/lib/python3.7/dist-packages/pvporcupine/resources/keyword_files/raspberry-pi/
+
+haid@robot-brain:~/proj/proj_robot2/brain/picovoice/test/demo/c $ cat do_bld
+#!/bin/bash
+
+gcc -std=c99 -O3 -o picovoice_demo_mic -I ../../sdk/c/include \
+  picovoice_demo_mic.c -ldl -lasound
+haid@robot-brain:~/proj/proj_robot2/brain/picovoice/test/demo/c $ cat do_run
+#!/bin/bash
+
+#   const char *library_path = argv[1];
+#   const char *porcupine_model_path = argv[2];
+#   const char *keyword_path = argv[3];
+#   const float porcupine_sensitivity = (float) atof(argv[4]);
+#   const char *rhino_model_path = argv[5];
+#   const char *context_path = argv[6];
+#   const float rhino_sensitivity = (float) atof(argv[7]);
+#   const char *input_audio_device = argv[8];
+
+LIBRARY_PATH=../../sdk/c/lib/raspberry-pi/cortex-a72/libpicovoice.so
+
+DIST=/usr/local/lib/python3.7/dist-packages
+
+INPUT_AUDIO_DEVICE="plughw:CARD=seeed4micvoicec,DEV=0"
+echo $INPUT_AUDIO_DEVICE
+
+./picovoice_demo_mic \
+    $LIBRARY_PATH \
+    $DIST/pvporcupine/lib/common/porcupine_params.pv \
+    $DIST/pvporcupine/resources/keyword_files/raspberry-pi/picovoice_raspberry-pi.ppn \
+    0.5 \
+    $DIST/pvrhino/lib/common/rhino_params.pv \
+    $DIST/pvrespeakerdemo/respeaker_raspberry-pi.rhn \
+    0.5 \
+    $INPUT_AUDIO_DEVICE
+
+brain/devel
+  repos               clone script
+  apa102              test pgm
+  picovoice_demo_c    c lang demo
+
+XXX TODO LATER XXX
+- what is in brain/respeaker dir, comments needed
+- python3 (notes using python3)
+   - virtualenv --system-site-packages --python=python3 ~/env3
+   - source ~/env3/bin/activate
+
+xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+xxxxxxxxxx  FIX  xxxxxxxxxxxxxx
+xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+$ porcupine_respeaker_demo
+/usr/local/lib/python3.7/dist-packages/gpiozero/devices.py:290: PinFactoryFallback: Falling back from rpigpio: No module named 'RPi'
+  'Falling back from %s: %s' % (name, str(e))))
+	brain/devel/leds/apa102_test
+	brain/devel/leds/save/
+	brain/devel/picovoice/picovoice_demo_mic
+	brain/devel/picovoice/save/
+	brain/devel/repos/4mics_hat/
+	brain/devel/repos/odas/
+	brain/devel/repos/picovoice/
+	brain/devel/repos/seeed-voicecard/
+	brain/save/
+/usr/local/lib/python3.7/dist-packages/gpiozero/devices.py:290: PinFactoryFallback: Falling back from lgpio: No module named 'lgpio'
+  'Falling back from %s: %s' % (name, str(e))))
+/usr/local/lib/python3.7/dist-packages/gpiozero/devices.py:290: PinFactoryFallback: Falling back from rpio: No module named 'RPIO'
+  'Falling back from %s: %s' % (name, str(e))))
+/usr/local/lib/python3.7/dist-packages/gpiozero/devices.py:290: PinFactoryFallback: Falling back from pigpio: No module named 'pigpio'
+  'Falling back from %s: %s' % (name, str(e))))
+/usr/local/lib/python3.7/dist-packages/gpiozero/devices.py:28
+
+----------------------- ----------------------- -----------------------
+----------------------- ----------------------- -----------------------
+----------------------- ----------------------- -----------------------
+
+brain:
+- respeaker microphone
+  - install rpi and respeaker hat
+  - study directions for respeaker
+- when voltage gets low:
+  - beep and shutdown the body
+- power saving
+  - shutdown body when not in use
+
 body
 - review threads, make a list of there frequencies
 - shut down motors on high current for 1 second
@@ -10,25 +442,15 @@ body
   - command recall
 - devel tests, do these all build and work
 
-brain:
-- respeaker microphone
-  - install rpi and respeaker hat
-  - study directions for respeaker
-- purchase Mini External USB Stereo Speaker
-  - PRODUCT ID: 3369
-- when voltage gets low:
-  - beep and shutdown the body
-- power saving
-  - shutdown body when not in use
-
 misc:
-- update readme.md in proj_robot
+- update readme.md in proj_robot2
 - dbg
-  - make a backup script, to google drive
   - safe_memcpy
   - don't use memcpy in RW_MMIO
   - funcs, startup should get BCM base address, and use in timer test
 - run the rt_gpio test pgms and check data on scope
+
+backup all projects periodically, run do_backup
 
 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 xxxxxxxxxxxxxxxxxxxx  DOC BEGINS HERE  xxxxxxxxxxxxxxxxxxxxxx
@@ -496,8 +918,8 @@ DSD TECH 2 PCS IIC OLED Display 0.91 Inch for Arduino ARM
     - cd u8g2/csrc
     - gcc -c -g -Wall *.c
     - ar cr libu8g2.a *.o
-    - mkdir ~/proj/proj_robot/util//u8g2
-    - cp *.h libu8g2.a ~/proj/proj_robot/util//u8g2
+    - mkdir ~/proj/proj_robot2/common/devices/i2c/u8g2
+    - cp *.h libu8g2.a ~/proj/proj_robot2/common/devices/i2c/u8g2
     - add a copyright file in this new directory too
   - step 2
     - add code to util_sensors.c, by porting from 
@@ -846,7 +1268,10 @@ Download OS
 
 Use dd to copy the .img file to micro-sd card
 
-Run rasp-config to set:
+Login 
+- username/password:  pi  raspberry
+
+Run raspi-config to set:
 - system options -> wireless lan
 - system options -> hostname
 - interfaces     -> ssh enable
@@ -877,7 +1302,7 @@ configure system
 configure my account
 - on home
     cd ~/.ssh
-    host=robot-ctlr
+    host=robot-brain
     ssh $host mkdir .ssh
     scp id_rsa.pub $host:.ssh/authorized_keys
     scp config id_rsa id_rsa.pub  $host:.ssh
@@ -890,7 +1315,7 @@ configure my account
         alias ls='ls -l --color=always --group-directories-first --human-readable'
         alias cscope='/usr/bin/cscope -d'
         alias cscope_init='rm -f cscope.out tags; /usr/bin/cscope -bR; ctags -R'
-        alias pr='cd ~/proj/proj_robot'
+        alias pr='cd ~/proj/proj_robot2'
         alias pdbg='cd ~/proj/proj_dbg'
         HISTCONTROL=""
         export EDITOR=vim
@@ -919,8 +1344,8 @@ configure my account
   * make git directories
         mkdir proj
         cd proj
-        git clone haid@home:proj/private_git_repos/proj_dbg.git
-        git clone git@github.com:sthaid/proj_robot.git
+        git clone haid@home:proj/private_git_repos/proj_dbg
+        git clone git@github.com:sthaid/proj_robot2
   * build and install dbg
   * bin/run_dbg
         #!/bin/bash
