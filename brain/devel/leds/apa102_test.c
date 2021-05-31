@@ -10,6 +10,8 @@
 #include <sys/ioctl.h>
 #include <linux/spi/spidev.h>
 
+// XXX add code to set GPIO5
+
 // notes: 
 // - respeaker requires gpio5 to be set, to enable the leds.
 // - code is ported from ../repos/4mics_hat/apa102.py
