@@ -1,87 +1,63 @@
 #include <stdio.h>
-#include <stdint.h>
-#include <stdlib.h>
-#include <string.h>
 #include <unistd.h>
-#include <stdbool.h>
-#include <fcntl.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <sys/ioctl.h>
-#include <linux/spi/spidev.h>
 
-// XXX add code to set GPIO5
+#include <apa102.h>
+#include <gpio.h>
 
-// notes: 
-// - respeaker requires gpio5 to be set, to enable the leds.
-// - code is ported from ../repos/4mics_hat/apa102.py
+#define MAX_LED 12
 
-#define NUM_LED 12
+unsigned int colors[] = {
+        LED_WHITE, LED_RED, LED_PINK, LED_ORANGE, LED_YELLOW,
+        LED_GREEN, LED_BLUE, LED_LIGHT_BLUE, LED_PURPLE, /*LED_OFF*/ };
 
-static struct {
-    unsigned char hdr[4];
-    struct led_s {
-        unsigned char start_and_brightness;
-        unsigned char blue;
-        unsigned char green;
-        unsigned char red;
-    } led[NUM_LED];
-    unsigned char trailer[(NUM_LED+15)/16];
-} tx;
-
-void set_leds(int brightness);
+#define MAX_COLORS (sizeof(colors)/sizeof(colors[0]))
 
 int main(int argc, char **argv)
 {
-    int fd, brightness, i;
+    int i, wavelen, brightness;
 
-    fd = open("/dev/spidev0.1", O_RDWR);
-    if (fd < 0) {
-        perror("open");
-        exit(1);  
+    if (apa102_init(MAX_LED) < 0) {
+        return 1;
     }
 
-    printf("Test1: ramp up brightness ...\n");
-    for (brightness = 0; brightness < 32; brightness++) {
-        set_leds(brightness);
-        write(fd, &tx, sizeof(tx));
+    // enable VCC of the leds, this is required on respeaker
+    if (gpio_init() < 0) {
+        return 1;
+    }
+    set_gpio_func(5,FUNC_OUT);
+    gpio_write(5,1);
+
+    printf("Colors test ...\n");
+    for (i = 0; i < MAX_COLORS; i++) {
+        apa102_set_all_leds(colors[i], 10);
+        apa102_show_leds();
+        sleep(1);
+    }
+    apa102_set_all_leds_off();
+    apa102_show_leds();
+    sleep(1);
+
+    printf("Wavelen test ...\n");
+    for (wavelen = 400; wavelen <= 700; wavelen += 2) {
+        unsigned int rgb = apa102_wavelen_to_rgb(wavelen);
+        apa102_set_all_leds(rgb, 10);
+        apa102_show_leds();
         usleep(100000);
     }
+    apa102_set_all_leds_off();
+    apa102_show_leds();
+    sleep(1);
 
-    printf("Test2: rotate ...\n");
-    for (i = 0; i < 20; i++) {
-        struct led_s tmp = tx.led[0];
-        memmove(&tx.led[0], &tx.led[1], (NUM_LED-1)*sizeof(struct led_s));
-        tx.led[NUM_LED-1] = tmp;
-        write(fd, &tx, sizeof(tx));
-        usleep(250000);
+    printf("Brightness test ...\n");
+    for (brightness = 0; brightness < MAX_BRIGHTNESS; brightness++) {
+        for (i = 0; i < MAX_LED; i++) {
+            apa102_set_led(i, colors[i%MAX_COLORS], brightness);
+        }
+        apa102_show_leds();
+        usleep(200000);
     }
-
-    printf("Test3: ramp down brightness ...\n");
-    for (brightness = 31; brightness >= 0; brightness--) {
-        set_leds(brightness);
-        write(fd, &tx, sizeof(tx));
-        usleep(100000);
-    }
+    apa102_set_all_leds_off();
+    apa102_show_leds();
 
     return 0;
-}
-
-void set_leds(int brightness)
-{
-    int i;
-
-    //printf("set brightness %d\n", brightness);
-
-    if (brightness < 0 || brightness > 31) {
-        printf("ERROR: invalid brightness %d\n", brightness);
-        exit(1);
-    }
-
-    for (i = 0; i < NUM_LED; i++) {
-        tx.led[i].start_and_brightness = 0xe0 | brightness;
-        tx.led[i].red   = (i % 3) == 0 ? 32 : 0;
-        tx.led[i].green = (i % 3) == 1 ? 32 : 0;
-        tx.led[i].blue  = (i % 3) == 2 ? 32 : 0;
-    }
 }
