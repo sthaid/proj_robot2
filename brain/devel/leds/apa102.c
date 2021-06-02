@@ -85,6 +85,7 @@ int apa102_init(int max_led_arg)
 void apa102_set_led(int num, unsigned int rgb, int led_brightness)
 {
     struct led_s *x = &tx->led[num];
+    double b;
 
     if (num < 0 || num >= max_led) {
         ERROR("invalid arg num=%d\n", num);
@@ -96,8 +97,12 @@ void apa102_set_led(int num, unsigned int rgb, int led_brightness)
         return;
     }
 
-    double b = 1e-6 * (led_brightness * led_brightness* led_brightness);
-    if (b != 0 && b < .002) b = .002;
+    if (led_brightness > 0) {
+        b = 1e-6 * (led_brightness * led_brightness* led_brightness) + .002;
+        if (b > 1) b = 1;
+    } else {
+        b = 0;
+    }
     //INFO("num=%d  led_brightness=%d  b=%0.3f\n", num, led_brightness, b);
 
     x->red   = nearbyint(((rgb >>  0) & 0xff) * b);
