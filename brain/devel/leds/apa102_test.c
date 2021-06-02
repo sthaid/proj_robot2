@@ -79,7 +79,7 @@ int main(int argc, char **argv)
     printf("Rotate test ...\n");
     for (i = 0; i < MAX_LED; i++) {
         apa102_set_led(i, 
-                       LED_BLUE, 
+                       LED_LIGHT_BLUE, 
                        i * 100 / (MAX_LED-1));
     }
     for (int cnt = 0; cnt < 100; cnt++) {
