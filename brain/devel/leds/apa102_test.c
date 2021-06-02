@@ -14,7 +14,7 @@ unsigned int colors[] = {
 
 int main(int argc, char **argv)
 {
-    int i, wavelen, brightness;
+    int i, wavelen, led_brightness, all_brightness;
 
     if (apa102_init(MAX_LED) < 0) {
         return 1;
@@ -29,35 +29,50 @@ int main(int argc, char **argv)
 
     printf("Colors test ...\n");
     for (i = 0; i < MAX_COLORS; i++) {
-        apa102_set_all_leds(colors[i], 10);
-        apa102_show_leds();
+        apa102_set_all_leds(colors[i], 100);
+        apa102_show_leds(31);
         sleep(1);
     }
-    apa102_set_all_leds_off();
-    apa102_show_leds();
+    apa102_show_leds(0);
     sleep(1);
 
     printf("Wavelen test ...\n");
     for (wavelen = 400; wavelen <= 700; wavelen += 2) {
         unsigned int rgb = apa102_wavelen_to_rgb(wavelen);
-        apa102_set_all_leds(rgb, 10);
-        apa102_show_leds();
+        apa102_set_all_leds(rgb, 100);
+        apa102_show_leds(31);
         usleep(100000);
     }
-    apa102_set_all_leds_off();
-    apa102_show_leds();
+    apa102_show_leds(0);
     sleep(1);
 
-    printf("Brightness test ...\n");
-    for (brightness = 0; brightness < MAX_BRIGHTNESS; brightness++) {
+    printf("LED brightness test ...\n");
+    int color = LED_WHITE;
+    for (led_brightness = 0; led_brightness <= 100; led_brightness++) {
         for (i = 0; i < MAX_LED; i++) {
-            apa102_set_led(i, colors[i%MAX_COLORS], brightness);
+            apa102_set_led(i, color, led_brightness);
         }
-        apa102_show_leds();
-        usleep(200000);
+        apa102_set_led(0, color, 100);
+        apa102_set_led(1, color, 100);
+        apa102_set_led(2, color, 100);
+        apa102_set_led(3, color, 100);
+        apa102_show_leds(31);
+        usleep(100000);
     }
-    apa102_set_all_leds_off();
-    apa102_show_leds();
+    apa102_show_leds(0);
+    sleep(1);
+
+    printf("All brightness test ...\n");
+    while (true) {
+        for (all_brightness = 0; all_brightness <= 31; all_brightness++) {
+            apa102_show_leds(all_brightness);
+            usleep(100000);
+        }
+        for (all_brightness = 31; all_brightness >= 0; all_brightness--) {
+            apa102_show_leds(all_brightness);
+            usleep(100000);
+        }
+    }
 
     return 0;
 }

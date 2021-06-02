@@ -11,12 +11,20 @@
 #include <apa102.h>
 #include <misc.h>
 
+// XXX TODO
+// - move to common dir and tests dir
+// - add rotate func
+
+// developed using info from:
+//   brain/devel/repos/4mics_hat/apa102.py
+
 //
 // defines
 //
 
 #define SPIDEV "/dev/spidev0.1"
 
+#define LED_BRIGHTNESS_FUDGE 0.5
 
 //
 // variables
@@ -40,9 +48,6 @@ static int tx_buff_size;
 static int max_led;
 
 // ---------------------------------------------------------------------------------------
-
-//XXX move to common dir and tests dir
-//XXX better range for brightness
 
 int apa102_init(int max_led_arg)
 {
@@ -71,7 +76,7 @@ int apa102_init(int max_led_arg)
 
     // set leds off, 
     apa102_set_all_leds_off();
-    apa102_show_leds();
+    apa102_show_leds(0);
 
     // success
     return 0;
@@ -79,7 +84,7 @@ int apa102_init(int max_led_arg)
 
 // - - - - - - - - - - 
 
-void apa102_set_led(int num, unsigned int rgb, int brightness)
+void apa102_set_led(int num, unsigned int rgb, int led_brightness)
 {
     struct led_s *x = &tx->led[num];
 
@@ -87,36 +92,57 @@ void apa102_set_led(int num, unsigned int rgb, int brightness)
         ERROR("invalid arg num=%d\n", num);
         return;
     }
-    if (brightness < 0 || brightness >= MAX_BRIGHTNESS) {
-        ERROR("invalid arg brightnesss=%d\n", brightness);
+
+    if (led_brightness < 0 || led_brightness > 100) {
+        ERROR("invalid arg led_brightnesss=%d\n", led_brightness);
         return;
     }
 
-    x->start_and_brightness = 0xe0 | brightness;
-    x->red    = (rgb >>  0) & 0xff;
-    x->green  = (rgb >>  8) & 0xff;
-    x->blue   = (rgb >> 16) & 0xff;
+    double b = (double)led_brightness * (.01 * LED_BRIGHTNESS_FUDGE);
+    x->red   = nearbyint(((rgb >>  0) & 0xff) * b);
+    x->green = nearbyint(((rgb >>  8) & 0xff) * b);
+    x->blue  = nearbyint(((rgb >> 16) & 0xff) * b);
 }
 
-void apa102_set_all_leds(unsigned int rgb, int brightness)
+void apa102_set_all_leds(unsigned int rgb, int led_brightness)
 {
-    if (brightness < 0 || brightness >= MAX_BRIGHTNESS) {
-        ERROR("invalid arg brightnesss=%d\n", brightness);
+    int red, green, blue;
+
+    if (led_brightness < 0 || led_brightness > 100) {
+        ERROR("invalid arg led_brightnesss=%d\n", led_brightness);
         return;
     }
 
-    for (int i = 0; i < max_led; i++) {
-        apa102_set_led(i, rgb, brightness);
+    double b = (double)led_brightness * (.01 * LED_BRIGHTNESS_FUDGE);
+    red   = nearbyint(((rgb >>  0) & 0xff) * b);
+    green = nearbyint(((rgb >>  8) & 0xff) * b);
+    blue  = nearbyint(((rgb >> 16) & 0xff) * b);
+
+    for (int num = 0; num < max_led; num++) {
+        struct led_s *x = &tx->led[num];
+        x->red   = red;
+        x->green = green;
+        x->blue  = blue;
     }
 }
 
 void apa102_set_all_leds_off(void)
 {
-    apa102_set_all_leds(LED_OFF, 0);
+    memset(tx, 0, tx_buff_size);
 }
 
-void apa102_show_leds(void)
+void apa102_show_leds(int all_led_brightness)
 {
+    if (all_led_brightness < 0 || all_led_brightness > 31) {
+        ERROR("invalid arg all_led_brightnesss=%d\n", all_led_brightness);
+        return;
+    }
+
+    for (int num = 0; num < max_led; num++) {
+        struct led_s *x = &tx->led[num];
+        x->start_and_brightness = 0xe0 | all_led_brightness;
+    }
+
     write(fd, tx, tx_buff_size);
 }
 
