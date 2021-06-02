@@ -27,6 +27,7 @@ int apa102_init(int max_led);
 void apa102_set_led(int num, unsigned int rgb, int led_brightness);
 void apa102_set_all_leds(unsigned int rgb, int led_brightness);
 void apa102_set_all_leds_off(void);
+void apa102_rotate_leds(int mode);
 
 void apa102_show_leds(int all_led_brightness);
 

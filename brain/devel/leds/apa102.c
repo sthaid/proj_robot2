@@ -13,7 +13,7 @@
 
 // XXX TODO
 // - move to common dir and tests dir
-// - add rotate func
+// - try setting max spi speed
 
 // developed using info from:
 //   brain/devel/repos/4mics_hat/apa102.py
@@ -23,8 +23,6 @@
 //
 
 #define SPIDEV "/dev/spidev0.1"
-
-#define LED_BRIGHTNESS_FUDGE 0.5
 
 //
 // variables
@@ -98,7 +96,10 @@ void apa102_set_led(int num, unsigned int rgb, int led_brightness)
         return;
     }
 
-    double b = (double)led_brightness * (.01 * LED_BRIGHTNESS_FUDGE);
+    double b = 1e-6 * (led_brightness * led_brightness* led_brightness);
+    if (b != 0 && b < .002) b = .002;
+    //INFO("num=%d  led_brightness=%d  b=%0.3f\n", num, led_brightness, b);
+
     x->red   = nearbyint(((rgb >>  0) & 0xff) * b);
     x->green = nearbyint(((rgb >>  8) & 0xff) * b);
     x->blue  = nearbyint(((rgb >> 16) & 0xff) * b);
@@ -106,29 +107,35 @@ void apa102_set_led(int num, unsigned int rgb, int led_brightness)
 
 void apa102_set_all_leds(unsigned int rgb, int led_brightness)
 {
-    int red, green, blue;
-
-    if (led_brightness < 0 || led_brightness > 100) {
-        ERROR("invalid arg led_brightnesss=%d\n", led_brightness);
-        return;
-    }
-
-    double b = (double)led_brightness * (.01 * LED_BRIGHTNESS_FUDGE);
-    red   = nearbyint(((rgb >>  0) & 0xff) * b);
-    green = nearbyint(((rgb >>  8) & 0xff) * b);
-    blue  = nearbyint(((rgb >> 16) & 0xff) * b);
-
     for (int num = 0; num < max_led; num++) {
-        struct led_s *x = &tx->led[num];
-        x->red   = red;
-        x->green = green;
-        x->blue  = blue;
+        apa102_set_led(num, rgb, led_brightness);
     }
 }
 
 void apa102_set_all_leds_off(void)
 {
     memset(tx, 0, tx_buff_size);
+}
+
+void apa102_rotate_leds(int mode)
+{
+    struct led_s x;
+
+    switch (mode) {
+    case 0:  // counterclockwise on respeaker
+        x = tx->led[0];
+        memmove(&tx->led[0], &tx->led[1], (max_led-1)*sizeof(struct led_s));
+        tx->led[max_led-1] = x;
+        break;
+    case 1:  // clockwise on respeaker
+        x = tx->led[max_led-1];
+        memmove(&tx->led[1], &tx->led[0], (max_led-1)*sizeof(struct led_s));
+        tx->led[0] = x;
+        break;
+    default:
+        ERROR("invalid mode %d\n", mode);
+        break;
+    }
 }
 
 void apa102_show_leds(int all_led_brightness)

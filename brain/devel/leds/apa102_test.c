@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <unistd.h>
+#include <string.h>
 
 #include <apa102.h>
 #include <gpio.h>
@@ -16,7 +17,13 @@ int main(int argc, char **argv)
 {
     int i, wavelen, led_brightness, all_brightness;
 
+    // init apa102 led device
     if (apa102_init(MAX_LED) < 0) {
+        return 1;
+    }
+
+    // if 'off' requested then exit, leds are now off due to above call to apa102_init
+    if (argc == 2 && strcmp(argv[1], "off") == 0) {
         return 1;
     }
 
@@ -27,6 +34,7 @@ int main(int argc, char **argv)
     set_gpio_func(5,FUNC_OUT);
     gpio_write(5,1);
 
+    // tests follow ...
     printf("Colors test ...\n");
     for (i = 0; i < MAX_COLORS; i++) {
         apa102_set_all_leds(colors[i], 100);
@@ -52,10 +60,6 @@ int main(int argc, char **argv)
         for (i = 0; i < MAX_LED; i++) {
             apa102_set_led(i, color, led_brightness);
         }
-        apa102_set_led(0, color, 100);
-        apa102_set_led(1, color, 100);
-        apa102_set_led(2, color, 100);
-        apa102_set_led(3, color, 100);
         apa102_show_leds(31);
         usleep(100000);
     }
@@ -63,16 +67,32 @@ int main(int argc, char **argv)
     sleep(1);
 
     printf("All brightness test ...\n");
-    while (true) {
-        for (all_brightness = 0; all_brightness <= 31; all_brightness++) {
-            apa102_show_leds(all_brightness);
-            usleep(100000);
-        }
-        for (all_brightness = 31; all_brightness >= 0; all_brightness--) {
-            apa102_show_leds(all_brightness);
-            usleep(100000);
-        }
+    for (all_brightness = 0; all_brightness <= 31; all_brightness++) {
+        apa102_show_leds(all_brightness);
+        usleep(100000);
+    }
+    for (all_brightness = 31; all_brightness >= 0; all_brightness--) {
+        apa102_show_leds(all_brightness);
+        usleep(100000);
     }
 
+    printf("Rotate test ...\n");
+    for (i = 0; i < MAX_LED; i++) {
+        apa102_set_led(i, 
+                       LED_GREEN, 
+                       i * 100 / (MAX_LED-1));
+    }
+    for (int cnt = 0; cnt < 100; cnt++) {
+        apa102_rotate_leds(0);
+        apa102_show_leds(31);
+        usleep(100000);
+    }
+    for (int cnt = 0; cnt < 100; cnt++) {
+        apa102_rotate_leds(1);
+        apa102_show_leds(31);
+        usleep(100000);
+    }
+
+    // done
     return 0;
 }
