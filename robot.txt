@@ -362,6 +362,10 @@ Python Notes
   - Python 3 offers Range() function to perform iterations whereas, In Python 2, 
     the xrange() is used for iterations.
 
+Sound Notes
+-----------
+- speed of sound is 343 meters/sec  OR 767 miles/hour
+
 APA102 LEDS - C Language Ctrl Pgm
 ---------------------------------
 Notes:
@@ -375,6 +379,40 @@ Notes:
 
 My C language demo program: ~/proj/proj_robot2/brain/devel/leds
 
+Respeaker Sound Localization AAA TODO AAA
+-----------------------------------------
+
+write portaudio19 pgm to capture sound from 4 channels of respeaker
+  http://portaudio.com/docs/v19-doxydocs/index.html    MAIN PAGE
+  https://github.com/PortAudio/portaudio/wiki          WIKI
+
+move the robot-brain pi back to bench and put speaker on corner desk
+- try speaker, sine wave, white noise, recorded voice
+
+sdl pgm to display the waveforms
+- select range
+- adjust position
+- calculate cross correlation
+- add low pass filter option
+
+filter development, software model
+- averaging, or exponential, or ...
+- apply range of sine wave frequencies to get frequency response
+- try white noise through the filter, and use fourier transform to get freq response
+- filter: web sites 
+    https://www.quora.com/Whats-the-C-coding-for-a-low-pass-filter
+   http://www.dspguide.com/
+- fft web sites
+http://www.fftw.org/
+http://www.fftw.org/fftw3.pdf
+
+------------
+
+STEP1 portaudio test
+- generate a sine wave
+- capture microphone data
+- decode the microphone data
+- put test pgms in devel dir
 
 ----------------------- ----------------------- -----------------------
 -----------------------          TODO           -----------------------
