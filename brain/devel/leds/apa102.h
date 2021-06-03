@@ -19,13 +19,13 @@ extern "C" {
 #define LED_OFF        LED_RGB(0,0,0)
 
 // notes:
-// - led_brightness range     0 - 100
-// - all_led_brightness range 0 - 31
+// - led_brightness range  0 - 100
+// - all_brightness range  0 - 31
 
 int apa102_init(int max_led);
 
 void apa102_set_led(int num, unsigned int rgb, int led_brightness);
-void apa102_set_all_leds(unsigned int rgb, int led_brightness);
+void apa102_set_all_leds(unsigned int rgb, int all_brightness);
 void apa102_set_all_leds_off(void);
 void apa102_rotate_leds(int mode);
 

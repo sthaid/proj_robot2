@@ -13,7 +13,7 @@
 
 // XXX TODO
 // - move to common dir and tests dir
-// - try setting max spi speed
+// - try setting max spi speed, and see if continuous operation (without delays) works
 
 // developed using info from:
 //   brain/devel/repos/4mics_hat/apa102.py
@@ -97,6 +97,7 @@ void apa102_set_led(int num, unsigned int rgb, int led_brightness)
         return;
     }
 
+    // xxx comment
     if (led_brightness > 0) {
         b = 1e-6 * (led_brightness * led_brightness* led_brightness) + .002;
         if (b > 1) b = 1;
@@ -143,16 +144,16 @@ void apa102_rotate_leds(int mode)
     }
 }
 
-void apa102_show_leds(int all_led_brightness)
+void apa102_show_leds(int all_brightness)
 {
-    if (all_led_brightness < 0 || all_led_brightness > 31) {
-        ERROR("invalid arg all_led_brightnesss=%d\n", all_led_brightness);
+    if (all_brightness < 0 || all_brightness > 31) {
+        ERROR("invalid arg all_brightnesss=%d\n", all_brightness);
         return;
     }
 
     for (int num = 0; num < max_led; num++) {
         struct led_s *x = &tx->led[num];
-        x->start_and_brightness = 0xe0 | all_led_brightness;
+        x->start_and_brightness = 0xe0 | all_brightness;
     }
 
     write(fd, tx, tx_buff_size);
