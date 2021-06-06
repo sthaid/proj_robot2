@@ -4,7 +4,9 @@
 #include <unistd.h>
 #include <string.h>
 #include <math.h>
+
 #include <portaudio.h>
+#include "pa_utils.h"
 
 #define SAMPLE_RATE 48000  // samples per sec
 #define DURATION    4      // secs
@@ -15,15 +17,6 @@
 #define MAX_FREQ 10000
 
 #define MAX_DATA  (DURATION * SAMPLE_RATE)
-
-#define ERROR_CHECK(rc, routine_name) \
-    do { \
-        if (rc != paNoError) { \
-            printf("ERROR: %s rc=%d, %s\n", routine_name, rc, Pa_GetErrorText(rc)); \
-            Pa_Terminate(); \
-            exit(1); \
-        } \
-    } while (0)
 
 //
 // variables
@@ -57,6 +50,7 @@ int main(int argc, char **argv)
     PaError             rc;
     PaStream           *stream;
     PaStreamParameters  output_params;
+    PaDeviceIndex       default_output_device_idx;
 
     // determine freq_start and freq_end
     if (argc >= 2 && sscanf(argv[1], "%d", &freq_start) != 1) {
@@ -85,9 +79,14 @@ int main(int argc, char **argv)
 
     // initalize portaudio
     rc = Pa_Initialize();
+    PA_ERROR_CHECK(rc, "Pa_Initialize");
+
+    // get the default output device, and print info
+    default_output_device_idx = Pa_GetDefaultOutputDevice();
+    print_device_info(default_output_device_idx);
 
     // init output_params and open the audio output stream
-    output_params.device = Pa_GetDefaultOutputDevice();
+    output_params.device = default_output_device_idx;
     if (output_params.device == paNoDevice) {
         printf("ERROR: No default output device.\n");
         exit(1);
@@ -105,15 +104,15 @@ int main(int argc, char **argv)
                        0,       // stream flags
                        stream_cb,
                        NULL);   // user_data
-    ERROR_CHECK(rc, "Pa_OpenStream");
+    PA_ERROR_CHECK(rc, "Pa_OpenStream");
 
     // register callback for when the the audio output compltes
     rc = Pa_SetStreamFinishedCallback(stream, stream_finished_cb);
-    ERROR_CHECK(rc, "Pa_SetStreamFinishedCallback");
+    PA_ERROR_CHECK(rc, "Pa_SetStreamFinishedCallback");
 
     // start the audio outuput
     rc = Pa_StartStream(stream);
-    ERROR_CHECK(rc, "Pa_StartStream");
+    PA_ERROR_CHECK(rc, "Pa_StartStream");
 
     // wait for audio output to complete
     while (!done) {
