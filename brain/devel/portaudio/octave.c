@@ -71,8 +71,6 @@ int main(int argc, char **argv)
         printf("ERROR: invalid frequency range: %d - %d\n", freq_start, freq_end);
         return 1;
     }
-    printf("range %d - %d hz,  duration %d secs,  sample_rate %d /sec\n\n",
-           freq_start, freq_end, DURATION, SAMPLE_RATE);
 
     // initialize sound data buffer 
     init_data();
@@ -83,7 +81,14 @@ int main(int argc, char **argv)
 
     // get the default output device, and print info
     default_output_device_idx = Pa_GetDefaultOutputDevice();
+
+    // print info
+    printf("\n");
+    printf("Range %d - %d Hz,  Duration %d secs,  Sample_Rate %d /sec\n",
+           freq_start, freq_end, DURATION, SAMPLE_RATE);
+    printf("\n");
     print_device_info(default_output_device_idx);
+    printf("\n");
 
     // init output_params and open the audio output stream
     output_params.device = default_output_device_idx;
@@ -138,7 +143,10 @@ static void init_data(void)
         freq += (double)(freq_end - freq_start) / (DURATION * SAMPLE_RATE);
 
         if (max_data == MAX_DATA) {
-            printf("FREQ %0.3f\n", freq);
+            if (nearbyint(freq) != freq_end) {
+                printf("ERROR: BUG freq %0.3f not equal freq_end %d\n", freq, freq_end);
+                exit(1);
+            }
             break;
         }
     }
