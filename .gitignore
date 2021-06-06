@@ -31,11 +31,15 @@ body/body.log
 
 body_test/bt
 
-brain/devel/leds/apa102_test
-brain/devel/picovoice/picovoice_demo_mic
 brain/devel/repos/4mics_hat/
 brain/devel/repos/odas/
 brain/devel/repos/odas_web/
 brain/devel/repos/picovoice/
 brain/devel/repos/seeed-voicecard/
+brain/devel/repos/libsndfile/
+brain/devel/repos/portaudio/
+brain/devel/leds/apa102_test
+brain/devel/picovoice/picovoice_demo_mic
+brain/devel/portaudio/portaudio_examples/build/
+brain/devel/portaudio/octave
 
