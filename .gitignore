@@ -2,6 +2,7 @@
 *.ko
 *.cmd
 *.swp
+*.wav
 
 devel/tests/button/button_test
 devel/tests/current/current_test
@@ -42,4 +43,6 @@ brain/devel/leds/apa102_test
 brain/devel/picovoice/picovoice_demo_mic
 brain/devel/portaudio/portaudio_examples/build/
 brain/devel/portaudio/octave
+brain/devel/portaudio/record
+brain/devel/portaudio/devs
 

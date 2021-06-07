@@ -10,7 +10,7 @@
         } \
     } while (0)
 
-void print_device_info(PaDeviceIndex idx);
-void print_device_info_all(void);
+void pa_print_device_info(PaDeviceIndex idx);
+void pa_print_device_info_all(void);
 
 #endif

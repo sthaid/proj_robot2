@@ -79,23 +79,20 @@ int main(int argc, char **argv)
     rc = Pa_Initialize();
     PA_ERROR_CHECK(rc, "Pa_Initialize");
 
-    // get the default output device, and print info
+    // get the default output device
     default_output_device_idx = Pa_GetDefaultOutputDevice();
-
-    // print info
-    printf("\n");
-    printf("Range %d - %d Hz,  Duration %d secs,  Sample_Rate %d /sec\n",
-           freq_start, freq_end, DURATION, SAMPLE_RATE);
-    printf("\n");
-    print_device_info(default_output_device_idx);
-    printf("\n");
-
-    // init output_params and open the audio output stream
-    output_params.device = default_output_device_idx;
     if (output_params.device == paNoDevice) {
         printf("ERROR: No default output device.\n");
         exit(1);
     }
+
+    // print info
+    printf("\nRange %d - %d Hz,  Duration %d secs,  Sample_Rate %d /sec\n\n",
+           freq_start, freq_end, DURATION, SAMPLE_RATE);
+    pa_print_device_info(default_output_device_idx);
+
+    // init output_params and open the audio output stream
+    output_params.device = default_output_device_idx;
     output_params.channelCount              = 1;
     output_params.sampleFormat              = paFloat32;
     output_params.suggestedLatency          = Pa_GetDeviceInfo(output_params.device)->defaultLowOutputLatency;
@@ -125,7 +122,7 @@ int main(int argc, char **argv)
     }
 
     // clean up and exit
-    Pa_StopStream(stream);  // not needed here because already done
+    Pa_StopStream(stream);
     Pa_CloseStream( stream );
     Pa_Terminate();
     return 0;

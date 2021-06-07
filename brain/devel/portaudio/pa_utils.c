@@ -4,7 +4,7 @@
 #include <portaudio.h>
 #include "pa_utils.h"
 
-void print_device_info(PaDeviceIndex idx)
+void pa_print_device_info(PaDeviceIndex idx)
 {
     const PaDeviceInfo *di;
     const PaHostApiInfo *hai;
@@ -28,9 +28,10 @@ void print_device_info(PaDeviceIndex idx)
     printf("  defaultHighInputLatency    = %0.3f\n", di->defaultHighInputLatency);
     printf("  defaultHighOutputLatency   = %0.3f\n", di->defaultHighOutputLatency);
     printf("  defaultSampleRate          = %0.0f\n", di->defaultSampleRate);  // XXX get all rates
+    printf("\n");
 }
 
-void print_device_info_all(void)
+void pa_print_device_info_all(void)
 {
     int i;
     int dev_cnt = Pa_GetDeviceCount();
@@ -49,7 +50,6 @@ void print_device_info_all(void)
     printf("\n");
 
     for (i = 0; i < dev_cnt; i++) {
-        print_device_info(i);
-        printf("\n");
+        pa_print_device_info(i);
     }
 }
