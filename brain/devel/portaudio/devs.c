@@ -2,7 +2,7 @@
 #include <stdlib.h>
 
 #include <portaudio.h>
-#include "pa_utils.h"
+#include <pa_utils.h>
 
 int main(int argc, char **argv)
 {

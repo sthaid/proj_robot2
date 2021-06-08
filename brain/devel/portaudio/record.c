@@ -8,8 +8,8 @@
 #include <math.h>
 
 #include <portaudio.h>
-#include "pa_utils.h"
-#include "sf_utils.h"
+#include <pa_utils.h>
+#include <sf_utils.h>
 
 #define SAMPLE_RATE 48000  // samples per sec
 #define DURATION    4      // secs

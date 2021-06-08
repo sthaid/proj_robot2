@@ -2,7 +2,7 @@
 #include <sndfile.h>
 #include <string.h>
 
-#include "sf_utils.h"
+#include <sf_utils.h>
 
 // reference:
 //   apt install libsndfile1-dev

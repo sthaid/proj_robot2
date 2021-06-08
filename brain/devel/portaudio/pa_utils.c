@@ -2,7 +2,7 @@
 #include <stdlib.h>
 
 #include <portaudio.h>
-#include "pa_utils.h"
+#include <pa_utils.h>
 
 void pa_print_device_info(PaDeviceIndex idx)
 {
