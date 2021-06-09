@@ -1,5 +1,3 @@
-// XXX adjust capture volume ?
-
 #include <stdio.h>
 #include <stdbool.h>
 #include <stdlib.h>
@@ -13,18 +11,25 @@
 
 #define SAMPLE_RATE 48000  // samples per sec
 #define DURATION    4      // secs
+#define MAX_DATA    (DURATION * SAMPLE_RATE)
 
 #define MAX_CHANNEL 4
-#define MAX_DATA    (DURATION * SAMPLE_RATE)
+
+#define PA_ERROR_CHECK(rc, routine_name) \
+    do { \
+        if (rc != paNoError) { \
+            printf("ERROR: %s rc=%d, %s\n", routine_name, rc, Pa_GetErrorText(rc)); \
+            Pa_Terminate(); \
+            exit(1); \
+        } \
+    } while (0)
 
 //
 // variables
 //
 
 static bool   done;
-
 static float  data[MAX_CHANNEL][MAX_DATA];
-static int    data_idx;
 
 //
 // prototypes
@@ -73,10 +78,10 @@ int main(int argc, char **argv)
     }
 
     // init input_params and open the audio output stream
-    input_params.device                    = default_input_device_idx;
-    input_params.channelCount              = MAX_CHANNEL;
-    input_params.sampleFormat              = paFloat32 | paNonInterleaved;
-    input_params.suggestedLatency          = Pa_GetDeviceInfo(input_params.device)->defaultLowInputLatency;
+    input_params.device           = default_input_device_idx;
+    input_params.channelCount     = MAX_CHANNEL;
+    input_params.sampleFormat     = paFloat32 | paNonInterleaved;
+    input_params.suggestedLatency = Pa_GetDeviceInfo(input_params.device)->defaultLowInputLatency;
     input_params.hostApiSpecificStreamInfo = NULL;
 
     rc = Pa_OpenStream(&stream,
@@ -93,7 +98,7 @@ int main(int argc, char **argv)
     rc = Pa_SetStreamFinishedCallback(stream, stream_finished_cb);
     PA_ERROR_CHECK(rc, "Pa_SetStreamFinishedCallback");
 
-    // start the audio outuput
+    // start the audio input
     rc = Pa_StartStream(stream);
     PA_ERROR_CHECK(rc, "Pa_StartStream");
 
@@ -138,12 +143,13 @@ static int stream_cb(const void *input,
                      void *user_data)
 {
     float **in = (void*)input;
-    int data_remaining = MAX_DATA - data_idx;
     int chan;
 
+    static int data_idx;
+
     // reduce frame_count if there is not enough space remaining in data
-    if (data_remaining < frame_count) {
-        frame_count = data_remaining;
+    if (frame_count > MAX_DATA - data_idx) {
+        frame_count = MAX_DATA - data_idx;
     }
 
     // for each channel make a copy of the input data

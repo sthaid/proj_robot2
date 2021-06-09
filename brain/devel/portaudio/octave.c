@@ -10,13 +10,20 @@
 
 #define SAMPLE_RATE 48000  // samples per sec
 #define DURATION    4      // secs
+#define MAX_DATA    (DURATION * SAMPLE_RATE)
 
 #define DEFAULT_FREQ_START  300
+#define MIN_FREQ            100
+#define MAX_FREQ            10000
 
-#define MIN_FREQ 100
-#define MAX_FREQ 10000
-
-#define MAX_DATA  (DURATION * SAMPLE_RATE)
+#define PA_ERROR_CHECK(rc, routine_name) \
+    do { \
+        if (rc != paNoError) { \
+            printf("ERROR: %s rc=%d, %s\n", routine_name, rc, Pa_GetErrorText(rc)); \
+            Pa_Terminate(); \
+            exit(1); \
+        } \
+    } while (0)
 
 //
 // variables
