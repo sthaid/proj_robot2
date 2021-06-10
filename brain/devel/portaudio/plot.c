@@ -3,7 +3,10 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <memory.h>
+#include <unistd.h>
+#include <string.h>
+#include <errno.h>
+#include <fcntl.h>
 #include <portaudio.h>
 
 #include <util_sdl.h>
@@ -14,10 +17,14 @@
 // defines
 //
 
-#define SAMPLE_RATE 48000  // samples per sec
-#define DURATION    1      // secs
-#define MAX_CHANNEL 4
-#define MAX_DATA    (DURATION * SAMPLE_RATE)
+#define INPUT_DEVICE "seeed-4mic-voicecard"
+#define MAX_CHANNEL  4
+#define SAMPLE_RATE  48000  // samples per sec
+#define DURATION     1      // secs
+
+#define MAX_DATA     (DURATION * SAMPLE_RATE)
+
+#define GET_MIC_DATA_FILENAME "get_mic_data.dat"
 
 //
 // variables
@@ -38,6 +45,8 @@ static int pane_hndlr(pane_cx_t *pane_cx, int request, void * init_params, sdl_e
 static int get_mic_data_init(void);
 static void get_mic_data_terminate(void);
 static int get_mic_data_start(void);
+static int get_mic_data_read_file(void);
+static int get_mic_data_write_file(void);
 
 // -----------------  MAIN  ---------------------------------------------------------
 
@@ -47,6 +56,8 @@ int main(int argc, char **argv)
     if (get_mic_data_init() < 0) {
         FATAL("get_mic_data_init\n");
     }
+
+    get_mic_data_read_file();
 
     // init sdl
     if (sdl_init(&win_width, &win_height, opt_fullscreen, false, false) < 0) {
@@ -70,6 +81,8 @@ int main(int argc, char **argv)
 
 // -----------------  PANE HNDLR  ---------------------------------------------------
 
+static void plot(rect_t *pane, int chan);
+
 static int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_event_t * event)
 {
     rect_t *pane = &pane_cx->pane;
@@ -87,7 +100,16 @@ static int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_
     // ------------------------
 
     if (request == PANE_HANDLER_REQ_RENDER) {
-        sdl_render_printf(pane, 0, 0, 50, SDL_WHITE, SDL_BLUE, "Hello World!");
+        if (data_ready) {
+            for (int chan = 0; chan < MAX_CHANNEL; chan++) {
+                plot(pane, chan); 
+            }
+        } else {
+            // xxx ctr
+            sdl_render_printf(pane, 0, 0, 50, SDL_WHITE, SDL_BLUE, 
+                              "No Data");
+        }
+
         return PANE_HANDLER_RET_NO_ACTION;
     }
 
@@ -125,6 +147,28 @@ static int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_
     return PANE_HANDLER_RET_NO_ACTION;
 }
 
+static void plot(rect_t *pane, int chan)
+{
+    int max_p = 0;
+    int x, y_base;
+    point_t p[10000];
+
+    #define XSTEP 20
+    #define XSTART 10000
+
+    y_base = (pane->h / 4) * (0.5 + chan);
+    INFO("chan=%d y_base=%d\n", chan, y_base);
+
+    for (x = 0; x < pane->w; x += XSTEP) {
+        p[max_p].x = x;
+        p[max_p].y = y_base + data[chan][XSTART+x] * (pane->h/8);
+        max_p++;
+    }
+
+    sdl_render_line(pane, 0, y_base, pane->w-1, y_base, SDL_WHITE);
+    sdl_render_lines(pane, p, max_p, SDL_WHITE);
+}
+
 // -----------------  GET MIC DATA  -------------------------------------------------
 
 static int       data_idx;
@@ -142,8 +186,7 @@ static int get_mic_data_init(void)
 {
     PaError             rc;
     PaStreamParameters  input_params;
-    PaDeviceIndex       default_input_device_idx;
-    const PaDeviceInfo *di;
+    PaDeviceIndex       devidx;
 
     // initalize portaudio
     rc = Pa_Initialize();
@@ -152,28 +195,17 @@ static int get_mic_data_init(void)
         return -1;
     }
 
-    // get the default input device, and print info
-    default_input_device_idx = Pa_GetDefaultInputDevice();
-    if (input_params.device == paNoDevice) {
-        printf("ERROR: No default output device.\n");
-        return -1;
+    // get the input device idx, and print info
+    devidx = pa_find_device(INPUT_DEVICE);
+    if (devidx == paNoDevice) {
+        printf("ERROR: could not find %s\n", INPUT_DEVICE);
+        exit(1);
     }
     printf("\n");
-    pa_print_device_info(default_input_device_idx);
-
-    // confirm input device is seeed-4mic-voicecard
-    di = Pa_GetDeviceInfo(default_input_device_idx);
-    if (strncmp(di->name, "seeed-4mic-voicecard", 20) != 0) {
-        printf("ERROR: name=%s, must be 'seeed-4mic-voicecard'\n", di->name);
-        return -1;
-    }
-    if (di->maxInputChannels != MAX_CHANNEL) {
-        printf("ERROR: maxInputChannels=%d, must be %d\n", di->maxInputChannels, MAX_CHANNEL);
-        return -1;
-    }
+    pa_print_device_info(devidx);
 
     // init input_params and open the audio output stream
-    input_params.device           = default_input_device_idx;
+    input_params.device           = devidx;
     input_params.channelCount     = MAX_CHANNEL;
     input_params.sampleFormat     = paFloat32 | paNonInterleaved;
     input_params.suggestedLatency = Pa_GetDeviceInfo(input_params.device)->defaultLowInputLatency;
@@ -276,5 +308,55 @@ static int get_mic_data_stream_cb(const void *input,
 static void get_mic_data_stream_finished_cb(void *userData)
 {
     INFO("mic data capture complete\n");
+
+    // xxx should the read and write be both outside this section
+    get_mic_data_write_file();
+
     data_ready = true;
+}
+
+static int get_mic_data_read_file(void)
+{
+    int fd, len;
+
+    INFO("reading %s\n", GET_MIC_DATA_FILENAME);
+
+    fd = open(GET_MIC_DATA_FILENAME, O_RDONLY);
+    if (fd < 0) {
+        WARN("open %s, %s\n", GET_MIC_DATA_FILENAME, strerror(errno));
+        return -1;
+    }
+
+    len = read(fd, data, sizeof(data));
+    if (len != sizeof(data)) {
+        WARN("read %s len=%d, %s\n", GET_MIC_DATA_FILENAME, len, strerror(errno));
+        return -1;
+    }
+
+    close(fd);
+    data_ready = true;
+    return 0;
+}
+
+static int get_mic_data_write_file(void)
+{
+    int fd, len;
+
+// xxx data must be ready
+    INFO("writing %s\n", GET_MIC_DATA_FILENAME);
+
+    fd = open(GET_MIC_DATA_FILENAME, O_CREAT|O_TRUNC|O_WRONLY, 0666);
+    if (fd < 0) {
+        ERROR("open %s, %s\n", GET_MIC_DATA_FILENAME, strerror(errno));
+        return -1;
+    }
+
+    len = write(fd, data, sizeof(data));
+    if (len != sizeof(data)) {
+        WARN("write %s len=%d, %s\n", GET_MIC_DATA_FILENAME, len, strerror(errno));
+        return -1;
+    }
+
+    close(fd);
+    return 0;
 }

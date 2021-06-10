@@ -45,4 +45,6 @@ brain/devel/portaudio/portaudio_examples/build/
 brain/devel/portaudio/octave
 brain/devel/portaudio/record
 brain/devel/portaudio/devs
+brain/devel/portaudio/plot
+brain/devel/portaudio/get_mic_data.dat
 

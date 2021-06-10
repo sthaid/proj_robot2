@@ -1,8 +1,27 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include <portaudio.h>
 #include <pa_utils.h>
+
+PaDeviceIndex pa_find_device(char *name)
+{
+    int dev_cnt = Pa_GetDeviceCount();
+    int i;
+
+    for (i = 0; i < dev_cnt; i++) {
+        const PaDeviceInfo *di = Pa_GetDeviceInfo(i);
+        if (di == NULL) {
+            return paNoDevice;
+        }
+        if (strncmp(di->name, name, strlen(name)) == 0) {
+            return i;
+        }
+    }
+
+    return paNoDevice;
+}
 
 void pa_print_device_info(PaDeviceIndex idx)
 {

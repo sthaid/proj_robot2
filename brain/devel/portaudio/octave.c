@@ -8,13 +8,14 @@
 #include <portaudio.h>
 #include <pa_utils.h>
 
-#define SAMPLE_RATE 48000  // samples per sec
-#define DURATION    4      // secs
-#define MAX_DATA    (DURATION * SAMPLE_RATE)
-
+#define OUTPUT_DEVICE       "USB2.0 Device"
+#define SAMPLE_RATE         48000  // samples per sec
+#define DURATION            4      // secs
 #define DEFAULT_FREQ_START  300
 #define MIN_FREQ            100
 #define MAX_FREQ            10000
+
+#define MAX_DATA      (DURATION * SAMPLE_RATE)
 
 #define PA_ERROR_CHECK(rc, routine_name) \
     do { \
@@ -57,7 +58,7 @@ int main(int argc, char **argv)
     PaError             rc;
     PaStream           *stream;
     PaStreamParameters  output_params;
-    PaDeviceIndex       default_output_device_idx;
+    PaDeviceIndex       devidx;
 
     // determine freq_start and freq_end
     if (argc >= 2 && sscanf(argv[1], "%d", &freq_start) != 1) {
@@ -86,23 +87,23 @@ int main(int argc, char **argv)
     rc = Pa_Initialize();
     PA_ERROR_CHECK(rc, "Pa_Initialize");
 
-    // get the default output device
-    default_output_device_idx = Pa_GetDefaultOutputDevice();
-    if (output_params.device == paNoDevice) {
-        printf("ERROR: No default output device.\n");
+    // get the output device idx
+    devidx = pa_find_device(OUTPUT_DEVICE);
+    if (devidx == paNoDevice) {
+        printf("ERROR: could not find %s\n", OUTPUT_DEVICE);
         exit(1);
     }
 
     // print info
     printf("\nRange %d - %d Hz,  Duration %d secs,  Sample_Rate %d /sec\n\n",
            freq_start, freq_end, DURATION, SAMPLE_RATE);
-    pa_print_device_info(default_output_device_idx);
+    pa_print_device_info(devidx);
 
     // init output_params and open the audio output stream
-    output_params.device = default_output_device_idx;
-    output_params.channelCount              = 1;
-    output_params.sampleFormat              = paFloat32;
-    output_params.suggestedLatency          = Pa_GetDeviceInfo(output_params.device)->defaultLowOutputLatency;
+    output_params.device            = devidx;
+    output_params.channelCount      = 1;
+    output_params.sampleFormat      = paFloat32;
+    output_params.suggestedLatency  = Pa_GetDeviceInfo(output_params.device)->defaultLowOutputLatency;
     output_params.hostApiSpecificStreamInfo = NULL;
 
     rc = Pa_OpenStream(&stream,

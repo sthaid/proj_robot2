@@ -9,11 +9,12 @@
 #include <pa_utils.h>
 #include <sf_utils.h>
 
-#define SAMPLE_RATE 48000  // samples per sec
-#define DURATION    4      // secs
-#define MAX_DATA    (DURATION * SAMPLE_RATE)
+#define INPUT_DEVICE "seeed-4mic-voicecard"
+#define MAX_CHANNEL  4
+#define SAMPLE_RATE  48000  // samples per sec
+#define DURATION     4      // secs
 
-#define MAX_CHANNEL 4
+#define MAX_DATA     (DURATION * SAMPLE_RATE)
 
 #define PA_ERROR_CHECK(rc, routine_name) \
     do { \
@@ -50,35 +51,23 @@ int main(int argc, char **argv)
     PaError             rc;
     PaStream           *stream;
     PaStreamParameters  input_params;
-    PaDeviceIndex       default_input_device_idx;
-    const PaDeviceInfo *di;
+    PaDeviceIndex       devidx;
 
     // initalize portaudio
     rc = Pa_Initialize();
     PA_ERROR_CHECK(rc, "Pa_Initialize");
 
-    // get the default input device, and print info
-    default_input_device_idx = Pa_GetDefaultInputDevice();
-    if (input_params.device == paNoDevice) {
-        printf("ERROR: No default output device.\n");
+    // get the input device idx, and print info
+    devidx = pa_find_device(INPUT_DEVICE);
+    if (devidx == paNoDevice) {
+        printf("ERROR: could not find %s\n", INPUT_DEVICE);
         exit(1);
     }
     printf("\n");
-    pa_print_device_info(default_input_device_idx);
-
-    // confirm input device is seeed-4mic-voicecard
-    di = Pa_GetDeviceInfo(default_input_device_idx);
-    if (strncmp(di->name, "seeed-4mic-voicecard", 20) != 0) {
-        printf("ERROR: name=%s, must be 'seeed-4mic-voicecard'\n", di->name);
-        exit(1);
-    }
-    if (di->maxInputChannels != MAX_CHANNEL) {
-        printf("ERROR: maxInputChannels=%d, must be %d\n", di->maxInputChannels, MAX_CHANNEL);
-        exit(1);
-    }
+    pa_print_device_info(devidx);
 
     // init input_params and open the audio output stream
-    input_params.device           = default_input_device_idx;
+    input_params.device           = devidx;
     input_params.channelCount     = MAX_CHANNEL;
     input_params.sampleFormat     = paFloat32 | paNonInterleaved;
     input_params.suggestedLatency = Pa_GetDeviceInfo(input_params.device)->defaultLowInputLatency;
