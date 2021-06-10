@@ -133,13 +133,16 @@ Examples:
 
 - arecord -D ac108 -f S32_LE -r 16000 -c 4 hello.wav
 - arecord -D ac108 hello.wav
-
 - aplay -D sysdefault:CARD=Headphones  hello.wav 
 - aplay -D sysdefault:CARD=Device  hello.wav 
 - aplay hello.wav
 
 - alsamixer
 - alsactl --file=ac108_asound.state store
+
+- # works
+- arecord -D sysdefault:CARD=seeed4micvoicec -c 4 -r 48000 hello.wav
+- aplay -D sysdefault:CARD=Device  hello.wav 
 
 audacity
 - set mic  to ac108 4
@@ -379,12 +382,54 @@ Notes:
 
 My C language demo program: ~/proj/proj_robot2/brain/devel/leds
 
-Respeaker Sound Localization AAA TODO AAA
------------------------------------------
+PortAudio & libsndfile Tests
+----------------------------
+Directory: XXX
+
+Install
+  sudo apt install portaudio19-dev
+  sudo apt install libsndfile1-dev
+
+Portaudio references
+  http://portaudio.com/docs/v19-doxydocs/index.html              MAIN PAGE
+  https://github.com/PortAudio/portaudio/wiki                    WIKI
+  http://portaudio.com/docs/v19-doxydocs/portaudio_8h.html       API REFERENCE
+  http://www.portaudio.com/docs/v19-doxydocs/compile_linux.html  BUILDING PORTAUDIO FOR LINUX
+  https://github.com/PortAudio/portaudio/                        GIT REPO
+  https://github.com/PortAudio/portaudio/tree/master/examples    EXAMPLES
+
+Libsndfile references
+  http://www.mega-nerd.com/libsndfile/                           MAIN PAGE
+  https://github.com/libsndfile/libsndfile                       GIT REPO
+  file:///usr/share/doc/libsndfile1-dev/html                     DOC FOLDER
+  file:///usr/share/doc/libsndfile1-dev/html/index.html          DOC MAIN
+  file:///usr/share/doc/libsndfile1-dev/html/api.html            DOC API
+  file:///usr/share/doc/libsndfile1-dev/examples                 EXAMPLES
+
+My Test Programs
+- octave : sine wave audio outut sweeping over a freq range
+
+AAA CONTINUE AAA portaudio dir
+/usr/share/fonts/truetype/freefont/FreeMonoBold.ttf
+
+program; mic4_read
+- read from 4 channel mic
+- write single file with the 4 channels of mic data
+
+program: mic4_raw_to_wav
+- create 4 wav files
+
+run the above 2 pgms with a sine wave being produced from the speaker, using spearker-test
+- verify the raw and wav files
+
+write sdl pgm to plot the 4 channels of raw data
+
+xxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+AAA TODO AAA Respeaker Sound Localization AAA TODO AAA
+------------------------------------------------------
 
 write portaudio19 pgm to capture sound from 4 channels of respeaker
-  http://portaudio.com/docs/v19-doxydocs/index.html    MAIN PAGE
-  https://github.com/PortAudio/portaudio/wiki          WIKI
 
 move the robot-brain pi back to bench and put speaker on corner desk
 - try speaker, sine wave, white noise, recorded voice
@@ -405,14 +450,6 @@ filter development, software model
 - fft web sites
 http://www.fftw.org/
 http://www.fftw.org/fftw3.pdf
-
-------------
-
-STEP1 portaudio test
-- generate a sine wave
-- capture microphone data
-- decode the microphone data
-- put test pgms in devel dir
 
 ----------------------- ----------------------- -----------------------
 -----------------------          TODO           -----------------------
@@ -1257,11 +1294,8 @@ TITLE: RPI - INSTALL
 
 Download OS 
 - https://www.raspberrypi.org/software/operating-systems/
-- Raspberry Pi OS Lite
-    Release date: January 11th 2021
-    Kernel version: 5.4
-    Size: 438MB
-    Show SHA256 file integrity hash: d49d6fab1b8e533f7efc40416e98ec16019b9c034bc89c59b83d0921c2aefeef
+- Raspberry Pi OS Lite  OR
+- Raspberry Pi OS with desktop
 
 Use dd to copy the .img file to micro-sd card
 
@@ -1293,7 +1327,6 @@ configure system
 - EDITOR=vi visudo
        haid    ALL=(ALL) NOPASSWD: ALL
 - apt install git vim cscope ctags apt-file libreadline-dev tkcvs raspberrypi-kernel-headers
-- OPTIONAL: apt install evince eog
 - apt-file update
 
 configure my account
@@ -1318,6 +1351,18 @@ configure my account
         export EDITOR=vim
         export GIT_EXTERNAL_DIFF=~/bin/git_external_diff
         export LC_COLLATE=C
+
+	alias pdbg='cd ~/proj/proj_dbg'
+	alias pr='cd ~/proj/proj_robot2'
+	alias prbo='cd ~/proj/proj_robot2/body'
+	alias prbt='cd ~/proj/proj_robot2/body_test'
+	alias prbr='cd ~/proj/proj_robot2/brain'
+	alias pa='cd ~/proj/proj_robot2/brain/devel/portaudio'
+	alias activate_env='source ~/env/bin/activate'
+	alias st='speaker-test -D sysdefault:CARD=Device -f 500 -t sine'
+	alias arecord='arecord -D sysdefault:CARD=seeed4micvoicec'
+	alias aplay='aplay -D sysdefault:CARD=Device'
+
   * .vimrc
         source /usr/share/vim/vim81/defaults.vim
         " tabs
@@ -1361,6 +1406,47 @@ configure my account
         git config --global user.name "Steven Haid"
         git config --global user.email stevenhaid@gmail.com
         git config -l
+
+--- optional ---
+
+optional: groups
+   sudo usermod -aG i2c,spi,gpio,audio haid
+   logout, and login and verify 'groups'
+
+optional: raspi-config
+- Interface options
+  - Enable SPI 
+  - Enable I2C 
+
+optional: seeed-voicecard
+  cd ~/proj/proj_robot2/brain/devel/repos
+  ./do_clone
+  cd seeed-voicecard
+  sudo ./install.sh  --compat-kernel option
+  sudo reboot
+
+optional: additional packages
+   apt install -y libsdl2-dev libsdl2-ttf-dev
+   apt install -y libjpeg-dev libpng-dev
+   apt install -y fonts-freefont-ttf 
+
+   apt install -y audacity
+   apt install -y portaudio19-dev
+   apt install -y libsndfile1-dev
+
+   apt install -y i2c-tools
+   apt install -y libi2c-dev
+   apt install -y glibc-docs
+
+   apt install -y python-virtualenv
+   apt install -y python-dev
+   apt install -y python2.7
+   apt install -y python-pip
+   apt install -y python3-pip
+
+optional: desktop
+  Preferences -> System -> Disable Autologin
+  terminal font size, and colors
 
 ===========================
 TITLE: RPI - GPIO
