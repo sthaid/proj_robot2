@@ -1,3 +1,6 @@
+// XXX plot the channels
+// XXX run on rpi display
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <memory.h>
@@ -153,7 +156,7 @@ static int get_mic_data_init(void)
     default_input_device_idx = Pa_GetDefaultInputDevice();
     if (input_params.device == paNoDevice) {
         printf("ERROR: No default output device.\n");
-        exit(1);
+        return -1;
     }
     printf("\n");
     pa_print_device_info(default_input_device_idx);
@@ -162,11 +165,11 @@ static int get_mic_data_init(void)
     di = Pa_GetDeviceInfo(default_input_device_idx);
     if (strncmp(di->name, "seeed-4mic-voicecard", 20) != 0) {
         printf("ERROR: name=%s, must be 'seeed-4mic-voicecard'\n", di->name);
-        exit(1);
+        return -1;
     }
     if (di->maxInputChannels != MAX_CHANNEL) {
         printf("ERROR: maxInputChannels=%d, must be %d\n", di->maxInputChannels, MAX_CHANNEL);
-        exit(1);
+        return -1;
     }
 
     // init input_params and open the audio output stream
@@ -223,14 +226,15 @@ static int get_mic_data_start(void)
         return -1;
     }
 
-    // reset variables when starting mic data capture
+    // reset for next mic data capture
+    Pa_StopStream(stream);
     data_idx = 0;
     data_ready = false;
     
     // start the audio input
     rc = Pa_StartStream(stream);
     if (rc < 0) {
-        FATAL("%s rc=%d, %s\n", "Pa_SetStreamFinishedCallback", rc, Pa_GetErrorText(rc));
+        FATAL("%s rc=%d, %s\n", "Pa_StartStream", rc, Pa_GetErrorText(rc));
     }
 
     // success
