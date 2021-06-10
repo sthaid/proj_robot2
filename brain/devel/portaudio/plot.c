@@ -1,6 +1,3 @@
-// XXX plot the channels
-// XXX run on rpi display
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -53,10 +50,12 @@ static int get_mic_data_write_file(void);
 int main(int argc, char **argv)
 {
     // init portaudio to get data from the respeaker 4 channel microphone array
+    // xxx comment on WARN
     if (get_mic_data_init() < 0) {
-        FATAL("get_mic_data_init\n");
+        WARN("get_mic_data_init failed\n");
     }
 
+    // xxx
     get_mic_data_read_file();
 
     // init sdl
@@ -81,6 +80,9 @@ int main(int argc, char **argv)
 
 // -----------------  PANE HNDLR  ---------------------------------------------------
 
+static int x_start = 10000;
+static int x_cursor;
+
 static void plot(rect_t *pane, int chan);
 
 static int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_event_t * event)
@@ -92,6 +94,7 @@ static int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_
     // ----------------------------
 
     if (request == PANE_HANDLER_REQ_INITIALIZE) {
+	x_cursor = pane->w / 2;
         return PANE_HANDLER_RET_NO_ACTION;
     }
 
@@ -110,6 +113,8 @@ static int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_
                               "No Data");
         }
 
+	sdl_render_line(pane, x_cursor, 0, x_cursor, pane->h-1, SDL_WHITE);
+
         return PANE_HANDLER_RET_NO_ACTION;
     }
 
@@ -122,6 +127,18 @@ static int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_
         case 'g':
             get_mic_data_start();
             break;
+	case SDL_EVENT_KEY_LEFT_ARROW:
+	    x_start++;
+	    break;
+	case SDL_EVENT_KEY_RIGHT_ARROW:
+	    x_start--;
+	    break;
+	case '<':
+	    x_cursor++;
+	    break;
+	case '>':
+	    x_cursor--;
+	    break;
         default:
             INFO("got event_id 0x%x\n", event->event_id);
             break;
@@ -152,17 +169,20 @@ static void plot(rect_t *pane, int chan)
     int max_p = 0;
     int x, y_base;
     point_t p[10000];
-
-    #define XSTEP 20
-    #define XSTART 10000
+    int x_data_idx;
 
     y_base = (pane->h / 4) * (0.5 + chan);
-    INFO("chan=%d y_base=%d\n", chan, y_base);
+    //INFO("chan=%d y_base=%d\n", chan, y_base);
 
-    for (x = 0; x < pane->w; x += XSTEP) {
+    x = 0;
+    for (x_data_idx = x_start; true; x_data_idx++) {
         p[max_p].x = x;
-        p[max_p].y = y_base + data[chan][XSTART+x] * (pane->h/8);
+        p[max_p].y = y_base + data[chan][x_data_idx] * (pane->h/8) * 4;
         max_p++;
+	x += 10;   // XXX
+	if (x >= pane->w) {
+	    break;
+	}
     }
 
     sdl_render_line(pane, 0, y_base, pane->w-1, y_base, SDL_WHITE);
@@ -195,14 +215,13 @@ static int get_mic_data_init(void)
         return -1;
     }
 
-    // get the input device idx, and print info
+    // get the input device idx
+    // xxx confirm number of channels
     devidx = pa_find_device(INPUT_DEVICE);
     if (devidx == paNoDevice) {
-        printf("ERROR: could not find %s\n", INPUT_DEVICE);
-        exit(1);
+        ERROR("could not find %s\n", INPUT_DEVICE);
+        return -1;
     }
-    printf("\n");
-    pa_print_device_info(devidx);
 
     // init input_params and open the audio output stream
     input_params.device           = devidx;
@@ -237,8 +256,10 @@ static int get_mic_data_init(void)
 static void get_mic_data_terminate(void)
 {
     // clean up and terminate portaudio
-    Pa_StopStream(stream);
-    Pa_CloseStream( stream );
+    if (stream) {
+	Pa_StopStream(stream);
+	Pa_CloseStream(stream);
+    }
     Pa_Terminate();
 }
 
@@ -249,6 +270,11 @@ static int get_mic_data_start(void)
     static bool first_call = true;
 
     INFO("mic data capture starting\n");
+
+    if (stream == NULL) {
+	ERROR("stream not open\n");
+	return -1;
+    }
 
     // if stream is running return an error
     okay = first_call || data_ready;
