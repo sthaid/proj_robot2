@@ -425,6 +425,98 @@ run the above 2 pgms with a sine wave being produced from the speaker, using spe
 write sdl pgm to plot the 4 channels of raw data
 
 xxxxxxxxxxxxxxxxxxxxxxxxxxxx
+xxxxxxxxxxxxxxxxxxxxxxxxxxxx
+xxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+corr.c  x
+devs.c  x
+fit.c  x
+octave.c  x
+pa_utils.c  x
+pa_utils.h  x
+plot.c  x
+record.c    x
+sf_utils.c  x
+sf_utils.h  x
+
+make save dir for files like fit.c
+
+new names for pgms
+
+octave -> gen
+- select output on cmdline  OR use default
+- single channel on computer
+
+devs
+- list sample rates
+
+record
+- specify duration
+- specify device (optional)
+- creating the wav files is optional
+
+plot
+- white background for printing
+- use new file format
+- file or microphone options
+- ctrls
+   left/right  pos and scale
+   cursor left/right
+   amplitude scaling
+- display
+  start and end sample number and time
+  x span
+  y scale
+
+corr -> analyze
+- analyze data from either a file or a capture
+- determine the direction of the sound
+- start by using 1000 hz 
+
+utils
+- pa_utils - make list of more utils
+               pa_find,  can also return default if not found
+- sf_utils - okay
+- file_utils - new file format,   read and write routines
+- gd_utils  - get_data from either the mic or a file
+                 used by corr or plot
+
+make list of additional desired pgms and functions, for later
+- may want to have a filter test pgm that applies a filter to 
+  input and plots the input, output, and the input and output fft and 
+  the frequency response
+
+--- notes ---
+
+orientation 
+- plot of data1000 
+  - shows 0 and 1 delayed  (okay)
+  - also shows 0 and 1 lower amplitude
+				    ------------------
+                                    |1              2|
+                                    |                |
+                                    |                |           
+                                    |                |                    ( SOUND
+                                    |                |
+                                    |    RESPEAKER   |
+                                    |0              3|
+				    ------------------
+
+
+xxxxxxxxxxxxxxxxxxxxxxxxxxxx
+xxxxxxxxxxxxxxxxxxxxxxxxxxxx
+xxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+
+seperate pgms for
+- get_data
+- plot_data
+- cc_data
+
+FIT
+https://www.bragitoff.com/2018/06/polynomial-fitting-c-program/
+
+try generating data in a freq sweep from 300 to 3000   OR   300 to 1500
 
 AAA TODO AAA Respeaker Sound Localization AAA TODO AAA
 ------------------------------------------------------

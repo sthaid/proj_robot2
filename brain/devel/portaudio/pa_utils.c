@@ -5,10 +5,20 @@
 #include <portaudio.h>
 #include <pa_utils.h>
 
+char *DEFAULT_OUTPUT_DEVICE = "DEFAULT_OUTPUT_DEVICE";
+char *DEFAULT_INPUT_DEVICE  = "DEFAULT_INPUT_DEVICE";
+
 PaDeviceIndex pa_find_device(char *name)
 {
     int dev_cnt = Pa_GetDeviceCount();
     int i;
+
+    if (strcmp(name, DEFAULT_OUTPUT_DEVICE) == 0) {
+	return Pa_GetDefaultOutputDevice();
+    }
+    if (strcmp(name, DEFAULT_INPUT_DEVICE) == 0) {
+	return Pa_GetDefaultInputDevice();
+    }
 
     for (i = 0; i < dev_cnt; i++) {
         const PaDeviceInfo *di = Pa_GetDeviceInfo(i);

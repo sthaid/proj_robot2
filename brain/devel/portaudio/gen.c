@@ -8,15 +8,13 @@
 #include <portaudio.h>
 #include <pa_utils.h>
 
-//#define OUTPUT_DEVICE       "USB2.0 Device"
-#define OUTPUT_DEVICE       "default"
 #define SAMPLE_RATE         48000  // samples per sec
-#define DURATION            4      // secs
+#define DURATION            5      // secs
 #define DEFAULT_FREQ_START  300
 #define MIN_FREQ            100
 #define MAX_FREQ            10000
 
-#define MAX_DATA      (DURATION * SAMPLE_RATE)
+#define MAX_DATA            (DURATION * SAMPLE_RATE)
 
 #define PA_ERROR_CHECK(rc, routine_name) \
     do { \
@@ -60,15 +58,37 @@ int main(int argc, char **argv)
     PaStream           *stream;
     PaStreamParameters  output_params;
     PaDeviceIndex       devidx;
+    char               *output_device = DEFAULT_OUTPUT_DEVICE;
+
+    // usage: gen [-d outdev] [freq_start] [freq_end]
+
+    // parse options
+    while (true) {
+	int ch = getopt(argc, argv, "d:h");
+	if (ch == -1) {
+	    break;
+	}
+	switch (ch) {
+	case 'd':
+	    output_device = optarg;
+	    break;
+	case 'h':
+	    printf("usage: gen [-d outdev] [freq_start] [freq_end]\n");
+	    return 0;
+	    break;
+	default:
+	    return 1;
+	};
+    }
 
     // determine freq_start and freq_end
-    if (argc >= 2 && sscanf(argv[1], "%d", &freq_start) != 1) {
-        printf("ERROR: not a number '%s'\n", argv[1]);
+    if (argc-optind >= 1 && sscanf(argv[optind], "%d", &freq_start) != 1) {
+        printf("ERROR: not a number '%s'\n", argv[optind]);
         return 1;
     }
     freq_end = 2 * freq_start;
-    if (argc >= 3 && sscanf(argv[2], "%d", &freq_end) != 1) {
-        printf("ERROR: not a number '%s'\n", argv[2]);
+    if (argc-optind >= 2 && sscanf(argv[optind+1], "%d", &freq_end) != 1) {
+        printf("ERROR: not a number '%s'\n", argv[optind+1]);
         return 1;
     }
         
@@ -89,9 +109,9 @@ int main(int argc, char **argv)
     PA_ERROR_CHECK(rc, "Pa_Initialize");
 
     // get the output device idx
-    devidx = pa_find_device(OUTPUT_DEVICE);
+    devidx = pa_find_device(output_device);
     if (devidx == paNoDevice) {
-        printf("ERROR: could not find %s\n", OUTPUT_DEVICE);
+        printf("ERROR: could not find %s\n", output_device);
         exit(1);
     }
 
@@ -102,8 +122,8 @@ int main(int argc, char **argv)
 
     // init output_params and open the audio output stream
     output_params.device            = devidx;
-    output_params.channelCount      = 1;
-    output_params.sampleFormat      = paFloat32;
+    output_params.channelCount      = 2;
+    output_params.sampleFormat      = paFloat32 | paNonInterleaved;
     output_params.suggestedLatency  = Pa_GetDeviceInfo(output_params.device)->defaultLowOutputLatency;
     output_params.hostApiSpecificStreamInfo = NULL;
 
@@ -167,16 +187,23 @@ static int stream_cb(const void *input,
                      PaStreamCallbackFlags status_flags,
                      void *user_data)
 {
-    float *out = output;
-    int data_remaining = MAX_DATA - data_idx;
+    float **out = (void*)output;
 
-    if (data_remaining < frame_count) {
+    // if more frames are requested than we have remaining data for then return paComplete
+    if (frame_count > MAX_DATA - data_idx) {
         return paComplete;
     }
 
-    memcpy(out, data+data_idx, frame_count*sizeof(float));
+    // left channel - not used
+    memset(out[0], 0, frame_count*sizeof(float));
+
+    // right channel
+    memcpy(out[1], data+data_idx, frame_count*sizeof(float));
+
+    // increase data_idx by the frame_count
     data_idx += frame_count;
     
+    // continue
     return paContinue;
 }
 
