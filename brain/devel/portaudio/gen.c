@@ -8,7 +8,8 @@
 #include <portaudio.h>
 #include <pa_utils.h>
 
-#define OUTPUT_DEVICE       "USB2.0 Device"
+//#define OUTPUT_DEVICE       "USB2.0 Device"
+#define OUTPUT_DEVICE       "default"
 #define SAMPLE_RATE         48000  // samples per sec
 #define DURATION            4      // secs
 #define DEFAULT_FREQ_START  300

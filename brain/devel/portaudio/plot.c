@@ -177,7 +177,7 @@ static void plot(rect_t *pane, int chan)
     x = 0;
     for (x_data_idx = x_start; true; x_data_idx++) {
         p[max_p].x = x;
-        p[max_p].y = y_base + data[chan][x_data_idx] * (pane->h/8) * 4;
+        p[max_p].y = y_base + data[chan][x_data_idx] * (pane->h/8);
         max_p++;
 	x += 10;   // XXX
 	if (x >= pane->w) {
