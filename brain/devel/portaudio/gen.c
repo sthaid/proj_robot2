@@ -5,7 +5,6 @@
 #include <string.h>
 #include <math.h>
 
-#include <portaudio.h>
 #include <pa_utils.h>
 
 #define SAMPLE_RATE         48000  // samples per sec
@@ -15,15 +14,7 @@
 #define MAX_FREQ            10000
 
 #define MAX_DATA            (DURATION * SAMPLE_RATE)
-
-#define PA_ERROR_CHECK(rc, routine_name) \
-    do { \
-        if (rc != paNoError) { \
-            printf("ERROR: %s rc=%d, %s\n", routine_name, rc, Pa_GetErrorText(rc)); \
-            Pa_Terminate(); \
-            exit(1); \
-        } \
-    } while (0)
+#define MAX_CHAN            2
 
 //
 // variables
@@ -31,34 +22,19 @@
 
 static int    freq_start = DEFAULT_FREQ_START;
 static int    freq_end;
-
-static bool   done;
-
 static float  data[MAX_DATA];
-static int    data_idx;
 
 //
 // prototypes
 //
 
 static void init_data(void);
-static int stream_cb(const void *input,
-                     void *output,
-                     unsigned long frame_count,
-                     const PaStreamCallbackTimeInfo *timeinfo,
-                     PaStreamCallbackFlags status_flags,
-                     void *user_data);
-static void stream_finished_cb(void *userData);
 
 // -----------------  MAIN  -------------------------------------------------------
 
 int main(int argc, char **argv)
 {
-    PaError             rc;
-    PaStream           *stream;
-    PaStreamParameters  output_params;
-    PaDeviceIndex       devidx;
-    char               *output_device = DEFAULT_OUTPUT_DEVICE;
+    char    *output_device = DEFAULT_OUTPUT_DEVICE;
 
     // usage: gen [-d outdev] [freq_start] [freq_end]
 
@@ -104,56 +80,20 @@ int main(int argc, char **argv)
     // initialize sound data buffer 
     init_data();
 
-    // initalize portaudio
-    rc = Pa_Initialize();
-    PA_ERROR_CHECK(rc, "Pa_Initialize");
-
-    // get the output device idx
-    devidx = pa_find_device(output_device);
-    if (devidx == paNoDevice) {
-        printf("ERROR: could not find %s\n", output_device);
-        exit(1);
+    // init pa_utils
+    if (pa_init() < 0) {
+	printf("ERROR: pa_init failed\n");
+	return 1;
     }
 
-    // print info
-    printf("\nRange %d - %d Hz,  Duration %d secs,  Sample_Rate %d /sec\n\n",
-           freq_start, freq_end, DURATION, SAMPLE_RATE);
-    pa_print_device_info(devidx);
-
-    // init output_params and open the audio output stream
-    output_params.device            = devidx;
-    output_params.channelCount      = 2;
-    output_params.sampleFormat      = paFloat32 | paNonInterleaved;
-    output_params.suggestedLatency  = Pa_GetDeviceInfo(output_params.device)->defaultLowOutputLatency;
-    output_params.hostApiSpecificStreamInfo = NULL;
-
-    rc = Pa_OpenStream(&stream,
-                       NULL,   // input_params
-                       &output_params,
-                       SAMPLE_RATE,
-                       paFramesPerBufferUnspecified,
-                       0,       // stream flags
-                       stream_cb,
-                       NULL);   // user_data
-    PA_ERROR_CHECK(rc, "Pa_OpenStream");
-
-    // register callback for when the the audio output compltes
-    rc = Pa_SetStreamFinishedCallback(stream, stream_finished_cb);
-    PA_ERROR_CHECK(rc, "Pa_SetStreamFinishedCallback");
-
-    // start the audio outuput
-    rc = Pa_StartStream(stream);
-    PA_ERROR_CHECK(rc, "Pa_StartStream");
-
-    // wait for audio output to complete
-    while (!done) {
-        Pa_Sleep(10);  // 10 ms
+    // play sound data
+    float *chan_data[MAX_CHAN] = {NULL, data};
+    if (pa_play(output_device, MAX_CHAN, MAX_DATA, SAMPLE_RATE, chan_data) < 0) {
+	printf("ERROR: pa_play failed\n");
+	return 1;
     }
 
-    // clean up and exit
-    Pa_StopStream(stream);
-    Pa_CloseStream( stream );
-    Pa_Terminate();
+    // done
     return 0;
 }
 
@@ -178,36 +118,3 @@ static void init_data(void)
     }
 }
 
-// -----------------  CALLBACKS  --------------------------------------------------
-
-static int stream_cb(const void *input,
-                     void *output,
-                     unsigned long frame_count,
-                     const PaStreamCallbackTimeInfo *timeinfo,
-                     PaStreamCallbackFlags status_flags,
-                     void *user_data)
-{
-    float **out = (void*)output;
-
-    // if more frames are requested than we have remaining data for then return paComplete
-    if (frame_count > MAX_DATA - data_idx) {
-        return paComplete;
-    }
-
-    // left channel - not used
-    memset(out[0], 0, frame_count*sizeof(float));
-
-    // right channel
-    memcpy(out[1], data+data_idx, frame_count*sizeof(float));
-
-    // increase data_idx by the frame_count
-    data_idx += frame_count;
-    
-    // continue
-    return paContinue;
-}
-
-static void stream_finished_cb(void *userData)
-{
-    done = true;
-}

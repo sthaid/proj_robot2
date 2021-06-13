@@ -1,12 +1,167 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdbool.h>
 #include <string.h>
 
 #include <portaudio.h>
 #include <pa_utils.h>
 
-char *DEFAULT_OUTPUT_DEVICE = "DEFAULT_OUTPUT_DEVICE";
-char *DEFAULT_INPUT_DEVICE  = "DEFAULT_INPUT_DEVICE";
+typedef struct {
+    int     max_chan;
+    int     max_data;
+    int     sample_rate;
+    float **chan_data;
+    int     data_idx;
+    bool    done;
+} user_data_t;
+
+// -----------------  INIT  ------------------------------------------------------
+
+static void exit_hndlr(void);
+
+int pa_init(void)
+{
+    Pa_Initialize();
+
+    atexit(exit_hndlr);
+
+    return 0;
+}
+
+static void exit_hndlr(void)
+{
+    Pa_Terminate();
+}
+
+// -----------------  PLAY  ------------------------------------------------------
+
+static int play_stream_cb(const void *input,
+                          void *output,
+                          unsigned long frame_count,
+                          const PaStreamCallbackTimeInfo *timeinfo,
+                          PaStreamCallbackFlags status_flags,
+                          void *ud);
+static void play_stream_finished_cb(void *ud);
+
+int pa_play(char *output_device, int max_chan, int max_data, int sample_rate, float **chan_data)
+{
+    PaError             rc;
+    PaStream           *stream = NULL;
+    PaStreamParameters  output_params;
+    PaDeviceIndex       devidx;
+    user_data_t         ud;
+
+    // init user_data
+    memset(&ud, 0, sizeof(ud));
+    ud.max_chan    = max_chan;
+    ud.max_data    = max_data;
+    ud.sample_rate = sample_rate;
+    ud.chan_data   = chan_data;
+    ud.data_idx    = 0;
+    ud.done        = false;
+
+    // get the output device idx
+    devidx = pa_find_device(output_device);
+    if (devidx == paNoDevice) {
+        printf("ERROR: could not find %s\n", output_device);
+	goto error;
+    }
+    pa_print_device_info(devidx);
+
+    // init output_params and open the audio output stream
+    output_params.device            = devidx;
+    output_params.channelCount      = max_chan;
+    output_params.sampleFormat      = paFloat32 | paNonInterleaved;
+    output_params.suggestedLatency  = Pa_GetDeviceInfo(output_params.device)->defaultLowOutputLatency;
+    output_params.hostApiSpecificStreamInfo = NULL;
+
+    rc = Pa_OpenStream(&stream,
+                       NULL,   // input_params
+                       &output_params,
+                       sample_rate,
+                       paFramesPerBufferUnspecified,
+                       0,       // stream flags
+                       play_stream_cb,
+                       &ud);   // user_data
+    if (rc != paNoError) {
+	printf("ERROR: Pa_OpenStream rc=%d, %s\n", rc, Pa_GetErrorText(rc));
+	goto error;
+    }
+
+    // register callback for when the the audio output compltes
+    rc = Pa_SetStreamFinishedCallback(stream, play_stream_finished_cb);
+    if (rc != paNoError) {
+	printf("ERROR: Pa_SetStreamFinishedCallback rc=%d, %s\n", rc, Pa_GetErrorText(rc));
+	goto error;
+    }
+
+    // start the audio outuput
+    rc = Pa_StartStream(stream);
+    if (rc != paNoError) {
+	printf("ERROR: Pa_StartStream rc=%d, %s\n", rc, Pa_GetErrorText(rc));
+	goto error;
+    }
+
+    // wait for audio output to complete
+    while (!ud.done) {
+        Pa_Sleep(10);  // 10 ms
+    }
+
+    // clean up, and return success
+    Pa_StopStream(stream);
+    Pa_CloseStream(stream);
+    return 0;
+
+    // error return path
+error:
+    if (stream) {
+	Pa_StopStream(stream);
+	Pa_CloseStream(stream);
+    }
+    return -1;
+}
+
+static int play_stream_cb(const void *input,
+                          void *output,
+                          unsigned long frame_count,
+                          const PaStreamCallbackTimeInfo *timeinfo,
+                          PaStreamCallbackFlags status_flags,
+                          void *user_data)
+{
+    float **out = (void*)output;
+    int chan;
+    user_data_t *ud = user_data;
+
+    // if more frames are requested than we have remaining data for then return paComplete
+    if (frame_count > ud->max_data - ud->data_idx) {
+        return paComplete;
+    }
+
+    // for each chan, copy the chan_data to out
+    for (chan = 0; chan < ud->max_chan; chan++) {
+	if (ud->chan_data[chan] == NULL) {
+	    memset(out[chan], 0, frame_count*sizeof(float));
+	} else {
+	    memcpy(out[chan], &ud->chan_data[chan][ud->data_idx], frame_count*sizeof(float));
+	}
+    }
+
+    // increase data_idx by the frame_count
+    ud->data_idx += frame_count;
+    
+    // continue
+    return paContinue;
+}
+
+static void play_stream_finished_cb(void *user_data)
+{
+    user_data_t *ud = user_data;
+    ud->done = true;
+}
+
+// -----------------  RECORD  ----------------------------------------------------
+
+// -----------------  UTILS  -----------------------------------------------------
 
 PaDeviceIndex pa_find_device(char *name)
 {
@@ -68,7 +223,7 @@ void pa_print_device_info_all(void)
 
     if (dev_cnt != hai->deviceCount) {
         printf("ERROR: BUG dev_cnt=%d hai->deviceCount=%d\n", dev_cnt, hai->deviceCount);
-        exit(1);
+        return; 
     }
 
     printf("hostApi = %s  device_count = %d  default_input = %d  default_output = %d\n",
