@@ -7,6 +7,9 @@
 
 #include <pa_utils.h>
 
+// XXX todo, option for duration too
+// XXX make freq range options
+
 //
 // defines
 //
