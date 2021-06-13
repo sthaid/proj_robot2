@@ -7,14 +7,18 @@
 
 #include <pa_utils.h>
 
+//
+// defines
+//
+
 #define SAMPLE_RATE         48000  // samples per sec
 #define DURATION            5      // secs
+#define MAX_CHAN            2
+#define MAX_DATA            (DURATION * SAMPLE_RATE)
+
 #define DEFAULT_FREQ_START  300
 #define MIN_FREQ            100
 #define MAX_FREQ            10000
-
-#define MAX_DATA            (DURATION * SAMPLE_RATE)
-#define MAX_CHAN            2
 
 //
 // variables
@@ -34,7 +38,7 @@ static void init_data(void);
 
 int main(int argc, char **argv)
 {
-    char    *output_device = DEFAULT_OUTPUT_DEVICE;
+    char *output_device = DEFAULT_OUTPUT_DEVICE;
 
     // usage: gen [-d outdev] [freq_start] [freq_end]
 

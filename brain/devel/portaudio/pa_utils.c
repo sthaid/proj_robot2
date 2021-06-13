@@ -95,7 +95,7 @@ int pa_play(char *output_device, int max_chan, int max_data, int sample_rate, fl
 	goto error;
     }
 
-    // start the audio outuput
+    // start the audio output
     rc = Pa_StartStream(stream);
     if (rc != paNoError) {
 	printf("ERROR: Pa_StartStream rc=%d, %s\n", rc, Pa_GetErrorText(rc));
@@ -160,6 +160,126 @@ static void play_stream_finished_cb(void *user_data)
 }
 
 // -----------------  RECORD  ----------------------------------------------------
+
+static int record_stream_cb(const void *input,
+                            void *output,
+                            unsigned long frame_count,
+                            const PaStreamCallbackTimeInfo *timeinfo,
+                            PaStreamCallbackFlags status_flags,
+                            void *ud);
+static void record_stream_finished_cb(void *ud);
+
+int pa_record(char *input_device, int max_chan, int max_data, int sample_rate, float **chan_data)
+{
+    PaError             rc;
+    PaStream           *stream = NULL;
+    PaStreamParameters  input_params;
+    PaDeviceIndex       devidx;
+    user_data_t         ud;
+
+    // init user_data
+    memset(&ud, 0, sizeof(ud));
+    ud.max_chan    = max_chan;
+    ud.max_data    = max_data;
+    ud.sample_rate = sample_rate;
+    ud.chan_data   = chan_data;
+    ud.data_idx    = 0;
+    ud.done        = false;
+
+    // get the input device idx
+    devidx = pa_find_device(input_device);
+    if (devidx == paNoDevice) {
+        printf("ERROR: could not find %s\n", input_device);
+	goto error;
+    }
+    pa_print_device_info(devidx);
+
+    // init input_params and open the audio input stream
+    input_params.device            = devidx;
+    input_params.channelCount      = max_chan;
+    input_params.sampleFormat      = paFloat32 | paNonInterleaved;
+    input_params.suggestedLatency  = Pa_GetDeviceInfo(input_params.device)->defaultLowOutputLatency;
+    input_params.hostApiSpecificStreamInfo = NULL;
+
+    rc = Pa_OpenStream(&stream,
+                       &input_params,
+                       NULL,   // output
+                       sample_rate,
+                       paFramesPerBufferUnspecified,
+                       0,       // stream flags
+                       record_stream_cb,
+                       &ud);   // user_data
+    if (rc != paNoError) {
+	printf("ERROR: Pa_OpenStream rc=%d, %s\n", rc, Pa_GetErrorText(rc));
+	goto error;
+    }
+
+    // register callback for when the the audio input compltes
+    rc = Pa_SetStreamFinishedCallback(stream, record_stream_finished_cb);
+    if (rc != paNoError) {
+	printf("ERROR: Pa_SetStreamFinishedCallback rc=%d, %s\n", rc, Pa_GetErrorText(rc));
+	goto error;
+    }
+
+    // start the audio input
+    rc = Pa_StartStream(stream);
+    if (rc != paNoError) {
+	printf("ERROR: Pa_StartStream rc=%d, %s\n", rc, Pa_GetErrorText(rc));
+	goto error;
+    }
+
+    // wait for audio input to complete
+    while (!ud.done) {
+        Pa_Sleep(10);  // 10 ms
+    }
+
+    // clean up, and return success
+    Pa_StopStream(stream);
+    Pa_CloseStream(stream);
+    return 0;
+
+    // error return path
+error:
+    if (stream) {
+	Pa_StopStream(stream);
+	Pa_CloseStream(stream);
+    }
+    return -1;
+}
+
+static int record_stream_cb(const void *input,
+                            void *output,
+                            unsigned long frame_count,
+                            const PaStreamCallbackTimeInfo *timeinfo,
+                            PaStreamCallbackFlags status_flags,
+                            void *user_data)
+{
+    float **in = (void*)input;
+    user_data_t *ud = user_data;
+    int chan;
+
+    // reduce frame_count if there is not enough space remaining in data
+    if (frame_count > ud->max_data - ud->data_idx) {
+        frame_count = ud->max_data - ud->data_idx;
+    }
+
+    // for each channel make a copy of the input data
+    for (chan = 0; chan < ud->max_chan; chan++) {
+        memcpy(&ud->chan_data[chan][ud->data_idx], in[chan], frame_count*sizeof(float));
+    }
+
+    // update data_idx
+    ud->data_idx += frame_count;
+
+    // return either paComplete or paContinue
+    return ud->data_idx == ud->max_data ? paComplete : paContinue;
+}
+
+static void record_stream_finished_cb(void *user_data)
+{
+    user_data_t *ud = user_data;
+    ud->done = true;
+}
 
 // -----------------  UTILS  -----------------------------------------------------
 
