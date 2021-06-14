@@ -4,6 +4,7 @@
 #include <string.h>
 #include <errno.h>
 #include <pthread.h>
+#include <math.h>
 
 #include <util_sdl.h>
 #include <util_misc.h>
@@ -57,9 +58,12 @@ int main(int argc, char **argv)
     data_src_name = SEEED_4MIC_VOICECARD;
     data_src = DATA_SRC_MIC;
 
-    // parse options xxx getopt -f or -m
+    // parse options
+    // -f <file_name> : get audio data from file
+    // -d <dev_name>  : get audio data from microphone
+    // -h             : help
     while (true) {
-        int ch = getopt(argc, argv, "d:h");
+        int ch = getopt(argc, argv, "f:d:h");
         if (ch == -1) {
             break;
         }
@@ -68,12 +72,12 @@ int main(int argc, char **argv)
             data_src_name = optarg;
             data_src = DATA_SRC_FILE;
             break;
-        case 'm':
+        case 'd':
             data_src_name = optarg;
             data_src = DATA_SRC_MIC;
             break;
         case 'h':
-            printf("xxx usage: gen [-d outdev] [freq_start] [freq_end]\n");
+            printf("usage: plot [-d indev] [-f filename]\n");
             return 0;
             break;
         default:
@@ -100,7 +104,14 @@ int main(int argc, char **argv)
         chan_data_ready = true;
     }
 
-    // xxx print
+    // print info
+    INFO("%s %s: max_chan=%d max_data=%d sample_rate=%d duration=%0.1f \n",
+         (data_src == DATA_SRC_MIC ? "mic" : "file"),
+         data_src_name,
+         max_chan,
+         max_data,
+         sample_rate,
+         (double)max_data / sample_rate);
 
     // init sdl
     if (sdl_init(&win_width, &win_height, opt_fullscreen, false, false) < 0) {
@@ -132,6 +143,8 @@ static void *get_mic_data_thread(void *cx)
 
 // -----------------  PANE HNDLR  ---------------------------------------------------
 
+#define FOOTER_HEIGHT 50
+
 static int ctr_smpl;
 static int cursor_x;
 static int pxls_per_smpl;
@@ -159,14 +172,48 @@ static int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_
 
     if (request == PANE_HANDLER_REQ_RENDER) {
         if (chan_data_ready) {
+            // plot the channel data
             for (int chan = 0; chan < max_chan; chan++) {
                 plot(pane, chan); 
             }
 
-            sdl_render_line(pane, cursor_x, 0, cursor_x, pane->h-1, SDL_GREEN);
-            //xxx print scale at bottom
+            // place label info at the bottom 
+            double ctr_time = (double)ctr_smpl / SAMPLE_RATE;
+            double tspan    = (double)pane->w / pxls_per_smpl / SAMPLE_RATE;
+            char str[50];
+
+            sprintf(str, "%0.3f", ctr_time-tspan/2);
+            sdl_render_printf(pane, 
+                              0, 
+                              pane->h - ROW2Y(2,25), 
+                              25, SDL_WHITE, SDL_BLACK, "%s", str);
+
+            sprintf(str, "%0.3f", ctr_time);
+            sdl_render_printf(pane, 
+                              pane->w/2 - COL2X(strlen(str)/2.,25),
+                              pane->h - ROW2Y(2,25), 
+                              25, SDL_WHITE, SDL_BLACK, "%s", str);
+
+            sprintf(str, "%0.3f", ctr_time+tspan/2);
+            sdl_render_printf(pane, 
+                              pane->w - COL2X(strlen(str),25),
+                              pane->h - ROW2Y(2,25), 
+                              25, SDL_WHITE, SDL_BLACK, "%s", str);
+
+            sprintf(str, "TSPAN=%0.3f   ZOOM=%d", tspan, pxls_per_smpl);
+            sdl_render_printf(pane, 
+                              pane->w/2 - COL2X(strlen(str)/2.,25),
+                              pane->h - ROW2Y(1,25), 
+                              25, SDL_WHITE, SDL_BLACK, "%s", str);
+            
+            // draw cursor
+            sdl_render_line(pane, cursor_x, 0, cursor_x, pane->h-FOOTER_HEIGHT, SDL_GREEN);
         } else {
-            // xxx print
+            // print 'NO DATA'
+            sdl_render_printf(pane, 
+                              pane->w/2 - 3.5 * sdl_font_char_width(50),
+                              pane->h/2 - 0.5 * sdl_font_char_height(50),
+                              50, SDL_WHITE, SDL_BLACK, "NO DATA");
         }
         return PANE_HANDLER_RET_NO_ACTION;
     }
@@ -176,31 +223,38 @@ static int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_
     // -----------------------
 
     if (request == PANE_HANDLER_REQ_EVENT) {
-        // xxx loop ?
         switch (event->event_id) {
         case SDL_EVENT_KEY_LEFT_ARROW:
-            ctr_smpl++;
-            if (ctr_smpl >= max_data) ctr_smpl = max_data-1;
+            ctr_smpl--;
             break;
         case SDL_EVENT_KEY_RIGHT_ARROW:
-            ctr_smpl--;
-            if (ctr_smpl < 0) ctr_smpl = 0;
+            ctr_smpl++;
+            break;
+        case SDL_EVENT_KEY_LEFT_ARROW | SDL_EVENT_KEY_CTRL:
+            ctr_smpl -= 20;
+            break;
+        case SDL_EVENT_KEY_RIGHT_ARROW | SDL_EVENT_KEY_CTRL:
+            ctr_smpl += 20;
+            break;
+        case SDL_EVENT_KEY_LEFT_ARROW | SDL_EVENT_KEY_ALT: {
+            double ctr_time = (double)ctr_smpl / SAMPLE_RATE;
+            ctr_smpl = nearbyint(ctr_time * 10 - 1) / 10. * SAMPLE_RATE;
+            break; }
+        case SDL_EVENT_KEY_RIGHT_ARROW | SDL_EVENT_KEY_ALT: {
+            double ctr_time = (double)ctr_smpl / SAMPLE_RATE;
+            ctr_smpl = nearbyint(ctr_time * 10 + 1) / 10. * SAMPLE_RATE;
+            break; }
+        case 'Z':
+            pxls_per_smpl++;
             break;
         case 'z':
-            pxls_per_smpl++;
-            if (pxls_per_smpl > 10) pxls_per_smpl = 10;
-            break;
-        case 'Z':
             pxls_per_smpl--;
-            if (pxls_per_smpl < 1) pxls_per_smpl = 1;
             break;
         case '<':
-            cursor_x++;
-            if (cursor_x >= pane->w) cursor_x = pane->w-1;
+            cursor_x--;
             break;
         case '>':
-            cursor_x--;
-            if (cursor_x < 0) cursor_x = 0;
+            cursor_x++;
             break;
         case 'g':
             if (data_src == DATA_SRC_MIC && chan_data_ready) {
@@ -210,9 +264,16 @@ static int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_
             }
             break;
         default:
-            INFO("got event_id 0x%x\n", event->event_id);
             break;
         }
+
+        if (ctr_smpl < 0) ctr_smpl = 0;
+        if (ctr_smpl >= max_data) ctr_smpl = max_data-1;
+        if (pxls_per_smpl > 10) pxls_per_smpl = 10;
+        if (pxls_per_smpl < 1) pxls_per_smpl = 1;
+        if (cursor_x < 0) cursor_x = 0;
+        if (cursor_x >= pane->w) cursor_x = pane->w-1;
+
         return PANE_HANDLER_RET_NO_ACTION;
     }
 
@@ -237,7 +298,7 @@ static void plot(rect_t *pane, int chan)
     int     pxl;
     int     smpl;
 
-    y_origin = ((pane->h-50) / 4) * (0.5 + chan);
+    y_origin = ((pane->h-FOOTER_HEIGHT) / 4) * (0.5 + chan);
 
     smpl = ctr_smpl - (pane->w/2) / pxls_per_smpl;
     pxl  = pane->w/2 - (ctr_smpl - smpl) * pxls_per_smpl;
@@ -251,7 +312,7 @@ static void plot(rect_t *pane, int chan)
     while (true) {
         if (smpl >= 0 && smpl < max_data) {
             p[max_points].x = pxl;
-            p[max_points].y = y_origin + chan_data[chan][smpl] * ((pane->h-50)/8);
+            p[max_points].y = y_origin + chan_data[chan][smpl] * ((pane->h-FOOTER_HEIGHT)/8);
             max_points++;
         }
         smpl++;

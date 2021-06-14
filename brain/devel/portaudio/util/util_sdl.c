@@ -470,6 +470,7 @@ void sdl_pane_manager(void *display_cx,                        // optional, cont
                         sdl_print_screen(print_screen_filename(),true,NULL);
                         redraw = true;
 #endif
+#if 0  // XXX not using multiple panes, and need ALT Arrow for plot pgm
                     } else if (event->event_id == SDL_EVENT_KEY_ALT + SDL_EVENT_KEY_UP_ARROW) {  // ALT+arrow: move pane
                         FG_PANE_CX->y_disp -= pane_move_speed();
                         redraw = true;
@@ -482,6 +483,7 @@ void sdl_pane_manager(void *display_cx,                        // optional, cont
                     } else if (event->event_id == SDL_EVENT_KEY_ALT + SDL_EVENT_KEY_RIGHT_ARROW) {
                         FG_PANE_CX->x_disp += pane_move_speed();
                         redraw = true;
+#endif
                     } else {   // pass keyboard event to the pane_handler
                         call_pane_handler = true;
                     }
