@@ -79,7 +79,7 @@ static WINDOW  * curses_window;
 static void curses_init(void);
 static void curses_exit(void);
 static void curses_runtime(void (*update_display)(int maxy, int maxx), int (*input_handler)(int input_char),
-		           void (*other_handler)(void));
+                           void (*other_handler)(void));
 
 // -----------------  MAIN & INITIALIZE & UTILS  ---------------------------------
 
@@ -135,7 +135,7 @@ static void initialize(void)
     // set 3 second recv timeout
     rc = setsockopt(sfd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
     if (rc < 0) {
-	fatal("failed to set SO_RCVTIMEO, %s\n", strerror(errno));
+        fatal("failed to set SO_RCVTIMEO, %s\n", strerror(errno));
     }
 
     // create thread to receive and process msgs from body pgm
@@ -145,7 +145,7 @@ static void initialize(void)
 static void sig_hndlr(int sig)
 {
     if (sig == SIGINT) {
-	sigint = true;
+        sigint = true;
     }
 }
 
@@ -502,16 +502,16 @@ static void update_display(int maxy, int maxx)
         bool is_warn_str = (strstr(str, "WARN") != NULL);
         bool is_body_test_str = (strstr(str, "BODY_TEST") != NULL);
         if (is_error_str || is_warn_str) {
-	    attron(COLOR_PAIR(COLOR_PAIR_RED));
-	} else if (is_body_test_str) {
-	    attron(COLOR_PAIR(COLOR_PAIR_CYAN));
-	}
+            attron(COLOR_PAIR(COLOR_PAIR_RED));
+        } else if (is_body_test_str) {
+            attron(COLOR_PAIR(COLOR_PAIR_CYAN));
+        }
         mvprintw(19+i, 0, "%s", str);
         if (is_error_str || is_warn_str) {
-	    attroff(COLOR_PAIR(COLOR_PAIR_RED));
-	} else if (is_body_test_str) {
-	    attroff(COLOR_PAIR(COLOR_PAIR_CYAN));
-	}
+            attroff(COLOR_PAIR(COLOR_PAIR_RED));
+        } else if (is_body_test_str) {
+            attroff(COLOR_PAIR(COLOR_PAIR_CYAN));
+        }
     }
 
     // display cmdline
@@ -551,14 +551,14 @@ static int process_cmdline(void)
     static char last_cmdline[100];
 
     if (strcmp(cmdline, "r") == 0) {
-	strcpy(cmdline, last_cmdline);
+        strcpy(cmdline, last_cmdline);
     }
 
     cmd[0] = '\0';
     memset(arg, 0, sizeof(arg));
     sscanf(cmdline, "%s %lf %lf %lf %lf", cmd, &arg[0], &arg[1], &arg[2], &arg[3]); 
     if (cmd[0] == '\0') {
-	blank_line();
+        blank_line();
         return 0;
     }
 
@@ -603,9 +603,9 @@ static int process_cmdline(void)
 static void other_handler(void)
 {
     if (sigint) {
-	sigint = false;
-	error("ctrl-c");
-	send_msg(MSG_ID_DRIVE_EMER_STOP, NULL, 0);
+        sigint = false;
+        error("ctrl-c");
+        send_msg(MSG_ID_DRIVE_EMER_STOP, NULL, 0);
     }
 }
 
@@ -637,7 +637,7 @@ static void curses_exit(void)
 }
 
 static void curses_runtime(void (*update_display)(int maxy, int maxx), int (*input_handler)(int input_char),
-		           void (*other_handler)(void))
+                           void (*other_handler)(void))
 {
     int input_char, maxy, maxx;
     int maxy_last=0, maxx_last=0;
@@ -679,10 +679,10 @@ static void curses_runtime(void (*update_display)(int maxy, int maxx), int (*inp
             return;
         }
 
-	// if other_handler is provided then call it
-	if (other_handler) {
-	    other_handler();
-	}
+        // if other_handler is provided then call it
+        if (other_handler) {
+            other_handler();
+        }
 
         // if need to sleep is indicated then do so
         if (sleep_us) {
