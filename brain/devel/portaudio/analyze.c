@@ -46,19 +46,19 @@ int main(int argc, char **argv)
 
     rc = get_mic_data_read_file();
     if (rc < 0) {
-	return 1;
+        return 1;
     }
 
     if (argc != 3) {
-	printf("ERROR argc\n");
-	return 1;
+        printf("ERROR argc\n");
+        return 1;
     }
 
     sscanf(argv[1], "%d", &chana);
     sscanf(argv[2], "%d", &chanb);
     if (chana == -1 || chanb == -1) {
-	printf("ERROR invalid args\n");
-	return 1;
+        printf("ERROR invalid args\n");
+        return 1;
     }
     printf("CHANS %d %d\n", chana, chanb);
 
@@ -66,17 +66,17 @@ int main(int argc, char **argv)
     len = MAX_DATA - 3000;
 
     for (i = 0; i <= 40; i++) {
-	y = data[chanb] + 1980 + i;
-	c[i] = correlate(x,y,len);
-	printf("%d %f\n", i, c[i]);
+        y = data[chanb] + 1980 + i;
+        c[i] = correlate(x,y,len);
+        printf("%d %f\n", i, c[i]);
     }
 
     max = get_max(c, 40);
     printf("MAX %f\n", max);
 
     for (i = 0; i <= 40; i++) {
-	int num_stars =  nearbyint(c[i] / max * 100);
-	printf("%3d %f - %s\n", 
+        int num_stars =  nearbyint(c[i] / max * 100);
+        printf("%3d %f - %s\n", 
                i-20, 
                c[i], 
                stars(num_stars));
@@ -100,7 +100,7 @@ static double get_max(double *x, int len)
     int i;
     double max = x[0];
     for (i = 1; i < len; i++) {
-	if (x[i] > max) max = x[i];
+        if (x[i] > max) max = x[i];
     }
     return max;
 }
@@ -111,7 +111,7 @@ static double correlate(float *d1, float *d2, int len)
     int i;
 
     for (i = 0; i < len; i++) {
-	sum += d1[i] * d2[i];
+        sum += d1[i] * d2[i];
     }
 
     return sum;

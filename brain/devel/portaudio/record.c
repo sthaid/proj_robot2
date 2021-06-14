@@ -46,9 +46,9 @@ int main(int argc, char **argv)
         case 'd':
             input_device = optarg;
             break;
-	case 'f':
-	    file_name = optarg;
-	    break;
+        case 'f':
+            file_name = optarg;
+            break;
         case 'h':
             printf("usage: record [-d indev] [-f file_name]\n");
             return 0;
@@ -70,7 +70,7 @@ int main(int argc, char **argv)
     // record sound data
     float *chan_data[max_chan];
     for (int chan = 0; chan < max_chan; chan++) {
-	chan_data[chan] = calloc(MAX_DATA, sizeof(float));
+        chan_data[chan] = calloc(MAX_DATA, sizeof(float));
     }
     if (pa_record(input_device, max_chan, MAX_DATA, SAMPLE_RATE, chan_data) < 0) {
         printf("ERROR: pa_play failed\n");
@@ -81,8 +81,8 @@ int main(int argc, char **argv)
     printf("writing recorded data to %s\n", file_name);
     rc = file_write(file_name, max_chan, MAX_DATA, SAMPLE_RATE, chan_data);
     if (rc < 0) {
-	printf("ERROR: file_write failed\n");
-	return 1;
+        printf("ERROR: file_write failed\n");
+        return 1;
     }
 
 #ifdef DEBUG

@@ -64,7 +64,7 @@ int pa_play(char *output_device, int max_chan, int max_data, int sample_rate, fl
     devidx = pa_find_device(output_device);
     if (devidx == paNoDevice) {
         printf("ERROR: could not find %s\n", output_device);
-	goto error;
+        goto error;
     }
     pa_print_device_info(devidx);
 
@@ -84,22 +84,22 @@ int pa_play(char *output_device, int max_chan, int max_data, int sample_rate, fl
                        play_stream_cb,
                        &ud);   // user_data
     if (rc != paNoError) {
-	printf("ERROR: Pa_OpenStream rc=%d, %s\n", rc, Pa_GetErrorText(rc));
-	goto error;
+        printf("ERROR: Pa_OpenStream rc=%d, %s\n", rc, Pa_GetErrorText(rc));
+        goto error;
     }
 
     // register callback for when the the audio output compltes
     rc = Pa_SetStreamFinishedCallback(stream, play_stream_finished_cb);
     if (rc != paNoError) {
-	printf("ERROR: Pa_SetStreamFinishedCallback rc=%d, %s\n", rc, Pa_GetErrorText(rc));
-	goto error;
+        printf("ERROR: Pa_SetStreamFinishedCallback rc=%d, %s\n", rc, Pa_GetErrorText(rc));
+        goto error;
     }
 
     // start the audio output
     rc = Pa_StartStream(stream);
     if (rc != paNoError) {
-	printf("ERROR: Pa_StartStream rc=%d, %s\n", rc, Pa_GetErrorText(rc));
-	goto error;
+        printf("ERROR: Pa_StartStream rc=%d, %s\n", rc, Pa_GetErrorText(rc));
+        goto error;
     }
 
     // wait for audio output to complete
@@ -115,8 +115,8 @@ int pa_play(char *output_device, int max_chan, int max_data, int sample_rate, fl
     // error return path
 error:
     if (stream) {
-	Pa_StopStream(stream);
-	Pa_CloseStream(stream);
+        Pa_StopStream(stream);
+        Pa_CloseStream(stream);
     }
     return -1;
 }
@@ -139,11 +139,11 @@ static int play_stream_cb(const void *input,
 
     // for each chan, copy the chan_data to out
     for (chan = 0; chan < ud->max_chan; chan++) {
-	if (ud->chan_data[chan] == NULL) {
-	    memset(out[chan], 0, frame_count*sizeof(float));
-	} else {
-	    memcpy(out[chan], &ud->chan_data[chan][ud->data_idx], frame_count*sizeof(float));
-	}
+        if (ud->chan_data[chan] == NULL) {
+            memset(out[chan], 0, frame_count*sizeof(float));
+        } else {
+            memcpy(out[chan], &ud->chan_data[chan][ud->data_idx], frame_count*sizeof(float));
+        }
     }
 
     // increase data_idx by the frame_count
@@ -190,7 +190,7 @@ int pa_record(char *input_device, int max_chan, int max_data, int sample_rate, f
     devidx = pa_find_device(input_device);
     if (devidx == paNoDevice) {
         printf("ERROR: could not find %s\n", input_device);
-	goto error;
+        goto error;
     }
     pa_print_device_info(devidx);
 
@@ -210,22 +210,22 @@ int pa_record(char *input_device, int max_chan, int max_data, int sample_rate, f
                        record_stream_cb,
                        &ud);   // user_data
     if (rc != paNoError) {
-	printf("ERROR: Pa_OpenStream rc=%d, %s\n", rc, Pa_GetErrorText(rc));
-	goto error;
+        printf("ERROR: Pa_OpenStream rc=%d, %s\n", rc, Pa_GetErrorText(rc));
+        goto error;
     }
 
     // register callback for when the the audio input compltes
     rc = Pa_SetStreamFinishedCallback(stream, record_stream_finished_cb);
     if (rc != paNoError) {
-	printf("ERROR: Pa_SetStreamFinishedCallback rc=%d, %s\n", rc, Pa_GetErrorText(rc));
-	goto error;
+        printf("ERROR: Pa_SetStreamFinishedCallback rc=%d, %s\n", rc, Pa_GetErrorText(rc));
+        goto error;
     }
 
     // start the audio input
     rc = Pa_StartStream(stream);
     if (rc != paNoError) {
-	printf("ERROR: Pa_StartStream rc=%d, %s\n", rc, Pa_GetErrorText(rc));
-	goto error;
+        printf("ERROR: Pa_StartStream rc=%d, %s\n", rc, Pa_GetErrorText(rc));
+        goto error;
     }
 
     // wait for audio input to complete
@@ -241,8 +241,8 @@ int pa_record(char *input_device, int max_chan, int max_data, int sample_rate, f
     // error return path
 error:
     if (stream) {
-	Pa_StopStream(stream);
-	Pa_CloseStream(stream);
+        Pa_StopStream(stream);
+        Pa_CloseStream(stream);
     }
     return -1;
 }
@@ -289,10 +289,10 @@ PaDeviceIndex pa_find_device(char *name)
     int i;
 
     if (strcmp(name, DEFAULT_OUTPUT_DEVICE) == 0) {
-	return Pa_GetDefaultOutputDevice();
+        return Pa_GetDefaultOutputDevice();
     }
     if (strcmp(name, DEFAULT_INPUT_DEVICE) == 0) {
-	return Pa_GetDefaultInputDevice();
+        return Pa_GetDefaultInputDevice();
     }
 
     for (i = 0; i < dev_cnt; i++) {

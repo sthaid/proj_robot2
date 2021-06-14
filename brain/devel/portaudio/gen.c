@@ -47,21 +47,21 @@ int main(int argc, char **argv)
 
     // parse options
     while (true) {
-	int ch = getopt(argc, argv, "d:h");
-	if (ch == -1) {
-	    break;
-	}
-	switch (ch) {
-	case 'd':
-	    output_device = optarg;
-	    break;
-	case 'h':
-	    printf("usage: gen [-d outdev] [freq_start] [freq_end]\n");
-	    return 0;
-	    break;
-	default:
-	    return 1;
-	};
+        int ch = getopt(argc, argv, "d:h");
+        if (ch == -1) {
+            break;
+        }
+        switch (ch) {
+        case 'd':
+            output_device = optarg;
+            break;
+        case 'h':
+            printf("usage: gen [-d outdev] [freq_start] [freq_end]\n");
+            return 0;
+            break;
+        default:
+            return 1;
+        };
     }
 
     // determine freq_start and freq_end
@@ -89,15 +89,15 @@ int main(int argc, char **argv)
 
     // init pa_utils
     if (pa_init() < 0) {
-	printf("ERROR: pa_init failed\n");
-	return 1;
+        printf("ERROR: pa_init failed\n");
+        return 1;
     }
 
     // play sound data
     float *chan_data[MAX_CHAN] = {NULL, data};
     if (pa_play(output_device, MAX_CHAN, MAX_DATA, SAMPLE_RATE, chan_data) < 0) {
-	printf("ERROR: pa_play failed\n");
-	return 1;
+        printf("ERROR: pa_play failed\n");
+        return 1;
     }
 
     // done

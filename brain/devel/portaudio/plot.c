@@ -3,6 +3,7 @@
 #include <unistd.h>
 #include <string.h>
 #include <errno.h>
+#include <pthread.h>
 
 #include <util_sdl.h>
 #include <util_misc.h>
@@ -12,6 +13,15 @@
 //
 // defines
 //
+
+// used when data being obtained from microphone
+#define SEEED_4MIC_VOICECARD "seeed-4mic-voicecard"
+#define MAX_CHAN             4
+#define SAMPLE_RATE          48000  // samples per sec
+#define DURATION             5      // secs
+
+#define DATA_SRC_MIC  1
+#define DATA_SRC_FILE 2
 
 //
 // variables
@@ -25,27 +35,72 @@ static int    max_chan;
 static int    max_data;
 static int    sample_rate;
 static float *chan_data[32];  // up to 32 channels
+static bool   chan_data_ready;
+
+static int    data_src;
+static char  *data_src_name;
 
 //
 // prototypes
 //
 
+static void *get_mic_data_thread(void *cx);
 static int pane_hndlr(pane_cx_t *pane_cx, int request, void * init_params, sdl_event_t * event);
 
 // -----------------  MAIN  ---------------------------------------------------------
 
 int main(int argc, char **argv)
 {
-    char *file_name = "record.dat";
-    int rc;
+    pthread_t tid;
 
-    // xxx also get mic data directly, and specify a duration
-    rc = file_read(file_name, &max_chan, &max_data, &sample_rate, chan_data);
-    if (rc < 0) {
-	FATAL("file_read failed\n");
+    // set default data source
+    data_src_name = SEEED_4MIC_VOICECARD;
+    data_src = DATA_SRC_MIC;
+
+    // parse options xxx getopt -f or -m
+    while (true) {
+        int ch = getopt(argc, argv, "d:h");
+        if (ch == -1) {
+            break;
+        }
+        switch (ch) {
+        case 'f':
+            data_src_name = optarg;
+            data_src = DATA_SRC_FILE;
+            break;
+        case 'm':
+            data_src_name = optarg;
+            data_src = DATA_SRC_MIC;
+            break;
+        case 'h':
+            printf("xxx usage: gen [-d outdev] [freq_start] [freq_end]\n");
+            return 0;
+            break;
+        default:
+            return 1;
+        };
     }
-    printf("file_read returned max_chan=%d max_data=%d sample_rate=%d\n",
-           max_chan, max_data, sample_rate);
+
+    // get audio data eitehr from microphone or file
+    if (data_src == DATA_SRC_MIC) {
+        if (pa_init() < 0) {
+            FATAL("failed to initialize portaudio\n");
+        }
+        max_chan    = MAX_CHAN;
+        max_data    = DURATION * SAMPLE_RATE;
+        sample_rate = SAMPLE_RATE;
+        for (int chan = 0; chan < max_chan; chan++) {
+            chan_data[chan] = malloc(max_data * sizeof(float));
+        }
+        pthread_create(&tid, NULL, get_mic_data_thread, NULL);
+    } else {
+        if (file_read(data_src_name, &max_chan, &max_data, &sample_rate, chan_data) < 0) {
+            FATAL("failed to read file %s\n", data_src_name);
+        }
+        chan_data_ready = true;
+    }
+
+    // xxx print
 
     // init sdl
     if (sdl_init(&win_width, &win_height, opt_fullscreen, false, false) < 0) {
@@ -66,10 +121,20 @@ int main(int argc, char **argv)
     return 0;
 }
 
+static void *get_mic_data_thread(void *cx)
+{
+    if (pa_record(data_src_name, max_chan, max_data, sample_rate, chan_data) < 0) {
+        FATAL("failed pa_record, %s\n", data_src_name);
+    }
+    chan_data_ready = true;
+    return NULL;
+}
+
 // -----------------  PANE HNDLR  ---------------------------------------------------
 
-static int x_start = 10000;
-static int x_cursor;
+static int ctr_smpl;
+static int cursor_x;
+static int pxls_per_smpl;
 
 static void plot(rect_t *pane, int chan);
 
@@ -82,7 +147,9 @@ static int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_
     // ----------------------------
 
     if (request == PANE_HANDLER_REQ_INITIALIZE) {
-	x_cursor = pane->w / 2;
+        ctr_smpl      = 0;
+        cursor_x      = pane->w / 2;
+        pxls_per_smpl = 1;
         return PANE_HANDLER_RET_NO_ACTION;
     }
 
@@ -91,12 +158,16 @@ static int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_
     // ------------------------
 
     if (request == PANE_HANDLER_REQ_RENDER) {
-        for (int chan = 0; chan < max_chan; chan++) {
-            plot(pane, chan); 
+        if (chan_data_ready) {
+            for (int chan = 0; chan < max_chan; chan++) {
+                plot(pane, chan); 
+            }
+
+            sdl_render_line(pane, cursor_x, 0, cursor_x, pane->h-1, SDL_GREEN);
+            //xxx print scale at bottom
+        } else {
+            // xxx print
         }
-
-	sdl_render_line(pane, x_cursor, 0, x_cursor, pane->h-1, SDL_WHITE);
-
         return PANE_HANDLER_RET_NO_ACTION;
     }
 
@@ -105,28 +176,43 @@ static int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_
     // -----------------------
 
     if (request == PANE_HANDLER_REQ_EVENT) {
+        // xxx loop ?
         switch (event->event_id) {
-	case SDL_EVENT_KEY_LEFT_ARROW:
-	    x_start++;
-	    break;
-	case SDL_EVENT_KEY_RIGHT_ARROW:
-	    x_start--;
-	    break;
-	case '<':
-	    x_cursor++;
-	    break;
-	case '>':
-	    x_cursor--;
-	    break;
+        case SDL_EVENT_KEY_LEFT_ARROW:
+            ctr_smpl++;
+            if (ctr_smpl >= max_data) ctr_smpl = max_data-1;
+            break;
+        case SDL_EVENT_KEY_RIGHT_ARROW:
+            ctr_smpl--;
+            if (ctr_smpl < 0) ctr_smpl = 0;
+            break;
+        case 'z':
+            pxls_per_smpl++;
+            if (pxls_per_smpl > 10) pxls_per_smpl = 10;
+            break;
+        case 'Z':
+            pxls_per_smpl--;
+            if (pxls_per_smpl < 1) pxls_per_smpl = 1;
+            break;
+        case '<':
+            cursor_x++;
+            if (cursor_x >= pane->w) cursor_x = pane->w-1;
+            break;
+        case '>':
+            cursor_x--;
+            if (cursor_x < 0) cursor_x = 0;
+            break;
+        case 'g':
+            if (data_src == DATA_SRC_MIC && chan_data_ready) {
+                pthread_t tid;
+                chan_data_ready = false;
+                pthread_create(&tid, NULL, get_mic_data_thread, NULL);
+            }
+            break;
         default:
             INFO("got event_id 0x%x\n", event->event_id);
             break;
         }
-//xxx get the data       g
-//xxx scroll x           left right arrows     change start sample
-//xxx change x scale     + -                   change sample_per_pixel
-//xxx change y scale     shift + -             change maxy
-
         return PANE_HANDLER_RET_NO_ACTION;
     }
 
@@ -145,26 +231,37 @@ static int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_
 
 static void plot(rect_t *pane, int chan)
 {
-    int max_p = 0;
-    int x, y_base;
     point_t p[10000];
-    int x_data_idx;
+    int     max_points = 0;
+    int     y_origin;
+    int     pxl;
+    int     smpl;
 
-    y_base = (pane->h / 4) * (0.5 + chan);
-    //INFO("chan=%d y_base=%d\n", chan, y_base);
+    y_origin = ((pane->h-50) / 4) * (0.5 + chan);
 
-    x = 0;
-    for (x_data_idx = x_start; true; x_data_idx++) {
-        p[max_p].x = x;
-        p[max_p].y = y_base + chan_data[chan][x_data_idx] * (pane->h/8);
-        max_p++;
-	x += 10;   // XXX
-	if (x >= pane->w) {
-	    break;
-	}
+    smpl = ctr_smpl - (pane->w/2) / pxls_per_smpl;
+    pxl  = pane->w/2 - (ctr_smpl - smpl) * pxls_per_smpl;
+
+    if (pxl < 0) {
+        FATAL("pxl=%d\n", pxl);
     }
 
-    sdl_render_line(pane, 0, y_base, pane->w-1, y_base, SDL_WHITE);
-    sdl_render_lines(pane, p, max_p, SDL_WHITE);
+    sdl_render_line(pane, 0, y_origin, pane->w-1, y_origin, SDL_GREEN);
+
+    while (true) {
+        if (smpl >= 0 && smpl < max_data) {
+            p[max_points].x = pxl;
+            p[max_points].y = y_origin + chan_data[chan][smpl] * ((pane->h-50)/8);
+            max_points++;
+        }
+        smpl++;
+        pxl += pxls_per_smpl;
+
+        if (pxl >= pane->w) {
+            break;
+        }
+    }
+
+    sdl_render_lines(pane, p, max_points, SDL_WHITE);
 }
 

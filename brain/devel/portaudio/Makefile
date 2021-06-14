@@ -16,7 +16,7 @@ record: record.c pa_utils.c sf_utils.c file_utils.c
 
 plot: plot.c pa_utils.c file_utils.c util/util_sdl.c util/util_misc.c util/util_jpeg.c util/util_png.c
 	gcc -g -Wall -O2 -I. -Iutil -I/usr/include/SDL2 $^ \
-            -lSDL2 -lSDL2_ttf -ljpeg -lpng -lportaudio -lm \
+            -lSDL2 -lSDL2_ttf -ljpeg -lpng -lportaudio -lm -lpthread \
             -o $@ 
 
 analyze: analyze.c
