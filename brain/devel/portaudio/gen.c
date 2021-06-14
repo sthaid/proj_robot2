@@ -15,10 +15,11 @@
 //
 
 #define SAMPLE_RATE         48000  // samples per sec
-#define DEFAULT_DURATION    5      // secs
 #define MAX_CHAN            2
+#define DEFAULT_DURATION    10     // secs
+#define DEFAULT_START_FREQ  500
+#define DEFAULT_END_FREQ    1500
 
-#define DEFAULT_FREQ        500
 #define MIN_FREQ            100
 #define MAX_FREQ            10000
 
@@ -26,8 +27,8 @@
 // variables
 //
 
-static int    freq_start = DEFAULT_FREQ;
-static int    freq_end = DEFAULT_FREQ;
+static int    freq_start = DEFAULT_START_FREQ;
+static int    freq_end = DEFAULT_END_FREQ;
 static int    duration = DEFAULT_DURATION;
 static float *data;
 static int    max_data;
