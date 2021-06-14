@@ -108,7 +108,9 @@ static void exit_handler(void);
 static void set_color(int32_t color); 
 static void font_init(int32_t ptsize);
 static void pane_terminate(struct pane_list_head_s * pane_list_head, pane_cx_t * pane_cx);
+#if 0
 static int32_t pane_move_speed(void);
+#endif
 static rect_t init_pane(int32_t x_disp, int32_t y_disp, int32_t w, int32_t h,
                         int32_t border_style, int32_t border_color, bool clear,
                         rect_t * loc_full_pane, rect_t * loc_bar_move, rect_t * loc_bar_x);
@@ -623,6 +625,7 @@ static void pane_terminate(struct pane_list_head_s * pane_list_head, pane_cx_t *
     free(pane_cx);
 }
 
+#if 0
 static int32_t pane_move_speed(void)
 {
     int32_t  speed;
@@ -642,6 +645,7 @@ static int32_t pane_move_speed(void)
 
     return speed;
 }
+#endif
 
 rect_t init_pane(int32_t x_disp, int32_t y_disp, int32_t w_total, int32_t h_total, 
                  int32_t border_style, int32_t border_color, bool clear,
