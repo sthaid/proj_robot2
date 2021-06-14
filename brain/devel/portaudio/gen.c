@@ -15,11 +15,10 @@
 //
 
 #define SAMPLE_RATE         48000  // samples per sec
-#define DURATION            5      // secs
+#define DEFAULT_DURATION    5      // secs
 #define MAX_CHAN            2
-#define MAX_DATA            (DURATION * SAMPLE_RATE)
 
-#define DEFAULT_FREQ_START  300
+#define DEFAULT_FREQ        500
 #define MIN_FREQ            100
 #define MAX_FREQ            10000
 
@@ -27,9 +26,11 @@
 // variables
 //
 
-static int    freq_start = DEFAULT_FREQ_START;
-static int    freq_end;
-static float  data[MAX_DATA];
+static int    freq_start = DEFAULT_FREQ;
+static int    freq_end = DEFAULT_FREQ;
+static int    duration = DEFAULT_DURATION;
+static float *data;
+static int    max_data;
 
 //
 // prototypes
@@ -43,11 +44,12 @@ int main(int argc, char **argv)
 {
     char *output_device = DEFAULT_OUTPUT_DEVICE;
 
-    // usage: gen [-d outdev] [freq_start] [freq_end]
+    // usage: gen [-d outdev] [-f freq[,freq]] [-t duration_secs]
 
     // parse options
     while (true) {
-        int ch = getopt(argc, argv, "d:h");
+        int ch = getopt(argc, argv, "d:f:t:h");
+        int cnt;
         if (ch == -1) {
             break;
         }
@@ -55,33 +57,39 @@ int main(int argc, char **argv)
         case 'd':
             output_device = optarg;
             break;
+        case 'f':
+            cnt = sscanf(optarg, "%d,%d", &freq_start, &freq_end);
+            if (cnt == 0) {
+                printf("ERROR: invalid frequency range '%s'\n", optarg);
+                return 1;
+            }
+
+            if (cnt == 1) {
+                freq_end = freq_start;
+            }
+
+            if (freq_start < MIN_FREQ || freq_start > MAX_FREQ ||
+                freq_end < MIN_FREQ || freq_end > MAX_FREQ ||
+                freq_end < freq_start)
+            {
+                printf("ERROR: invalid frequency range %d - %d\n", freq_start, freq_end);
+                return 1;
+            }
+            break;
+        case 't':
+            cnt = sscanf(optarg, "%d", &duration);
+            if (cnt != 1 || duration < 1 || duration > 60) {
+                printf("ERROR: invalid duration '%s'\n", optarg);
+                return 1;
+            }
+            break;
         case 'h':
-            printf("usage: gen [-d outdev] [freq_start] [freq_end]\n");
+            printf("usage: gen [-d outdev] [-f freq[,freq]] [-t duration_secs]\n");
             return 0;
             break;
         default:
             return 1;
         };
-    }
-
-    // determine freq_start and freq_end
-    if (argc-optind >= 1 && sscanf(argv[optind], "%d", &freq_start) != 1) {
-        printf("ERROR: not a number '%s'\n", argv[optind]);
-        return 1;
-    }
-    freq_end = 2 * freq_start;
-    if (argc-optind >= 2 && sscanf(argv[optind+1], "%d", &freq_end) != 1) {
-        printf("ERROR: not a number '%s'\n", argv[optind+1]);
-        return 1;
-    }
-        
-    // validate frequency range
-    if (freq_start < MIN_FREQ || freq_start > MAX_FREQ ||
-        freq_end < MIN_FREQ || freq_end > MAX_FREQ ||
-        freq_end < freq_start)
-    {
-        printf("ERROR: invalid frequency range: %d - %d\n", freq_start, freq_end);
-        return 1;
     }
 
     // initialize sound data buffer 
@@ -93,9 +101,13 @@ int main(int argc, char **argv)
         return 1;
     }
 
+    // print params
+    printf("\nduation = %d secs   freq = %d - %d   sample_rate = %d\n\n",
+           duration, freq_start, freq_end, SAMPLE_RATE);
+
     // play sound data
     float *chan_data[MAX_CHAN] = {NULL, data};
-    if (pa_play(output_device, MAX_CHAN, MAX_DATA, SAMPLE_RATE, chan_data) < 0) {
+    if (pa_play(output_device, MAX_CHAN, max_data, SAMPLE_RATE, chan_data) < 0) {
         printf("ERROR: pa_play failed\n");
         return 1;
     }
@@ -107,15 +119,17 @@ int main(int argc, char **argv)
 static void init_data(void)
 {
     double freq = freq_start;
-    int max_data = 0;
+    int i;
 
-    while (true) {
-        data[max_data] = sin((2*M_PI) * freq * ((double)max_data/SAMPLE_RATE));
-        max_data++;
+    max_data = duration * SAMPLE_RATE;
+    data = malloc(max_data * sizeof(float));
 
-        freq += (double)(freq_end - freq_start) / (DURATION * SAMPLE_RATE);
+    for (i = 0; i < max_data; i++) {
+        data[i] = sin((2*M_PI) * freq * ((double)i/SAMPLE_RATE));
 
-        if (max_data == MAX_DATA) {
+        freq += (double)(freq_end - freq_start) / max_data;
+
+        if (i == max_data-1) {
             if (nearbyint(freq) != freq_end) {
                 printf("ERROR: BUG freq %0.3f not equal freq_end %d\n", freq, freq_end);
                 exit(1);
