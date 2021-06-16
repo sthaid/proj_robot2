@@ -1,7 +1,7 @@
 # reference:
 # https://stackoverflow.com/questions/3220277/what-do-the-makefile-symbols-and-mean
 
-TARGETS = gen devs record plot analyze
+TARGETS = gen devs record plot analyze filters
 
 build: $(TARGETS)
 
@@ -19,8 +19,11 @@ plot: plot.c pa_utils.c file_utils.c util/util_sdl.c util/util_misc.c util/util_
             -lSDL2 -lSDL2_ttf -ljpeg -lpng -lportaudio -lm -lpthread \
             -o $@ 
 
-analyze: analyze.c
-	gcc -g -Wall -O2 -I. $^ -lm -o $@ 
+analyze: analyze.c file_utils.c ../../../common/util/misc.c
+	gcc -g -Wall -O2 -I. -I../../../common/include $^ -lm -o $@ 
+
+filters: filters.c
+	gcc -g -Wall -O2 -I. $^ -lm -lfftw3 -o $@ 
 
 clean:
 	rm -f $(TARGETS) *.wav
