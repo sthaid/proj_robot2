@@ -59,7 +59,7 @@ static fftw_plan   plan;
 static void init_in_data(void);
 static int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_event_t * event);
 static void plot(rect_t *pane, int idx, complex *data, char *title);
-static void apply_low_pass_filter(complex *data, int n);
+static void apply_low_pass_filter(complex *data, int n, int k1, double k2);
 
 // -----------------  MAIN  --------------------------------------
 
@@ -119,6 +119,9 @@ static int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_
 {
     rect_t *pane = &pane_cx->pane;
 
+    static int k1 = 1;
+    static double k2 = 0.95
+
     // ----------------------------
     // -------- INITIALIZE --------
     // ----------------------------
@@ -137,25 +140,9 @@ static int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_
         plot(pane, 0, out, "TITLE");
 
         memcpy(in, in_data, N*sizeof(complex));
-        apply_low_pass_filter(in, N);
+        apply_low_pass_filter(in, N, k1, k2);
         fftw_execute(plan);
         plot(pane, 1, out, "TITLE");
-
-        memcpy(in, in_data, N*sizeof(complex));
-        apply_low_pass_filter(in, N);
-        apply_low_pass_filter(in, N);
-        fftw_execute(plan);
-        plot(pane, 2, out, "TITLE");
-
-        memcpy(in, in_data, N*sizeof(complex));
-        apply_low_pass_filter(in, N);
-        apply_low_pass_filter(in, N);
-        apply_low_pass_filter(in, N);
-        fftw_execute(plan);
-        plot(pane, 3, out, "TITLE");
-
-        //plot(pane, 2, out, "TITLE");
-        //plot(pane, 3, out, "TITLE");
 
         return PANE_HANDLER_RET_NO_ACTION;
     }
@@ -187,7 +174,8 @@ static int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_
     return PANE_HANDLER_RET_NO_ACTION;
 }
 
-// xxx maybe data is not an arg
+// xxx maybe data is not an arg, just alwasy plot out
+// xxx or else N should be an arg too
 static void plot(rect_t *pane, int idx, complex *data, char *title)
 {
     int y_pixels, y_max, y_origin, x_max, i, x;
@@ -238,13 +226,15 @@ static void plot(rect_t *pane, int idx, complex *data, char *title)
     }
 }
 
-static void apply_low_pass_filter(complex *data, int n)
+// xxx xmaybe data and n not args
+static void apply_low_pass_filter(complex *data, int n, int k1, double k2)
 {
-    double cx = 0;
-    int i;
+    double cx[10];
 
-    for (i = 0; i < n; i++) {
-        data[i] = low_pass_filter(creal(data[i]), &cx);
+    memset(cx,0,sizeof(cx));
+
+    for (int i = 0; i < n; i++) {
+        data[i] = low_pass_filter(creal(data[i]), cx, k1, k2);
     }
 }
 
