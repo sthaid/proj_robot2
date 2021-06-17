@@ -7,23 +7,24 @@
 #include <fcntl.h>
 #include <math.h>
 
+#include <file_utils.h>
+#include <misc.h>
+
 //
 // defines
 //
 
-#define MAX_CHANNEL  4
-#define SAMPLE_RATE  48000  // samples per sec
-#define DURATION     1      // secs
-#define MAX_DATA     (DURATION * SAMPLE_RATE)
-
-#define GET_MIC_DATA_FILENAME "get_mic_data.dat"
 
 //
 // variables
 //
 
-static float  data[MAX_CHANNEL][MAX_DATA];
-static bool   data_ready;
+static float *chan_data[32];
+static int    max_data;
+static int    max_chan;
+static int    sample_rate;
+
+static char *file_name;
 
 //
 // prototypes
@@ -32,7 +33,7 @@ static bool   data_ready;
 static double correlate(float *d1, float *d2, int len);
 static double get_max(double *x, int len);
 static char *stars(int n);
-static int get_mic_data_read_file(void);
+static void smooth(float *data, int max_data);
 
 // -----------------  MAIN  ----------------------------------
 
@@ -42,45 +43,94 @@ int main(int argc, char **argv)
     double c[1000], max;
     int rc, len, i, chana=-1, chanb=-1;
 
-    setlinebuf(stdout);
-
-    rc = get_mic_data_read_file();
-    if (rc < 0) {
-        return 1;
-    }
-
-    if (argc != 3) {
+    if (argc != 4) {
         printf("ERROR argc\n");
         return 1;
     }
 
-    sscanf(argv[1], "%d", &chana);
-    sscanf(argv[2], "%d", &chanb);
+    file_name = argv[1];
+    sscanf(argv[2], "%d", &chana);
+    sscanf(argv[3], "%d", &chanb);
     if (chana == -1 || chanb == -1) {
         printf("ERROR invalid args\n");
         return 1;
     }
-    printf("CHANS %d %d\n", chana, chanb);
 
-    x = data[chana] + 2000;
-    len = MAX_DATA - 3000;
-
-    for (i = 0; i <= 40; i++) {
-        y = data[chanb] + 1980 + i;
-        c[i] = correlate(x,y,len);
-        printf("%d %f\n", i, c[i]);
+    rc = file_read(file_name, &max_chan, &max_data, &sample_rate, chan_data);
+    if (rc < 0) {
+        printf("file_read failed\n");
+        return 1;
     }
 
-    max = get_max(c, 40);
+    // smooth data
+    printf("SMOOTHING\n");
+    for (i = 0; i < max_chan; i++) {
+        smooth(chan_data[i], max_data);
+    }
+
+//#define START  31200
+//#define END    36000
+
+#if 1
+#define START 10000
+#define END (max_data-20000)
+
+    x = chan_data[chana] + START;
+    len = (END-START);
+
+    printf("\nFILE_NAME=%s  MAX_DATA=%d  CHANS=%d %d  SAMPLES=%d %0.1f secs\n\n", 
+         file_name, max_data, chana, chanb, len, (double)len/sample_rate);
+
+#define RANGE 30
+    for (i = 0; i <= 2*RANGE; i++) {
+        y = chan_data[chanb] + START-RANGE + i;
+        c[i] = correlate(x,y,len);
+        //printf("%d %f\n", i, c[i]);
+    }
+#else
+#define RANGE 1
+    c[0] = 1;
+    c[1] = 5;
+    c[2] = 2;
+#endif
+
+    max = get_max(c, 2*RANGE);
     printf("MAX %f\n", max);
 
-    for (i = 0; i <= 40; i++) {
+    for (i = 0; i <= 2*RANGE; i++) {
         int num_stars =  nearbyint(c[i] / max * 100);
         printf("%3d %f - %s\n", 
-               i-20, 
+               i-RANGE, 
                c[i], 
                stars(num_stars));
     }
+
+    // starting at ctr, look back until find negative cross corr
+    int start = -1;
+    for (i = RANGE; i >= 0; i--) {
+        if (c[i] < 0) break;
+        start = i;
+    }
+
+    if (start == -1) {
+        printf("no start\n");
+        return 1;
+    }
+    printf("start = %d\n", start);
+
+    interp_point_t p[100];
+    double sum = 0, answer;
+    int cnt=0;
+    for (i = start; c[i] > 0; i++) {
+        sum += c[i];
+        p[cnt].x = sum;
+        p[cnt].y = i-RANGE;
+        printf("interp point   %d = %f %f\n", cnt, p[cnt].x, p[cnt].y);
+        cnt++;
+    }
+    printf("SUM  %f\n", sum);
+    answer = interpolate(p, cnt, sum/2) + 0.5;
+    printf("answer %0.2f\n", answer);
 
     return 0;
 }
@@ -112,33 +162,33 @@ static double correlate(float *d1, float *d2, int len)
 
     for (i = 0; i < len; i++) {
         sum += d1[i] * d2[i];
+#if 0
+        //sum += 
+            //d1[i] * d1[i] * d1[i] *
+            //d2[i] * d2[i] * d2[i];
+        if (d1[i] > 0 && d2[i] > 0) {
+            sum += d1[i] + d2[i];
+        } else if (d1[i] < 0 && d2[i] < 0) {
+            sum -= d1[i] + d2[i];
+        } else {
+            sum += d1[i] + d2[i];
+        }
+#endif
     }
 
     return sum;
 }
 
-// -----------------  UTILS  ---------------------------------
 
-static int get_mic_data_read_file(void)
+
+
+static void smooth(float *data, int max_data)
 {
-    int fd, len;
-
-    printf("reading %s\n", GET_MIC_DATA_FILENAME);
-
-    fd = open(GET_MIC_DATA_FILENAME, O_RDONLY);
-    if (fd < 0) {
-        printf("open %s, %s\n", GET_MIC_DATA_FILENAME, strerror(errno));
-        return -1;
+    int i;
+    for (i = 1; i < max_data; i++) {
+        //data[i] = 0.9 * data[i-1] + 0.1 * data[i];
+        data[i] = 0.8 * data[i-1] + 0.2 * data[i];
+        //data[i] = 0.7 * data[i-1] + 0.7 * data[i];
     }
-
-    len = read(fd, data, sizeof(data));
-    if (len != sizeof(data)) {
-        printf("read %s len=%d, %s\n", GET_MIC_DATA_FILENAME, len, strerror(errno));
-        return -1;
-    }
-
-    close(fd); 
-    data_ready = true;
-    return 0;
 }
 

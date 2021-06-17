@@ -427,28 +427,11 @@ write sdl pgm to plot the 4 channels of raw data
 xxxxxxxxxxxxxxxxxxxxxxxxxxxx
 xxxxxxxxxxxxxxxxxxxxxxxxxxxx
 xxxxxxxxxxxxxxxxxxxxxxxxxxxx
-
-corr.c  x
-devs.c  x
-fit.c  x
-octave.c  x
-pa_utils.c  x
-pa_utils.h  x
-plot.c  x
-record.c    x
-sf_utils.c  x
-sf_utils.h  x
-
-make save dir for files like fit.c
-
-new names for pgms
-
-octave -> gen
-- select output on cmdline  OR use default
-- single channel on computer
-
-devs
-- list sample rates
+file
+- magic
+- max_channel
+- max_data
+- sample_rate
 
 record
 - specify duration
@@ -474,17 +457,29 @@ corr -> analyze
 - start by using 1000 hz 
 
 utils
-- pa_utils - make list of more utils
-               pa_find,  can also return default if not found
-- sf_utils - okay
 - file_utils - new file format,   read and write routines
 - gd_utils  - get_data from either the mic or a file
-                 used by corr or plot
+                 used by corr or plot  or record
+
+search all files for tabs
+
+-rw-rw-r-- 1 haid haid 3.4K Jun 14 09:18 gen.c
+-rw-rw-r-- 1 haid haid  160 Jun 13 07:26 devs.c
+-rw-rw-r-- 1 haid haid 9.5K Jun 14 08:56 plot.c
+
+-rw-rw-r-- 1 haid haid 2.6K Jun 14 05:53 record.c
+
+-rw-rw-r-- 1 haid haid 2.8K Jun 14 05:52 analyze.c
+
+--- later ---
 
 make list of additional desired pgms and functions, for later
 - may want to have a filter test pgm that applies a filter to 
   input and plots the input, output, and the input and output fft and 
   the frequency response
+
+devs
+- list sample rates
 
 --- notes ---
 
@@ -497,6 +492,23 @@ orientation
                                     |                |
                                     |                |           
                                     |                |                    ( SOUND
+                                    |                |
+                                    |    RESPEAKER   |
+                                    |0              3|
+				    ------------------
+
+
+
+
+
+                                         SOUND
+                                          vv
+
+				    ------------------
+                                    |1              2|
+                                    |                |
+                                    |                |           
+                                    |                |
                                     |                |
                                     |    RESPEAKER   |
                                     |0              3|

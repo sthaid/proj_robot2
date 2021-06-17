@@ -180,21 +180,22 @@ static int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_
             // place label info at the bottom 
             double ctr_time = (double)ctr_smpl / SAMPLE_RATE;
             double tspan    = (double)pane->w / pxls_per_smpl / SAMPLE_RATE;
+            int sample_span = pane->w / pxls_per_smpl;  // XXX should this be double, maybe delete 
             char str[50];
 
-            sprintf(str, "%0.3f", ctr_time-tspan/2);
+            sprintf(str, "%0.3f  %d", ctr_time-tspan/2, ctr_smpl-sample_span/2);
             sdl_render_printf(pane, 
                               0, 
                               pane->h - ROW2Y(2,25), 
                               25, SDL_WHITE, SDL_BLACK, "%s", str);
 
-            sprintf(str, "%0.3f", ctr_time);
+            sprintf(str, "%0.3f  %d", ctr_time, ctr_smpl);
             sdl_render_printf(pane, 
                               pane->w/2 - COL2X(strlen(str)/2.,25),
                               pane->h - ROW2Y(2,25), 
                               25, SDL_WHITE, SDL_BLACK, "%s", str);
 
-            sprintf(str, "%0.3f", ctr_time+tspan/2);
+            sprintf(str, "%d  %0.3f", ctr_smpl+sample_span/2, ctr_time+tspan/2);
             sdl_render_printf(pane, 
                               pane->w - COL2X(strlen(str),25),
                               pane->h - ROW2Y(2,25), 
@@ -312,7 +313,7 @@ static void plot(rect_t *pane, int chan)
     while (true) {
         if (smpl >= 0 && smpl < max_data) {
             p[max_points].x = pxl;
-            p[max_points].y = y_origin + chan_data[chan][smpl] * ((pane->h-FOOTER_HEIGHT)/8);
+            p[max_points].y = y_origin + (chan_data[chan][smpl] * ((pane->h-FOOTER_HEIGHT)/8));
             max_points++;
         }
         smpl++;

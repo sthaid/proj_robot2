@@ -22,7 +22,7 @@ plot: plot.c pa_utils.c file_utils.c util/util_sdl.c util/util_misc.c util/util_
 analyze: analyze.c file_utils.c ../../../common/util/misc.c
 	gcc -g -Wall -O2 -I. -I../../../common/include $^ -lm -o $@ 
 
-filters: filters.c
+filters: filters.c filter_utils.c
 	gcc -g -Wall -O2 -I. $^ -lm -lfftw3 -o $@ 
 
 clean:

@@ -16,9 +16,9 @@
 
 #define SAMPLE_RATE         48000  // samples per sec
 #define MAX_CHAN            2
-#define DEFAULT_DURATION    10     // secs
-#define DEFAULT_START_FREQ  500
-#define DEFAULT_END_FREQ    1500
+#define DEFAULT_DURATION    15     // secs  XXX check this and next 2 lines
+#define DEFAULT_START_FREQ  100
+#define DEFAULT_END_FREQ    1600
 
 #define MIN_FREQ            100
 #define MAX_FREQ            10000
@@ -117,6 +117,8 @@ int main(int argc, char **argv)
     return 0;
 }
 
+// XXX clean this up
+#if 0
 static void init_data(void)
 {
     double freq = freq_start;
@@ -139,4 +141,42 @@ static void init_data(void)
         }
     }
 }
+#endif
 
+#if 0
+static void init_data(void)
+{
+    int freq, i;
+    double max;
+
+    max_data = duration * SAMPLE_RATE;
+    data = malloc(max_data * sizeof(float));
+
+    for (freq = freq_start; freq < freq_end; freq += 50) {
+        for (i = 0; i < max_data; i++) {
+            data[i] += sin((2*M_PI) * freq * ((double)i/SAMPLE_RATE));
+        }
+    }
+
+    max = 0;
+    for (i = 0; i < max_data; i++) {
+        if (data[i] > max) max = data[i];
+    }
+
+    for (i = 0; i < max_data; i++) {
+        data[i] /= max;
+    }
+}
+#endif
+
+static void init_data(void)
+{
+    int i;
+
+    max_data = duration * SAMPLE_RATE;
+    data = malloc(max_data * sizeof(float));
+    
+    for (i = 0; i < max_data; i++) {
+        data[i] = ((double)random() / RAND_MAX) - 0.5;
+    }
+};
