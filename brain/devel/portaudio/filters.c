@@ -56,11 +56,12 @@ static fftw_plan   plan;
 // prototypes
 //
 
-static void init_in_data(void);
+static void init_data_sin(complex *data, int n, int freq_start, int freq_end, int freq_incr);
 static int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_event_t * event);
 static int plot(rect_t *pane, int idx, complex *data, char *title);
 static void apply_low_pass_filter(complex *data, int n, int k1, double k2);
 static void apply_high_pass_filter(complex *data, int n, int k1, double k2);
+static void apply_band_pass_filter(complex *data, int n, int k1lpf, double k2lpf, int k1hpf, double k2hpf);
 static void clip_int(int *v, int low, int high);
 static void clip_double(double *v, double low, double high);
 
@@ -70,7 +71,7 @@ int main(int argc, char **argv)
 {
     // init the in_data array
     in_data  = (complex*) fftw_malloc(sizeof(complex) * N);
-    init_in_data();
+    init_data_sin(in_data, N, 25, 1500, 25);
 
     // allocate in and out arrays in create the plan
     in  = (complex*) fftw_malloc(sizeof(complex) * N);
@@ -100,18 +101,15 @@ int main(int argc, char **argv)
     return 0;
 }
 
-static void init_in_data(void)
+static void init_data_sin(complex *data, int n, int freq_start, int freq_end, int freq_incr)
 {
-    double freq[] = { 100, 200, 300, 400, 500, 600, 700, 800, 900, 
-                     1000, 1100, 1200, 1300, 1400, 1500 };
-    int i, j;
+    int i, f;
 
-    // XXX scale so transform is +/-1
     memset(in_data, 0, N*sizeof(complex));
-    for (i = 0; i < sizeof(freq)/sizeof(freq[0]); i++) {
-        double f = freq[i];
-        for (j = 0; j < N; j++) {
-            in_data[j] += 1.99 * sin((2*M_PI) * f * ((double)j/SAMPLE_RATE));
+    for (f = freq_start; f <= freq_end; f += freq_incr) {
+        printf("%d\n", f);
+        for (i = 0; i < n; i++) {
+            data[i] += sin((2*M_PI) * f * ((double)i/SAMPLE_RATE));
         }
     }
 }
@@ -127,10 +125,21 @@ static int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_
     static int    hpf_k1 = 1;
     static double hpf_k2 = 0.95;
 
+    //static int    bpf_k1 = 1;
+    //static double bpf_k2 = 0.95;
+    //static int    bpf_k3 = 1;
+    //static double bpf_k4 = 0.95;
+
     #define SDL_EVENT_LPF_K1   (SDL_EVENT_USER_DEFINED + 0)
     #define SDL_EVENT_LPF_K2   (SDL_EVENT_USER_DEFINED + 1)
     #define SDL_EVENT_HPF_K1   (SDL_EVENT_USER_DEFINED + 2)
     #define SDL_EVENT_HPF_K2   (SDL_EVENT_USER_DEFINED + 3)
+#if 0
+    #define SDL_EVENT_BPF_K1   (SDL_EVENT_USER_DEFINED + 4)
+    #define SDL_EVENT_BPF_K2   (SDL_EVENT_USER_DEFINED + 5)
+    #define SDL_EVENT_BPF_K3   (SDL_EVENT_USER_DEFINED + 6)
+    #define SDL_EVENT_BPF_K4   (SDL_EVENT_USER_DEFINED + 7)
+#endif
 
     // ----------------------------
     // -------- INITIALIZE --------
@@ -193,6 +202,42 @@ static int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_
             30, str, SDL_LIGHT_BLUE, SDL_BLACK, 
             SDL_EVENT_HPF_K2, SDL_EVENT_TYPE_MOUSE_WHEEL, pane_cx);
 
+        // plot fft of bndigh pass filtered in_data
+        memcpy(in, in_data, N*sizeof(complex));
+        apply_band_pass_filter(in, N, lpf_k1, lpf_k2, hpf_k1, hpf_k2);
+        fftw_execute(plan);
+        y_origin = plot(pane, 3, out, "BAND PASS FILTER SPECTRUM");
+
+#if 0
+        sprintf(str, "%5d", bpf_k1);
+        sdl_render_text_and_register_event(
+            pane, 
+            pane->w-100, y_origin-ROW2Y(6.0,30),
+            30, str, SDL_LIGHT_BLUE, SDL_BLACK, 
+            SDL_EVENT_BPF_K1, SDL_EVENT_TYPE_MOUSE_WHEEL, pane_cx);
+
+        sprintf(str, "%5.3f", bpf_k2);
+        sdl_render_text_and_register_event(
+            pane, 
+            pane->w-100, y_origin-ROW2Y(4.5,30),
+            30, str, SDL_LIGHT_BLUE, SDL_BLACK, 
+            SDL_EVENT_BPF_K2, SDL_EVENT_TYPE_MOUSE_WHEEL, pane_cx);
+
+        sprintf(str, "%5d", bpf_k3);
+        sdl_render_text_and_register_event(
+            pane, 
+            pane->w-100, y_origin-ROW2Y(3.0,30),
+            30, str, SDL_LIGHT_BLUE, SDL_BLACK, 
+            SDL_EVENT_BPF_K3, SDL_EVENT_TYPE_MOUSE_WHEEL, pane_cx);
+
+        sprintf(str, "%5.3f", bpf_k4);
+        sdl_render_text_and_register_event(
+            pane, 
+            pane->w-100, y_origin-ROW2Y(1.5,30),
+            30, str, SDL_LIGHT_BLUE, SDL_BLACK, 
+            SDL_EVENT_BPF_K4, SDL_EVENT_TYPE_MOUSE_WHEEL, pane_cx);
+#endif
+
         return PANE_HANDLER_RET_NO_ACTION;
     }
 
@@ -205,23 +250,48 @@ static int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_
         case SDL_EVENT_LPF_K1:
             if (event->mouse_wheel.delta_y > 0) lpf_k1++;
             if (event->mouse_wheel.delta_y < 0) lpf_k1--;
-            clip_int(&lpf_k1, 1, 10);
+            clip_int(&lpf_k1, 1, 30);
             break;
         case SDL_EVENT_LPF_K2:
             if (event->mouse_wheel.delta_y > 0) lpf_k2 += .01;
             if (event->mouse_wheel.delta_y < 0) lpf_k2 -= .01;
             clip_double(&lpf_k2, 0.5, 0.99);
             break;
+
         case SDL_EVENT_HPF_K1:
             if (event->mouse_wheel.delta_y > 0) hpf_k1++;
             if (event->mouse_wheel.delta_y < 0) hpf_k1--;
-            clip_int(&hpf_k1, 1, 10);
+            clip_int(&hpf_k1, 1, 30);
             break;
         case SDL_EVENT_HPF_K2:
             if (event->mouse_wheel.delta_y > 0) hpf_k2 += .01;
             if (event->mouse_wheel.delta_y < 0) hpf_k2 -= .01;
             clip_double(&hpf_k2, 0.5, 0.99);
             break;
+
+#if 0
+//xxx use same constants, and boost amplitude of bandpass
+        case SDL_EVENT_BPF_K1:
+            if (event->mouse_wheel.delta_y > 0) bpf_k1++;
+            if (event->mouse_wheel.delta_y < 0) bpf_k1--;
+            clip_int(&bpf_k1, 1, 10);
+            break;
+        case SDL_EVENT_BPF_K2:
+            if (event->mouse_wheel.delta_y > 0) bpf_k2 += .01;
+            if (event->mouse_wheel.delta_y < 0) bpf_k2 -= .01;
+            clip_double(&bpf_k2, 0.5, 0.99);
+            break;
+        case SDL_EVENT_BPF_K3:
+            if (event->mouse_wheel.delta_y > 0) bpf_k3++;
+            if (event->mouse_wheel.delta_y < 0) bpf_k3--;
+            clip_int(&bpf_k3, 1, 10);
+            break;
+        case SDL_EVENT_BPF_K4:
+            if (event->mouse_wheel.delta_y > 0) bpf_k4 += .01;
+            if (event->mouse_wheel.delta_y < 0) bpf_k4 -= .01;
+            clip_double(&bpf_k4, 0.5, 0.99);
+            break;
+#endif
         default:
             break;
         }
@@ -248,9 +318,9 @@ static int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_
 static int plot(rect_t *pane, int idx, complex *data, char *title)
 {
     int y_pixels, y_max, y_origin, x_max, i, x;
-    double freq, absv, y_values[5000];
+    double freq, absv, y_values[5000], max_y_value=0;
 
-    #define MAX_PLOT_FREQ 1600
+    #define MAX_PLOT_FREQ 1505
 
     y_pixels = pane->h / 4;
     y_origin = y_pixels * (idx + 1) - 20;
@@ -259,7 +329,7 @@ static int plot(rect_t *pane, int idx, complex *data, char *title)
 
     memset(y_values, 0, sizeof(y_values));
 
-    sdl_render_line(pane, 0, y_origin, pane->w-100, y_origin, SDL_GREEN);
+    sdl_render_line(pane, 0, y_origin, x_max, y_origin, SDL_GREEN);
     sdl_render_printf(pane, 
                       0, y_origin+1, 
                       20, SDL_WHITE, SDL_BLACK, "%s", title);
@@ -267,23 +337,35 @@ static int plot(rect_t *pane, int idx, complex *data, char *title)
 
     for (i = 0; i < N; i++) {
         freq = i * ((double)SAMPLE_RATE / N);
-        if (freq >= MAX_PLOT_FREQ) {
+        if (freq > MAX_PLOT_FREQ) {
             break;
         }
 
+#if 0
         absv = cabs(data[i]) / N;
         if (absv > 1) {
             printf("warning: absv = %f\n", absv);
             absv = 1;
         }
+#else
+        absv = cabs(data[i]);
+#endif
 
         x = freq / MAX_PLOT_FREQ * x_max;
 
         if (absv > y_values[x]) {
             y_values[x] = absv;
+
+            if (y_values[x] > max_y_value) {
+                max_y_value = y_values[x];
+            }
         }
     }
 
+    for (x = 0; x < x_max; x++) {
+        y_values[x] *= (1 / max_y_value);
+    }
+        
     for (x = 0; x < x_max; x++) {
         if (y_values[x] < .01) {
             continue;
@@ -300,7 +382,7 @@ static int plot(rect_t *pane, int idx, complex *data, char *title)
 // xxx xmaybe data and n not args
 static void apply_low_pass_filter(complex *data, int n, int k1, double k2)
 {
-    double cx[10];
+    double cx[100];
     memset(cx,0,sizeof(cx));
     for (int i = 0; i < n; i++) {
         data[i] = low_pass_filter_ex(creal(data[i]), cx, k1, k2);
@@ -309,10 +391,19 @@ static void apply_low_pass_filter(complex *data, int n, int k1, double k2)
 
 static void apply_high_pass_filter(complex *data, int n, int k1, double k2)
 {
-    double cx[10];
+    double cx[100];
     memset(cx,0,sizeof(cx));
     for (int i = 0; i < n; i++) {
         data[i] = high_pass_filter_ex(creal(data[i]), cx, k1, k2);
+    }
+}
+
+static void apply_band_pass_filter(complex *data, int n, int k1, double k2, int k3, double k4)
+{
+    double cx[100];
+    memset(cx,0,sizeof(cx));
+    for (int i = 0; i < n; i++) {
+        data[i] = band_pass_filter_ex(creal(data[i]), cx, k1, k2, k3, k4);
     }
 }
 
