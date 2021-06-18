@@ -58,8 +58,11 @@ static fftw_plan   plan;
 
 static void init_in_data(void);
 static int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_event_t * event);
-static void plot(rect_t *pane, int idx, complex *data, char *title);
+static int plot(rect_t *pane, int idx, complex *data, char *title);
 static void apply_low_pass_filter(complex *data, int n, int k1, double k2);
+static void apply_high_pass_filter(complex *data, int n, int k1, double k2);
+static void clip_int(int *v, int low, int high);
+static void clip_double(double *v, double low, double high);
 
 // -----------------  MAIN  --------------------------------------
 
@@ -85,7 +88,7 @@ int main(int argc, char **argv)
         NULL,           // context
         NULL,           // called prior to pane handlers
         NULL,           // called after pane handlers
-        1000000,          // 0=continuous, -1=never, else us   XXX was 10ms
+        10000,          // 0=continuous, -1=never, else us
         1,              // number of pane handler varargs that follow
         pane_hndlr, NULL, 0, 0, win_width, win_height, PANE_BORDER_STYLE_NONE);
 
@@ -119,8 +122,15 @@ static int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_
 {
     rect_t *pane = &pane_cx->pane;
 
-    static int k1 = 1;
-    static double k2 = 0.95
+    static int    lpf_k1 = 1;
+    static double lpf_k2 = 0.95;
+    static int    hpf_k1 = 1;
+    static double hpf_k2 = 0.95;
+
+    #define SDL_EVENT_LPF_K1   (SDL_EVENT_USER_DEFINED + 0)
+    #define SDL_EVENT_LPF_K2   (SDL_EVENT_USER_DEFINED + 1)
+    #define SDL_EVENT_HPF_K1   (SDL_EVENT_USER_DEFINED + 2)
+    #define SDL_EVENT_HPF_K2   (SDL_EVENT_USER_DEFINED + 3)
 
     // ----------------------------
     // -------- INITIALIZE --------
@@ -135,14 +145,53 @@ static int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_
     // ------------------------
 
     if (request == PANE_HANDLER_REQ_RENDER) {
-        memcpy(in, in_data, N*sizeof(complex));
-        fftw_execute(plan);
-        plot(pane, 0, out, "TITLE");
+        char str[100];
+        int y_origin;
 
+        // plot fft of in_data
         memcpy(in, in_data, N*sizeof(complex));
-        apply_low_pass_filter(in, N, k1, k2);
         fftw_execute(plan);
-        plot(pane, 1, out, "TITLE");
+        plot(pane, 0, out, "DATA SPECTRUM");
+
+        // plot fft of low pass filtered in_data
+        memcpy(in, in_data, N*sizeof(complex));
+        apply_low_pass_filter(in, N, lpf_k1, lpf_k2);
+        fftw_execute(plan);
+        y_origin = plot(pane, 1, out, "LOW PASS FILTER SPECTRUM");
+
+        sprintf(str, "%5d", lpf_k1);
+        sdl_render_text_and_register_event(
+            pane, 
+            pane->w-100, y_origin-ROW2Y(3.0,30),
+            30, str, SDL_LIGHT_BLUE, SDL_BLACK, 
+            SDL_EVENT_LPF_K1, SDL_EVENT_TYPE_MOUSE_WHEEL, pane_cx);
+
+        sprintf(str, "%5.3f", lpf_k2);
+        sdl_render_text_and_register_event(
+            pane, 
+            pane->w-100, y_origin-ROW2Y(1.5,30),
+            30, str, SDL_LIGHT_BLUE, SDL_BLACK, 
+            SDL_EVENT_LPF_K2, SDL_EVENT_TYPE_MOUSE_WHEEL, pane_cx);
+
+        // plot fft of high pass filtered in_data
+        memcpy(in, in_data, N*sizeof(complex));
+        apply_high_pass_filter(in, N, hpf_k1, hpf_k2);
+        fftw_execute(plan);
+        y_origin = plot(pane, 2, out, "HIGH PASS FILTER SPECTRUM");
+
+        sprintf(str, "%5d", hpf_k1);
+        sdl_render_text_and_register_event(
+            pane, 
+            pane->w-100, y_origin-ROW2Y(3.0,30),
+            30, str, SDL_LIGHT_BLUE, SDL_BLACK, 
+            SDL_EVENT_HPF_K1, SDL_EVENT_TYPE_MOUSE_WHEEL, pane_cx);
+
+        sprintf(str, "%5.3f", hpf_k2);
+        sdl_render_text_and_register_event(
+            pane, 
+            pane->w-100, y_origin-ROW2Y(1.5,30),
+            30, str, SDL_LIGHT_BLUE, SDL_BLACK, 
+            SDL_EVENT_HPF_K2, SDL_EVENT_TYPE_MOUSE_WHEEL, pane_cx);
 
         return PANE_HANDLER_RET_NO_ACTION;
     }
@@ -153,6 +202,26 @@ static int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_
 
     if (request == PANE_HANDLER_REQ_EVENT) {
         switch (event->event_id) {
+        case SDL_EVENT_LPF_K1:
+            if (event->mouse_wheel.delta_y > 0) lpf_k1++;
+            if (event->mouse_wheel.delta_y < 0) lpf_k1--;
+            clip_int(&lpf_k1, 1, 10);
+            break;
+        case SDL_EVENT_LPF_K2:
+            if (event->mouse_wheel.delta_y > 0) lpf_k2 += .01;
+            if (event->mouse_wheel.delta_y < 0) lpf_k2 -= .01;
+            clip_double(&lpf_k2, 0.5, 0.99);
+            break;
+        case SDL_EVENT_HPF_K1:
+            if (event->mouse_wheel.delta_y > 0) hpf_k1++;
+            if (event->mouse_wheel.delta_y < 0) hpf_k1--;
+            clip_int(&hpf_k1, 1, 10);
+            break;
+        case SDL_EVENT_HPF_K2:
+            if (event->mouse_wheel.delta_y > 0) hpf_k2 += .01;
+            if (event->mouse_wheel.delta_y < 0) hpf_k2 -= .01;
+            clip_double(&hpf_k2, 0.5, 0.99);
+            break;
         default:
             break;
         }
@@ -176,7 +245,7 @@ static int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_
 
 // xxx maybe data is not an arg, just alwasy plot out
 // xxx or else N should be an arg too
-static void plot(rect_t *pane, int idx, complex *data, char *title)
+static int plot(rect_t *pane, int idx, complex *data, char *title)
 {
     int y_pixels, y_max, y_origin, x_max, i, x;
     double freq, absv, y_values[5000];
@@ -193,7 +262,7 @@ static void plot(rect_t *pane, int idx, complex *data, char *title)
     sdl_render_line(pane, 0, y_origin, pane->w-100, y_origin, SDL_GREEN);
     sdl_render_printf(pane, 
                       0, y_origin+1, 
-                      20, SDL_WHITE, SDL_BLUE, "%s", title);
+                      20, SDL_WHITE, SDL_BLACK, "%s", title);
 
 
     for (i = 0; i < N; i++) {
@@ -224,17 +293,44 @@ static void plot(rect_t *pane, int idx, complex *data, char *title)
                         x, y_origin - y_values[x] * y_max,
                         SDL_WHITE);
     }
+
+    return y_origin;
 }
 
 // xxx xmaybe data and n not args
 static void apply_low_pass_filter(complex *data, int n, int k1, double k2)
 {
     double cx[10];
-
     memset(cx,0,sizeof(cx));
-
     for (int i = 0; i < n; i++) {
-        data[i] = low_pass_filter(creal(data[i]), cx, k1, k2);
+        data[i] = low_pass_filter_ex(creal(data[i]), cx, k1, k2);
+    }
+}
+
+static void apply_high_pass_filter(complex *data, int n, int k1, double k2)
+{
+    double cx[10];
+    memset(cx,0,sizeof(cx));
+    for (int i = 0; i < n; i++) {
+        data[i] = high_pass_filter_ex(creal(data[i]), cx, k1, k2);
+    }
+}
+
+static void clip_int(int *v, int low, int high)
+{
+    if (*v < low) {
+        *v = low;
+    } else if (*v > high) {
+        *v = high;
+    }
+}
+
+static void clip_double(double *v, double low, double high)
+{
+    if (*v < low) {
+        *v = low;
+    } else if (*v > high) {
+        *v = high;
     }
 }
 
