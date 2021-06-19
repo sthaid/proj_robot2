@@ -45,7 +45,7 @@ int main(int argc, char **argv)
 {
     char *output_device = DEFAULT_OUTPUT_DEVICE;
 
-    // usage: gen [-d outdev] [-f freq[,freq]] [-t duration_secs]
+    // usage: gen [-d outdev] [-f freq_start[,freq_end]] [-t duration_secs]
 
     // parse options
     while (true) {
@@ -85,7 +85,7 @@ int main(int argc, char **argv)
             }
             break;
         case 'h':
-            printf("usage: gen [-d outdev] [-f freq[,freq]] [-t duration_secs]\n");
+            printf("usage: gen [-d outdev] [-f freq_start[,freq_end]] [-t duration_secs]\n");
             return 0;
             break;
         default:

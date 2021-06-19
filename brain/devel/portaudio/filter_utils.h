@@ -1,17 +1,9 @@
 #ifndef __FILTER_UTILS_H__
 #define __FILTER_UTILS_H__
 
-#if 0
-static inline double low_pass_filter(double v, double *cx, int k1, double k2)
-{
-    for (int i = 0; i < k1; i++) {
-        cx[i] = k2 * cx[i] + (1 - k2) * (i == 0 ? v : cx[i-1]);
-    }
-    return cx[k1-1];
-}
-#endif
+// XXX commetns needed
 
-// --------------
+// Low pass filter
 
 static inline double low_pass_filter(double v, double *cx, double k2)
 {
@@ -27,7 +19,7 @@ static inline double low_pass_filter_ex(double v, double *cx, int k1, double k2)
     return v;
 }
 
-// --------------
+// High pass filter
 
 static inline double high_pass_filter(double v, double *cx, double k2)
 {
@@ -43,7 +35,7 @@ static inline double high_pass_filter_ex(double v, double *cx, int k1, double k2
     return v;
 }
 
-// --------------
+// Band pass filter
 
 static inline double band_pass_filter_ex(double v, double *cx, int lpf_k1, double lpf_k2, int hpf_k1, double hpf_k2)
 {
