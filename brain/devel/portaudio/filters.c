@@ -1,3 +1,7 @@
+// XXX 
+// - x scale
+// - f1,f2
+
 // FFTW NOTES:
 //
 // References:
@@ -57,7 +61,7 @@ static fftw_plan   plan;
 //
 
 static void init_data_sin(complex *data, int n, int freq_start, int freq_end, int freq_incr);
-static void init_data_random(complex *data, int n);
+static void init_data_rand(complex *data, int n);
 static int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_event_t * event);
 static int plot(rect_t *pane, int idx, complex *data, int n, char *fmt, ...);
 static void apply_low_pass_filter(complex *data, int n, int k1, double k2);
@@ -97,7 +101,7 @@ int main(int argc, char **argv)
     if (strcmp(data_type_str, "sin") == 0) {
         init_data_sin(in_data, N, 25, 1500, 25);
     } else if (strcmp(data_type_str, "rand") == 0) {
-        init_data_random(in_data, N);
+        init_data_rand(in_data, N);
     } else {
         printf("ERROR: invalid data_type_str '%s', expected 'sin' or 'rand'\n", data_type_str);
         return 1;
@@ -143,7 +147,7 @@ static void init_data_sin(complex *data, int n, int freq_start, int freq_end, in
     }
 }
 
-static void init_data_random(complex *data, int n)
+static void init_data_rand(complex *data, int n)
 {
     int i, cnt;
 
@@ -295,6 +299,12 @@ static int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_
             if (event->mouse_wheel.delta_y > 0) hpf_k2 += .01;
             if (event->mouse_wheel.delta_y < 0) hpf_k2 -= .01;
             clip_double(&hpf_k2, 0.0, 1.0);
+            break;
+        case SDL_EVENT_KEY_F(1):
+            init_data_sin(in_data, N, 25, 1500, 25);
+            break;
+        case SDL_EVENT_KEY_F(2):
+            init_data_rand(in_data, N);
             break;
         default:
             break;
