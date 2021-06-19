@@ -1,7 +1,3 @@
-// XXX 
-// - x scale
-// - f1,f2
-
 // FFTW NOTES:
 //
 // References:
@@ -52,6 +48,8 @@ static int         win_height = 800;
 static int         opt_fullscreen = false;
 
 static complex    *in_data;
+static char       *in_data_type_str = "sin";
+
 static complex    *in;
 static complex    *out;
 static fftw_plan   plan;
@@ -63,7 +61,7 @@ static fftw_plan   plan;
 static void init_data_sin(complex *data, int n, int freq_start, int freq_end, int freq_incr);
 static void init_data_rand(complex *data, int n);
 static int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_event_t * event);
-static int plot(rect_t *pane, int idx, complex *data, int n, char *fmt, ...);
+static int plot(rect_t *pane, int idx, complex *data, int n);
 static void apply_low_pass_filter(complex *data, int n, int k1, double k2);
 static void apply_high_pass_filter(complex *data, int n, int k1, double k2);
 static void apply_band_pass_filter(complex *data, int n, int lpf_k1, double lpf_k2, int hpf_k1, double hpf_k2);
@@ -74,8 +72,6 @@ static void clip_double(double *v, double low, double high);
 
 int main(int argc, char **argv)
 {
-    char *data_type_str = "sin";
-
     // usage: filters [-t sin|rand]
 
     // parse options
@@ -86,7 +82,7 @@ int main(int argc, char **argv)
         }
         switch (ch) {
         case 't':
-            data_type_str = optarg;
+            in_data_type_str = optarg;
             break;
         case 'h':
             printf("usage: filters [-t sin|rand]\n");
@@ -98,12 +94,12 @@ int main(int argc, char **argv)
 
     // init the in_data array
     in_data  = (complex*) fftw_malloc(sizeof(complex) * N);
-    if (strcmp(data_type_str, "sin") == 0) {
+    if (strcmp(in_data_type_str, "sin") == 0) {
         init_data_sin(in_data, N, 25, 1500, 25);
-    } else if (strcmp(data_type_str, "rand") == 0) {
+    } else if (strcmp(in_data_type_str, "rand") == 0) {
         init_data_rand(in_data, N);
     } else {
-        printf("ERROR: invalid data_type_str '%s', expected 'sin' or 'rand'\n", data_type_str);
+        printf("ERROR: invalid in_data_type_str '%s', expected 'sin' or 'rand'\n", in_data_type_str);
         return 1;
     }
 
@@ -170,10 +166,11 @@ static int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_
     static int    hpf_k1 = 5;
     static double hpf_k2 = 0.95;
 
-    #define SDL_EVENT_LPF_K1   (SDL_EVENT_USER_DEFINED + 0)
-    #define SDL_EVENT_LPF_K2   (SDL_EVENT_USER_DEFINED + 1)
-    #define SDL_EVENT_HPF_K1   (SDL_EVENT_USER_DEFINED + 2)
-    #define SDL_EVENT_HPF_K2   (SDL_EVENT_USER_DEFINED + 3)
+    #define SDL_EVENT_LPF_K1       (SDL_EVENT_USER_DEFINED + 0)
+    #define SDL_EVENT_LPF_K2       (SDL_EVENT_USER_DEFINED + 1)
+    #define SDL_EVENT_HPF_K1       (SDL_EVENT_USER_DEFINED + 2)
+    #define SDL_EVENT_HPF_K2       (SDL_EVENT_USER_DEFINED + 3)
+    #define SDL_EVENT_INDAT_SLCT   (SDL_EVENT_USER_DEFINED + 4)
 
     // ----------------------------
     // -------- INITIALIZE --------
@@ -195,25 +192,37 @@ static int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_
         // plot fft of in_data
         memcpy(in, in_data, N*sizeof(complex));
         t1 = TIME(fftw_execute(plan));
-        plot(pane, 0, out, N, "DATA SPECTRUM - FFT=%0.3f SECS", t1);
+        y_origin = plot(pane, 0, out, N);
+
+        sdl_render_printf(pane, pane->w-95, y_origin-ROW2Y(5,30), 30, SDL_WHITE, SDL_BLACK, "INDAT");
+        sdl_render_printf(pane, pane->w-95, y_origin-ROW2Y(4,30), 30, SDL_WHITE, SDL_BLACK, "%0.3f", t1);
+
+        sdl_render_text_and_register_event(
+            pane, 
+            pane->w-95, y_origin-ROW2Y(1,30),
+            30, "SLCT", SDL_LIGHT_BLUE, SDL_BLACK, 
+            SDL_EVENT_INDAT_SLCT, SDL_EVENT_TYPE_MOUSE_CLICK, pane_cx);
 
         // plot fft of low pass filtered in_data
         memcpy(in, in_data, N*sizeof(complex));
         t1 = TIME(apply_low_pass_filter(in, N, lpf_k1, lpf_k2));
         fftw_execute(plan);
-        y_origin = plot(pane, 1, out, N, "LOW PASS FILTER SPECTRUM - LPF=%0.3f SECS", t1);
+        y_origin = plot(pane, 1, out, N);
+
+        sdl_render_printf(pane, pane->w-95, y_origin-ROW2Y(5,30), 30, SDL_WHITE, SDL_BLACK, "LPF");
+        sdl_render_printf(pane, pane->w-95, y_origin-ROW2Y(4,30), 30, SDL_WHITE, SDL_BLACK, "%0.3f", t1);
 
         sprintf(str, "%4d", lpf_k1);
         sdl_render_text_and_register_event(
             pane, 
-            pane->w-95, y_origin-ROW2Y(3.0,30),
+            pane->w-95, y_origin-ROW2Y(2,30),
             30, str, SDL_LIGHT_BLUE, SDL_BLACK, 
             SDL_EVENT_LPF_K1, SDL_EVENT_TYPE_MOUSE_WHEEL, pane_cx);
 
         sprintf(str, "%4.2f", lpf_k2);
         sdl_render_text_and_register_event(
             pane, 
-            pane->w-95, y_origin-ROW2Y(1.5,30),
+            pane->w-95, y_origin-ROW2Y(1,30),
             30, str, SDL_LIGHT_BLUE, SDL_BLACK, 
             SDL_EVENT_LPF_K2, SDL_EVENT_TYPE_MOUSE_WHEEL, pane_cx);
 
@@ -221,53 +230,59 @@ static int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_
         memcpy(in, in_data, N*sizeof(complex));
         t1 = TIME(apply_high_pass_filter(in, N, hpf_k1, hpf_k2));
         fftw_execute(plan);
-        y_origin = plot(pane, 2, out, N, "HIGH PASS FILTER SPECTRUM - HPF=%0.3f SECS", t1);
+        y_origin = plot(pane, 2, out, N);
+
+        sdl_render_printf(pane, pane->w-95, y_origin-ROW2Y(5,30), 30, SDL_WHITE, SDL_BLACK, "HPF");
+        sdl_render_printf(pane, pane->w-95, y_origin-ROW2Y(4,30), 30, SDL_WHITE, SDL_BLACK, "%0.3f", t1);
 
         sprintf(str, "%4d", hpf_k1);
         sdl_render_text_and_register_event(
             pane, 
-            pane->w-95, y_origin-ROW2Y(3.0,30),
+            pane->w-95, y_origin-ROW2Y(2,30),
             30, str, SDL_LIGHT_BLUE, SDL_BLACK, 
             SDL_EVENT_HPF_K1, SDL_EVENT_TYPE_MOUSE_WHEEL, pane_cx);
 
         sprintf(str, "%4.2f", hpf_k2);
         sdl_render_text_and_register_event(
             pane, 
-            pane->w-95, y_origin-ROW2Y(1.5,30),
+            pane->w-95, y_origin-ROW2Y(1,30),
             30, str, SDL_LIGHT_BLUE, SDL_BLACK, 
             SDL_EVENT_HPF_K2, SDL_EVENT_TYPE_MOUSE_WHEEL, pane_cx);
 
-        // plot fft of bndigh pass filtered in_data
+        // plot fft of band pass filtered in_data
         memcpy(in, in_data, N*sizeof(complex));
         t1 = TIME(apply_band_pass_filter(in, N, lpf_k1, lpf_k2, hpf_k1, hpf_k2));
         fftw_execute(plan);
-        y_origin = plot(pane, 3, out, N, "BAND PASS FILTER SPECTRUM - BPF=%0.3f SECS", t1);
+        y_origin = plot(pane, 3, out, N);
+
+        sdl_render_printf(pane, pane->w-95, y_origin-ROW2Y(6,30), 30, SDL_WHITE, SDL_BLACK, "BPF");
+        sdl_render_printf(pane, pane->w-95, y_origin-ROW2Y(5,30), 30, SDL_WHITE, SDL_BLACK, "%0.3f", t1);
 
         sprintf(str, "%4d", lpf_k1);
         sdl_render_text_and_register_event(
             pane, 
-            pane->w-95, y_origin-ROW2Y(6.0,30),
+            pane->w-95, y_origin-ROW2Y(4,30),
             30, str, SDL_LIGHT_BLUE, SDL_BLACK,
             SDL_EVENT_LPF_K1, SDL_EVENT_TYPE_MOUSE_WHEEL, pane_cx);
 
         sprintf(str, "%4.2f", lpf_k2);
         sdl_render_text_and_register_event(
             pane, 
-            pane->w-95, y_origin-ROW2Y(4.5,30),
+            pane->w-95, y_origin-ROW2Y(3,30),
             30, str, SDL_LIGHT_BLUE, SDL_BLACK,
             SDL_EVENT_LPF_K2, SDL_EVENT_TYPE_MOUSE_WHEEL, pane_cx);
 
         sprintf(str, "%4d", hpf_k1);
         sdl_render_text_and_register_event(
             pane, 
-            pane->w-95, y_origin-ROW2Y(3.0,30),
+            pane->w-95, y_origin-ROW2Y(2,30),
             30, str, SDL_LIGHT_BLUE, SDL_BLACK,
             SDL_EVENT_HPF_K1, SDL_EVENT_TYPE_MOUSE_WHEEL, pane_cx);
 
         sprintf(str, "%4.2f", hpf_k2);
         sdl_render_text_and_register_event(
             pane, 
-            pane->w-95, y_origin-ROW2Y(1.5,30),
+            pane->w-95, y_origin-ROW2Y(1,30),
             30, str, SDL_LIGHT_BLUE, SDL_BLACK,
             SDL_EVENT_HPF_K2, SDL_EVENT_TYPE_MOUSE_WHEEL, pane_cx);
 
@@ -300,6 +315,15 @@ static int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_
             if (event->mouse_wheel.delta_y < 0) hpf_k2 -= .01;
             clip_double(&hpf_k2, 0.0, 1.0);
             break;
+        case SDL_EVENT_INDAT_SLCT:
+            if (strcmp(in_data_type_str, "sin") == 0) {
+                in_data_type_str = "rand";
+                init_data_rand(in_data, N);
+            } else {
+                in_data_type_str = "sin";
+                init_data_sin(in_data, N, 25, 1500, 25);
+            }
+            break;
         case SDL_EVENT_KEY_F(1):
             init_data_sin(in_data, N, 25, 1500, 25);
             break;
@@ -327,12 +351,11 @@ static int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_
     return PANE_HANDLER_RET_NO_ACTION;
 }
 
-static int plot(rect_t *pane, int idx, complex *data, int n, char *fmt, ...)
+static int plot(rect_t *pane, int idx, complex *data, int n)
 {
     int y_pixels, y_max, y_origin, x_max, i, x;
     double freq, absv, y_values[5000], max_y_value=0;
-    char title[100];
-    va_list ap;
+    char str[100];
 
     #define MAX_PLOT_FREQ 1501
 
@@ -342,14 +365,7 @@ static int plot(rect_t *pane, int idx, complex *data, int n, char *fmt, ...)
     x_max    = pane->w - 100;
     memset(y_values, 0, sizeof(y_values));
 
-    va_start(ap, fmt);
-    vsprintf(title, fmt, ap);
-    va_end(ap);
-    sdl_render_line(pane, 0, y_origin, x_max, y_origin, SDL_GREEN);
-    sdl_render_printf(pane, 
-                      0, y_origin+1, 
-                      20, SDL_WHITE, SDL_BLACK, "%s", title);
-
+    // determine the y value that will be plotted below
     for (i = 0; i < n; i++) {
         freq = i * ((double)SAMPLE_RATE / n);
         if (freq > MAX_PLOT_FREQ) {
@@ -368,22 +384,31 @@ static int plot(rect_t *pane, int idx, complex *data, int n, char *fmt, ...)
         }
     }
 
-    if (max_y_value == 0) {
-        return y_origin;
+    // plot y values
+    if (max_y_value > 0) {
+        for (x = 0; x < x_max; x++) {
+            y_values[x] *= (1 / max_y_value);
+        }
+            
+        for (x = 0; x < x_max; x++) {
+            if (y_values[x] < .01) {
+                continue;
+            }
+            sdl_render_line(pane, 
+                            x, y_origin, 
+                            x, y_origin - y_values[x] * y_max,
+                            SDL_WHITE);
+        }
     }
 
-    for (x = 0; x < x_max; x++) {
-        y_values[x] *= (1 / max_y_value);
-    }
-        
-    for (x = 0; x < x_max; x++) {
-        if (y_values[x] < .01) {
-            continue;
-        }
-        sdl_render_line(pane, 
-                        x, y_origin, 
-                        x, y_origin - y_values[x] * y_max,
-                        SDL_WHITE);
+    // x axis
+    sdl_render_line(pane, 0, y_origin, x_max, y_origin, SDL_GREEN);
+    for (freq = 100; freq <= MAX_PLOT_FREQ-100; freq+= 100) {
+        x = freq / MAX_PLOT_FREQ * x_max;
+        //sdl_render_line(pane, x, y_origin+5, x, y_origin-5, SDL_GREEN);
+        sprintf(str, "%d", (int)nearbyint(freq));
+        sdl_render_text(pane,
+            x-COL2X(strlen(str),20)/2, y_origin+1, 20, str, SDL_GREEN, SDL_BLACK);
     }
 
     return y_origin;
