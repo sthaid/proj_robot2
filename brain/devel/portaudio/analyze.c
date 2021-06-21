@@ -1,194 +1,158 @@
 #include <stdio.h>
+#include <stdbool.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <stdbool.h>
+#include <stddef.h>
 #include <unistd.h>
 #include <string.h>
 #include <errno.h>
-#include <fcntl.h>
-#include <math.h>
+#include <pthread.h>
 
-#include <file_utils.h>
-#include <misc.h>
+#include <util_misc.h>
 
 //
 // defines
 //
 
+#define SAMPLE_RATE  40000
+#define MAX_SAMPLES  48000
+
+#define MAX_CHAN 4
+
+#define MIN_AMP 1  // xxx
+
+//
+// typedefs
+//
+
+typedef struct {
+    int    idx;
+    int    max;
+    double sum;
+    double values[0];
+} average_cx_t;
 
 //
 // variables
 //
 
-static float *chan_data[32];
-static int    max_data;
-static int    max_chan;
-static int    sample_rate;
-
-static char *file_name;
-
 //
-// prototypes
+// prototpes
 //
 
-static double correlate(float *d1, float *d2, int len);
-static double get_max(double *x, int len);
-static char *stars(int n);
-static void smooth(float *data, int max_data);
+static void *get_data_from_file_thread(void *cx);
+static void process_data(double *raw_data);
 
-// -----------------  MAIN  ----------------------------------
+static double average(double v, average_cx_t *cx);
+static average_cx_t *average_alloc_cx(int max);
+
+// -------------------------------------------------------------------------
 
 int main(int argc, char **argv)
 {
-    float *x, *y;
-    double c[1000], max;
-    int rc, len, i, chana=-1, chanb=-1;
+    pthread_t tid;
 
-    if (argc != 4) {
-        printf("ERROR argc\n");
-        return 1;
+    // create get_data_from_file_thread
+    pthread_create(&tid, NULL, get_data_from_file_thread, NULL);
+
+    // pause forever
+    while (true) {
+        pause();
     }
 
-    file_name = argv[1];
-    sscanf(argv[2], "%d", &chana);
-    sscanf(argv[3], "%d", &chanb);
-    if (chana == -1 || chanb == -1) {
-        printf("ERROR invalid args\n");
-        return 1;
-    }
-
-    rc = file_read(file_name, &max_chan, &max_data, &sample_rate, chan_data);
-    if (rc < 0) {
-        printf("file_read failed\n");
-        return 1;
-    }
-
-    // smooth data
-    printf("SMOOTHING\n");
-    for (i = 0; i < max_chan; i++) {
-        smooth(chan_data[i], max_data);
-    }
-
-//#define START  31200
-//#define END    36000
-
-#if 1
-#define START 10000
-#define END (max_data-20000)
-
-    x = chan_data[chana] + START;
-    len = (END-START);
-
-    printf("\nFILE_NAME=%s  MAX_DATA=%d  CHANS=%d %d  SAMPLES=%d %0.1f secs\n\n", 
-         file_name, max_data, chana, chanb, len, (double)len/sample_rate);
-
-#define RANGE 30
-    for (i = 0; i <= 2*RANGE; i++) {
-        y = chan_data[chanb] + START-RANGE + i;
-        c[i] = correlate(x,y,len);
-        //printf("%d %f\n", i, c[i]);
-    }
-#else
-#define RANGE 1
-    c[0] = 1;
-    c[1] = 5;
-    c[2] = 2;
-#endif
-
-    max = get_max(c, 2*RANGE);
-    printf("MAX %f\n", max);
-
-    for (i = 0; i <= 2*RANGE; i++) {
-        int num_stars =  nearbyint(c[i] / max * 100);
-        printf("%3d %f - %s\n", 
-               i-RANGE, 
-               c[i], 
-               stars(num_stars));
-    }
-
-    // starting at ctr, look back until find negative cross corr
-    int start = -1;
-    for (i = RANGE; i >= 0; i--) {
-        if (c[i] < 0) break;
-        start = i;
-    }
-
-    if (start == -1) {
-        printf("no start\n");
-        return 1;
-    }
-    printf("start = %d\n", start);
-
-    interp_point_t p[100];
-    double sum = 0, answer;
-    int cnt=0;
-    for (i = start; c[i] > 0; i++) {
-        sum += c[i];
-        p[cnt].x = sum;
-        p[cnt].y = i-RANGE;
-        printf("interp point   %d = %f %f\n", cnt, p[cnt].x, p[cnt].y);
-        cnt++;
-    }
-    printf("SUM  %f\n", sum);
-    answer = interpolate(p, cnt, sum/2) + 0.5;
-    printf("answer %0.2f\n", answer);
-
+    // done
     return 0;
 }
 
-static char *stars(int n)
+static void *get_data_from_file_thread(void *cx)
 {
-    static char array[1000];
+    // read file
 
-    if (n < 0) n = 0;
-    memset(array, '*', n);
-    array[n] = '\0';
-    return array;
+    // loop, passing file data to routine for procesing
+
+    return NULL;
 }
 
-static double get_max(double *x, int len) 
+// -------------------------------------------------------------------------
+
+static void process_data(double *raw_data)
 {
-    int i;
-    double max = x[0];
-    for (i = 1; i < len; i++) {
-        if (x[i] > max) max = x[i];
+    int      i;
+    uint64_t time_now;
+    double   amp;
+
+    static unsigned char lfd_idx;
+    static double        filtered_data[MAX_CHAN][256];
+    static average_cx_t *avg_amp_cx;
+    static uint64_t      time_last;
+    static bool          first_call = true;
+
+    // init on first call
+    if (first_call) {
+        avg_amp_cx = average_alloc_cx(MAX_SAMPLES);
+        first_call = false;
     }
-    return max;
-}
 
-static double correlate(float *d1, float *d2, int len)
-{
-    double sum = 0;
-    int i;
+    // print sample rate
 
-    for (i = 0; i < len; i++) {
-        sum += d1[i] * d2[i];
 #if 0
-        //sum += 
-            //d1[i] * d1[i] * d1[i] *
-            //d2[i] * d2[i] * d2[i];
-        if (d1[i] > 0 && d2[i] > 0) {
-            sum += d1[i] + d2[i];
-        } else if (d1[i] < 0 && d2[i] < 0) {
-            sum -= d1[i] + d2[i];
-        } else {
-            sum += d1[i] + d2[i];
-        }
+    // filter data 
+    for (i = 0; i < MAX_CHAN; i++) {
+        filtered_data[chan][lfd_idx] = low_pass_filter_ex(raw_data[chan], filter_cx[chan], LPF_K1, LPF_K2);
+    }
+
+    // correlate over 1 sec
+    for (i = 0; i < MAX; i++) {
+        corr_02[i] = correlate(filtered_data[0][-(MAX/2)], filtered_data[2][i+1-MAX], corr_02_cx);
+        corr_13[i] = correlate(filtered_data[1][-(MAX/2)], filtered_data[3][i+1-MAX], corr_13_cx);
+    }
 #endif
+
+    // average the amplitude over 1 sec, for chan 0;
+    // if amplitude too low then return
+    amp = average(filtered_data[0][lfd_idx], avg_amp_cx);
+    if (amp < MIN_AMP) {
+        goto done;
     }
 
-    return sum;
+    // if sound direction was last determined less than 1 second ago then return
+    time_now = microsec_timer();
+    if (time_now - time_last < 1000000) {
+        goto done;
+    }
+    time_last = time_now;
+
+    // find the peak correlation
+
+    // compute the sound direction
+
+    // debug printint?
+
+
+done:
+    lfd_idx++;
 }
 
+// -------------------------------------------------------------------
 
-
-
-static void smooth(float *data, int max_data)
+static double average(double v, average_cx_t *cx)
 {
-    int i;
-    for (i = 1; i < max_data; i++) {
-        //data[i] = 0.9 * data[i-1] + 0.1 * data[i];
-        data[i] = 0.8 * data[i-1] + 0.2 * data[i];
-        //data[i] = 0.7 * data[i-1] + 0.7 * data[i];
-    }
+    double tmp = v * v;
+
+    cx->sum += (tmp - cx->values[cx->idx]);
+    cx->values[cx->idx] = tmp;
+    cx->idx = (cx->idx + 1) % cx->max;
+    return cx->sum / cx->max;
 }
 
+static average_cx_t *average_alloc_cx(int max)
+{
+    int len;
+    average_cx_t *cx;
+
+    len = offsetof(average_cx_t, values[max]);
+    cx = calloc(1,len);
+    cx->max = max;
+    return cx;
+}
