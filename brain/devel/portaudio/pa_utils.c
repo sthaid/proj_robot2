@@ -10,7 +10,7 @@ typedef struct {
     int     max_chan;
     int     max_data;
     int     sample_rate;
-    float **chan_data;
+    float  *data;
     int     data_idx;
     bool    done;
 } user_data_t;
@@ -43,7 +43,7 @@ static int play_stream_cb(const void *input,
                           void *ud);
 static void play_stream_finished_cb(void *ud);
 
-int pa_play(char *output_device, int max_chan, int max_data, int sample_rate, float **chan_data)
+int pa_play(char *output_device, int max_chan, int max_data, int sample_rate, float *data)
 {
     PaError             rc;
     PaStream           *stream = NULL;
@@ -51,12 +51,18 @@ int pa_play(char *output_device, int max_chan, int max_data, int sample_rate, fl
     PaDeviceIndex       devidx;
     user_data_t         ud;
 
+    // verify max_data is a multiple of max_chan
+    if ((max_data % max_chan) != 0) {
+        printf("ERROR: max_data=%d must be a multiple of max_chan=%d\n", max_data, max_chan);
+        return -1;
+    }
+
     // init user_data
     memset(&ud, 0, sizeof(ud));
     ud.max_chan    = max_chan;
     ud.max_data    = max_data;
     ud.sample_rate = sample_rate;
-    ud.chan_data   = chan_data;
+    ud.data        = data;
     ud.data_idx    = 0;
     ud.done        = false;
 
@@ -71,7 +77,7 @@ int pa_play(char *output_device, int max_chan, int max_data, int sample_rate, fl
     // init output_params and open the audio output stream
     output_params.device            = devidx;
     output_params.channelCount      = max_chan;
-    output_params.sampleFormat      = paFloat32 | paNonInterleaved;
+    output_params.sampleFormat      = paFloat32;
     output_params.suggestedLatency  = Pa_GetDeviceInfo(output_params.device)->defaultLowOutputLatency;
     output_params.hostApiSpecificStreamInfo = NULL;
 
@@ -128,26 +134,18 @@ static int play_stream_cb(const void *input,
                           PaStreamCallbackFlags status_flags,
                           void *user_data)
 {
-    float **out = (void*)output;
-    int chan;
     user_data_t *ud = user_data;
+    int frames_avail = (ud->max_data - ud->data_idx) / ud->max_chan;
 
     // if more frames are requested than we have remaining data for then return paComplete
-    if (frame_count > ud->max_data - ud->data_idx) {
+    if (frame_count > frames_avail) {
         return paComplete;
     }
 
-    // for each chan, copy the chan_data to out
-    for (chan = 0; chan < ud->max_chan; chan++) {
-        if (ud->chan_data[chan] == NULL) {
-            memset(out[chan], 0, frame_count*sizeof(float));
-        } else {
-            memcpy(out[chan], &ud->chan_data[chan][ud->data_idx], frame_count*sizeof(float));
-        }
-    }
-
-    // increase data_idx by the frame_count
-    ud->data_idx += frame_count;
+    // copy the frames to output buffer, and
+    // updata data_idx
+    memcpy(output, &ud->data[ud->data_idx], frame_count * ud->max_chan * sizeof(float));
+    ud->data_idx += frame_count * ud->max_chan;
     
     // continue
     return paContinue;
@@ -169,7 +167,7 @@ static int record_stream_cb(const void *input,
                             void *ud);
 static void record_stream_finished_cb(void *ud);
 
-int pa_record(char *input_device, int max_chan, int max_data, int sample_rate, float **chan_data)
+int pa_record(char *input_device, int max_chan, int max_data, int sample_rate, float *data)
 {
     PaError             rc;
     PaStream           *stream = NULL;
@@ -177,12 +175,18 @@ int pa_record(char *input_device, int max_chan, int max_data, int sample_rate, f
     PaDeviceIndex       devidx;
     user_data_t         ud;
 
+    // verify max_data is a multiple of max_chan
+    if ((max_data % max_chan) != 0) {
+        printf("ERROR: max_data=%d must be a multiple of max_chan=%d\n", max_data, max_chan);
+        return -1;
+    }
+
     // init user_data
     memset(&ud, 0, sizeof(ud));
     ud.max_chan    = max_chan;
     ud.max_data    = max_data;
     ud.sample_rate = sample_rate;
-    ud.chan_data   = chan_data;
+    ud.data        = data;
     ud.data_idx    = 0;
     ud.done        = false;
 
@@ -197,7 +201,7 @@ int pa_record(char *input_device, int max_chan, int max_data, int sample_rate, f
     // init input_params and open the audio input stream
     input_params.device            = devidx;
     input_params.channelCount      = max_chan;
-    input_params.sampleFormat      = paFloat32 | paNonInterleaved;
+    input_params.sampleFormat      = paFloat32;
     input_params.suggestedLatency  = Pa_GetDeviceInfo(input_params.device)->defaultLowOutputLatency;
     input_params.hostApiSpecificStreamInfo = NULL;
 
@@ -254,22 +258,18 @@ static int record_stream_cb(const void *input,
                             PaStreamCallbackFlags status_flags,
                             void *user_data)
 {
-    float **in = (void*)input;
     user_data_t *ud = user_data;
-    int chan;
+    int frames_avail = (ud->max_data - ud->data_idx) / ud->max_chan;
 
     // reduce frame_count if there is not enough space remaining in data
-    if (frame_count > ud->max_data - ud->data_idx) {
-        frame_count = ud->max_data - ud->data_idx;
+    if (frame_count > frames_avail) {
+        frame_count = frames_avail;
     }
 
-    // for each channel make a copy of the input data
-    for (chan = 0; chan < ud->max_chan; chan++) {
-        memcpy(&ud->chan_data[chan][ud->data_idx], in[chan], frame_count*sizeof(float));
-    }
-
-    // update data_idx
-    ud->data_idx += frame_count;
+    // copy the frames from the input buffer, and
+    // updata data_idx
+    memcpy(&ud->data[ud->data_idx], input, frame_count * ud->max_chan * sizeof(float));
+    ud->data_idx += frame_count * ud->max_chan;
 
     // return either paComplete or paContinue
     return ud->data_idx == ud->max_data ? paComplete : paContinue;

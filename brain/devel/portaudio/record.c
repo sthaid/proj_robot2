@@ -8,17 +8,14 @@
 #include <portaudio.h>
 #include <pa_utils.h>
 #include <sf_utils.h>
-#include <file_utils.h>
 
 //
 // defines
 //
 
-//#define DEBUG
-
 #define SEEED_4MIC_VOICECARD "seeed-4mic-voicecard"
 #define SAMPLE_RATE          48000  // samples per sec
-#define DEFAULT_DURATION     12     // secs
+#define DEFAULT_DURATION     10     // secs
 
 //
 // variables
@@ -31,10 +28,9 @@ static int duration = DEFAULT_DURATION;
 int main(int argc, char **argv)
 {
     char *input_device = SEEED_4MIC_VOICECARD;
-    char *file_name = "record.dat";
-    int   max_chan, rc;
+    char *file_name = "record.wav";
 
-    // usage: record [-d indev] [-f file_name] [-t duration_secs]
+    // usage: record [-d indev] [-f file_name.wav] [-t duration_secs]
 
     // parse options
     while (true) {
@@ -49,6 +45,10 @@ int main(int argc, char **argv)
             break;
         case 'f':
             file_name = optarg;
+            if (strstr(file_name, ".wav") == NULL) {
+                printf("ERROR: file_name must have '.wav' extension\n");
+                return 1;
+            }
             break;
         case 't':
             cnt = sscanf(optarg, "%d", &duration);
@@ -58,7 +58,7 @@ int main(int argc, char **argv)
             }
             break;
         case 'h':
-            printf("usage: record [-d indev] [-f file_name] [-t duration_secs]\n");
+            printf("usage: record [-d indev] [-f file_name.wav] [-t duration_secs]\n");
             return 0;
             break;
         default:
@@ -67,7 +67,7 @@ int main(int argc, char **argv)
     }
 
     // use 4 channels for seeed-4mic-voicecard, otherwise 1
-    max_chan = (strcmp(input_device, SEEED_4MIC_VOICECARD) == 0 ? 4 : 1);
+    int max_chan = (strcmp(input_device, SEEED_4MIC_VOICECARD) == 0 ? 4 : 1);
 
     // init pa_utils
     if (pa_init() < 0) {
@@ -76,43 +76,18 @@ int main(int argc, char **argv)
     }
 
     // record sound data
-    float *chan_data[max_chan];
-    int max_data = duration * SAMPLE_RATE;
-
-    for (int chan = 0; chan < max_chan; chan++) {
-        chan_data[chan] = calloc(max_data, sizeof(float));
-    }
-    if (pa_record(input_device, max_chan, max_data, SAMPLE_RATE, chan_data) < 0) {
-        printf("ERROR: pa_play failed\n");
+    int max_data = duration * SAMPLE_RATE * max_chan;
+    float *data = calloc(max_data, sizeof(float));
+    if (pa_record(input_device, max_chan, max_data, SAMPLE_RATE, data) < 0) {
+        printf("ERROR: pa_record failed\n");
         return 1;
     }
 
-    // write sound data to file
-    printf("writing recorded data to %s\n", file_name);
-    rc = file_write(file_name, max_chan, max_data, SAMPLE_RATE, chan_data);
-    if (rc < 0) {
-        printf("ERROR: file_write failed\n");
+    // write sound data to wav file
+    if (sf_write_wav_file(file_name, data, max_chan, max_data, SAMPLE_RATE) < 0) {
+        printf("ERROR sf_write_wav_file failed\n");
         return 1;
     }
-
-#ifdef DEBUG
-    // print average data for each channel
-    printf("\n");
-    for (int chan = 0; chan < max_chan; chan++) {
-        float sum = 0;
-        for (int i = 0; i < max_data; i++) {
-            sum += fabsf(chan_data[chan][i]);
-        }
-        printf("avg data for chan %d = %0.3f\n", chan, sum/max_data);
-    }
-
-    // write wav file for each channel
-    for (int chan = 0; chan < max_chan; chan++) {
-        char filename[100];
-        sprintf(filename, "record_%d.wav", chan);
-        sf_create_wav(chan_data[chan], max_data, SAMPLE_RATE, filename);
-    }
-#endif
 
     // done
     return 0;

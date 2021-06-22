@@ -7,18 +7,15 @@
 
 #include <pa_utils.h>
 
-// XXX todo, option for duration too
-// XXX make freq range options
-
 //
 // defines
 //
 
 #define SAMPLE_RATE         48000  // samples per sec
 #define MAX_CHAN            2
-#define DEFAULT_DURATION    15     // secs  XXX check this and next 2 lines
+#define DEFAULT_DURATION    10
 #define DEFAULT_START_FREQ  100
-#define DEFAULT_END_FREQ    1600
+#define DEFAULT_END_FREQ    1000
 
 #define MIN_FREQ            100
 #define MAX_FREQ            10000
@@ -30,6 +27,8 @@
 static int    freq_start = DEFAULT_START_FREQ;
 static int    freq_end = DEFAULT_END_FREQ;
 static int    duration = DEFAULT_DURATION;
+static bool   white_noise = false;
+
 static float *data;
 static int    max_data;
 
@@ -37,7 +36,8 @@ static int    max_data;
 // prototypes
 //
 
-static void init_data(void);
+static void init_sine_data(void);
+static void init_white_noise_data(void);
 
 // -----------------  MAIN  -------------------------------------------------------
 
@@ -45,11 +45,11 @@ int main(int argc, char **argv)
 {
     char *output_device = DEFAULT_OUTPUT_DEVICE;
 
-    // usage: gen [-d outdev] [-f freq_start[,freq_end]] [-t duration_secs]
+    // usage: gen [-d outdev] [-f freq_start[,freq_end]] [-t duration_secs] [-w] [-h]
 
     // parse options
     while (true) {
-        int ch = getopt(argc, argv, "d:f:t:h");
+        int ch = getopt(argc, argv, "d:f:t:wh");
         int cnt;
         if (ch == -1) {
             break;
@@ -84,8 +84,11 @@ int main(int argc, char **argv)
                 return 1;
             }
             break;
+        case 'w':
+            white_noise = true;
+            break;
         case 'h':
-            printf("usage: gen [-d outdev] [-f freq_start[,freq_end]] [-t duration_secs]\n");
+            printf("usage: gen [-d outdev] [-f freq_start[,freq_end]] [-t duration_secs] [-w] [-h]\n");
             return 0;
             break;
         default:
@@ -94,7 +97,11 @@ int main(int argc, char **argv)
     }
 
     // initialize sound data buffer 
-    init_data();
+    if (white_noise == false) {
+        init_sine_data();
+    } else {
+        init_white_noise_data();
+    }
 
     // init pa_utils
     if (pa_init() < 0) {
@@ -107,8 +114,7 @@ int main(int argc, char **argv)
            duration, freq_start, freq_end, SAMPLE_RATE);
 
     // play sound data
-    float *chan_data[MAX_CHAN] = {NULL, data};
-    if (pa_play(output_device, MAX_CHAN, max_data, SAMPLE_RATE, chan_data) < 0) {
+    if (pa_play(output_device, MAX_CHAN, max_data, SAMPLE_RATE, data) < 0) {
         printf("ERROR: pa_play failed\n");
         return 1;
     }
@@ -117,59 +123,27 @@ int main(int argc, char **argv)
     return 0;
 }
 
-// XXX clean this up
-#if 0
-static void init_data(void)
+static void init_sine_data(void)
 {
-    double freq = freq_start;
+    double freq;
     int i;
 
-    max_data = duration * SAMPLE_RATE;
+    max_data = duration * SAMPLE_RATE * MAX_CHAN;
     data = malloc(max_data * sizeof(float));
 
-    for (i = 0; i < max_data; i++) {
+    for (i = 0; i < max_data; i += MAX_CHAN) {
+        freq = freq_start + (freq_end - freq_start) * ((double)i / (max_data - MAX_CHAN));
         data[i] = sin((2*M_PI) * freq * ((double)i/SAMPLE_RATE));
+        data[i+1] = data[i];
+    }
 
-        freq += (double)(freq_end - freq_start) / max_data;
-
-        if (i == max_data-1) {
-            if (nearbyint(freq) != freq_end) {
-                printf("ERROR: BUG freq %0.3f not equal freq_end %d\n", freq, freq_end);
-                exit(1);
-            }
-            break;
-        }
+    if (nearbyint(freq) != freq_end) {
+        printf("ERROR: BUG freq %0.3f not equal freq_end %d\n", freq, freq_end);
+        exit(1);
     }
 }
-#endif
 
-#if 0
-static void init_data(void)
-{
-    int freq, i;
-    double max;
-
-    max_data = duration * SAMPLE_RATE;
-    data = malloc(max_data * sizeof(float));
-
-    for (freq = freq_start; freq < freq_end; freq += 50) {
-        for (i = 0; i < max_data; i++) {
-            data[i] += sin((2*M_PI) * freq * ((double)i/SAMPLE_RATE));
-        }
-    }
-
-    max = 0;
-    for (i = 0; i < max_data; i++) {
-        if (data[i] > max) max = data[i];
-    }
-
-    for (i = 0; i < max_data; i++) {
-        data[i] /= max;
-    }
-}
-#endif
-
-static void init_data(void)
+static void init_white_noise_data(void)
 {
     int i;
 
