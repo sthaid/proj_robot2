@@ -9,7 +9,7 @@
 #include <util_sdl.h>
 #include <util_misc.h>
 #include <pa_utils.h>
-#include <file_utils.h>
+#include <sf_utils.h>
 
 //
 // defines
@@ -17,7 +17,6 @@
 
 // used when data being obtained from microphone
 #define SEEED_4MIC_VOICECARD "seeed-4mic-voicecard"
-#define MAX_CHAN             4
 #define SAMPLE_RATE          48000  // samples per sec
 #define DURATION             5      // secs
 
@@ -34,9 +33,10 @@ static int    opt_fullscreen = false;
 
 static int    max_chan;
 static int    max_data;
+static int    max_frames;
 static int    sample_rate;
-static float *chan_data[32];  // up to 32 channels
-static bool   chan_data_ready;
+static float *data;
+static bool   data_ready;
 
 static int    data_src;
 static char  *data_src_name;
@@ -59,7 +59,7 @@ int main(int argc, char **argv)
     data_src = DATA_SRC_MIC;
 
     // parse options
-    // -f <file_name> : get audio data from file
+    // -f <file_name> : get audio data from wav file
     // -d <dev_name>  : get audio data from microphone
     // -h             : help
     while (true) {
@@ -71,6 +71,10 @@ int main(int argc, char **argv)
         case 'f':
             data_src_name = optarg;
             data_src = DATA_SRC_FILE;
+            if (strstr(data_src_name, ".wav") == NULL) {
+                printf("ERROR: file_name must have '.wav' extension\n");
+                return 1;
+            }
             break;
         case 'd':
             data_src_name = optarg;
@@ -90,28 +94,29 @@ int main(int argc, char **argv)
         if (pa_init() < 0) {
             FATAL("failed to initialize portaudio\n");
         }
-        max_chan    = MAX_CHAN;
-        max_data    = DURATION * SAMPLE_RATE;
+        max_chan    = (strcmp(data_src_name, SEEED_4MIC_VOICECARD) == 0 ? 4 : 1);
+        max_data    = DURATION * SAMPLE_RATE * max_chan;
+        max_frames  = max_data / max_chan;
         sample_rate = SAMPLE_RATE;
-        for (int chan = 0; chan < max_chan; chan++) {
-            chan_data[chan] = malloc(max_data * sizeof(float));
-        }
+        data = calloc(max_data, sizeof(float));
         pthread_create(&tid, NULL, get_mic_data_thread, NULL);
     } else {
-        if (file_read(data_src_name, &max_chan, &max_data, &sample_rate, chan_data) < 0) {
+        if (sf_read_wav_file(data_src_name, &data, &max_chan, &max_data, &sample_rate) < 0) {
             FATAL("failed to read file %s\n", data_src_name);
         }
-        chan_data_ready = true;
+        max_frames = max_data / max_chan;
+        data_ready = true;
     }
 
     // print info
-    INFO("%s %s: max_chan=%d max_data=%d sample_rate=%d duration=%0.1f \n",
+    INFO("%s %s: max_chan=%d max_data=%d max_frames=%d sample_rate=%d duration=%0.1f \n",
          (data_src == DATA_SRC_MIC ? "mic" : "file"),
          data_src_name,
          max_chan,
          max_data,
+         max_frames,
          sample_rate,
-         (double)max_data / sample_rate);
+         (double)max_frames / sample_rate);
 
     // init sdl
     if (sdl_init(&win_width, &win_height, opt_fullscreen, false, false) < 0) {
@@ -134,10 +139,10 @@ int main(int argc, char **argv)
 
 static void *get_mic_data_thread(void *cx)
 {
-    if (pa_record(data_src_name, max_chan, max_data, sample_rate, chan_data) < 0) {
+    if (pa_record(data_src_name, max_chan, max_data, sample_rate, data) < 0) {
         FATAL("failed pa_record, %s\n", data_src_name);
     }
-    chan_data_ready = true;
+    data_ready = true;
     return NULL;
 }
 
@@ -171,7 +176,7 @@ static int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_
     // ------------------------
 
     if (request == PANE_HANDLER_REQ_RENDER) {
-        if (chan_data_ready) {
+        if (data_ready) {
             // plot the channel data
             for (int chan = 0; chan < max_chan; chan++) {
                 plot(pane, chan); 
@@ -258,9 +263,9 @@ static int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_
             cursor_x++;
             break;
         case 'g':
-            if (data_src == DATA_SRC_MIC && chan_data_ready) {
+            if (data_src == DATA_SRC_MIC && data_ready) {
                 pthread_t tid;
-                chan_data_ready = false;
+                data_ready = false;
                 pthread_create(&tid, NULL, get_mic_data_thread, NULL);
             }
             break;
@@ -269,7 +274,7 @@ static int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_
         }
 
         if (ctr_smpl < 0) ctr_smpl = 0;
-        if (ctr_smpl >= max_data) ctr_smpl = max_data-1;
+        if (ctr_smpl >= max_frames) ctr_smpl = max_frames-1;
         if (pxls_per_smpl > 10) pxls_per_smpl = 10;
         if (pxls_per_smpl < 1) pxls_per_smpl = 1;
         if (cursor_x < 0) cursor_x = 0;
@@ -311,9 +316,10 @@ static void plot(rect_t *pane, int chan)
     sdl_render_line(pane, 0, y_origin, pane->w-1, y_origin, SDL_GREEN);
 
     while (true) {
-        if (smpl >= 0 && smpl < max_data) {
+        if (smpl >= 0 && smpl < max_frames) {
+            float v = data[(smpl * max_chan) + chan];
             p[max_points].x = pxl;
-            p[max_points].y = y_origin + (chan_data[chan][smpl] * ((pane->h-FOOTER_HEIGHT)/8));
+            p[max_points].y = y_origin + (v * ((pane->h-FOOTER_HEIGHT)/8));
             max_points++;
         }
         smpl++;
