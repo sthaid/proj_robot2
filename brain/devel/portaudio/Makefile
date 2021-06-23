@@ -28,5 +28,5 @@ filters: filters.c util/util_sdl.c util/util_misc.c util/util_jpeg.c util/util_p
             -o $@ 
 
 clean:
-	rm -f $(TARGETS) *.wav
+	rm -f $(TARGETS)
 
