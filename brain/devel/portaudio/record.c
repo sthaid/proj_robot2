@@ -15,26 +15,29 @@
 
 #define SEEED_4MIC_VOICECARD "seeed-4mic-voicecard"
 #define SAMPLE_RATE          48000  // samples per sec
+
+#define DEFAULT_IN_DEV       SEEED_4MIC_VOICECARD
 #define DEFAULT_DURATION     10     // secs
+#define DEFAULT_FILE_NAME    "record.wav"
 
 //
 // variables
 //
 
-static int duration = DEFAULT_DURATION;
+static int   duration     = DEFAULT_DURATION;
+static char *input_device = DEFAULT_IN_DEV;
+static char *file_name    = DEFAULT_FILE_NAME;
 
 // -----------------  MAIN  -------------------------------------------------------
 
 int main(int argc, char **argv)
 {
-    char *input_device = SEEED_4MIC_VOICECARD;
-    char *file_name = "record.wav";
-
-    // usage: record [-d indev] [-f file_name.wav] [-t duration_secs]
+    #define USAGE \
+    "usage: record [-d indev] [-f file_name.wav] [-T duration_secs]"
 
     // parse options
     while (true) {
-        int ch = getopt(argc, argv, "d:f:t:h");
+        int ch = getopt(argc, argv, "d:f:T:h");
         int cnt;
         if (ch == -1) {
             break;
@@ -50,7 +53,7 @@ int main(int argc, char **argv)
                 return 1;
             }
             break;
-        case 't':
+        case 'T':
             cnt = sscanf(optarg, "%d", &duration);
             if (cnt != 1 || duration < 1 || duration > 60) {
                 printf("ERROR: invalid duration '%s'\n", optarg);
@@ -58,7 +61,7 @@ int main(int argc, char **argv)
             }
             break;
         case 'h':
-            printf("usage: record [-d indev] [-f file_name.wav] [-t duration_secs]\n");
+            printf("%s\n", USAGE);
             return 0;
             break;
         default:
@@ -66,8 +69,11 @@ int main(int argc, char **argv)
         };
     }
 
+    // init max_chan, max_data, and data;
     // use 4 channels for seeed-4mic-voicecard, otherwise 1
     int max_chan = (strcmp(input_device, SEEED_4MIC_VOICECARD) == 0 ? 4 : 1);
+    int max_data = duration * SAMPLE_RATE * max_chan;
+    float *data = calloc(max_data, sizeof(float));
 
     // init pa_utils
     if (pa_init() < 0) {
@@ -76,8 +82,6 @@ int main(int argc, char **argv)
     }
 
     // record sound data
-    int max_data = duration * SAMPLE_RATE * max_chan;
-    float *data = calloc(max_data, sizeof(float));
     if (pa_record(input_device, max_chan, max_data, SAMPLE_RATE, data) < 0) {
         printf("ERROR: pa_record failed\n");
         return 1;
