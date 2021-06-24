@@ -38,8 +38,8 @@ static int    sample_rate;
 static float *data;
 static bool   data_ready;
 
-static int    data_src;
-static char  *data_src_name;
+static int    data_src       = DATA_SRC_MIC;
+static char  *data_src_name  = SEEED_4MIC_VOICECARD;
 
 //
 // prototypes
@@ -54,14 +54,12 @@ int main(int argc, char **argv)
 {
     pthread_t tid;
 
-    // set default data source
-    data_src_name = SEEED_4MIC_VOICECARD;
-    data_src = DATA_SRC_MIC;
+    #define USAGE \
+    "usage: plot [-d indev] [-f filename]\n" \
+    "       - use either -d or -f\n" \
+    "       - default is -d SEEED_4MIC_VOICECARD"
 
     // parse options
-    // -f <file_name> : get audio data from wav file
-    // -d <dev_name>  : get audio data from microphone
-    // -h             : help
     while (true) {
         int ch = getopt(argc, argv, "f:d:h");
         if (ch == -1) {
@@ -81,7 +79,7 @@ int main(int argc, char **argv)
             data_src = DATA_SRC_MIC;
             break;
         case 'h':
-            printf("usage: plot [-d indev] [-f filename]\n");
+            printf("%s\n", USAGE);
             return 0;
             break;
         default:
