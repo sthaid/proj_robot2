@@ -182,6 +182,6 @@ static void init_white_noise_data(void)
     data = malloc(max_data * sizeof(float));
     
     for (i = 0; i < max_data; i++) {
-        data[i] = ((double)random() / RAND_MAX) - 0.5;
+        data[i] = 2 * (((double)random() / RAND_MAX) - 0.5);
     }
-};
+}
