@@ -14,6 +14,13 @@
 // - The DFT results are stored in-order in the array out, with the zero-frequency (DC) 
 //   component in out[0].
 
+#if 0
+XXX use f1 to F12 to select input source
+- get rid of SLCT of input
+- always play audio which is from the selected plot
+#endif
+
+
 #include <stdio.h>
 #include <stdbool.h>
 #include <stdlib.h>
@@ -43,6 +50,8 @@
 #define TIME(code) \
     ( { unsigned long start=microsec_timer(); code; (microsec_timer()-start)/1000000.; } )
 
+//XXX #define AF3_FACTOR 1e8
+
 //
 // variables
 //
@@ -58,10 +67,17 @@ static complex    *in;
 static complex    *out;
 static fftw_plan   plan;
 
+#if 0
+static int         lpf_k1 = 7;
+static double      lpf_k2 = 0.95;
+static int         hpf_k1 = 7;
+static double      hpf_k2 = 0.50;
+#else
 static int         lpf_k1 = 5;
 static double      lpf_k2 = 0.95;
 static int         hpf_k1 = 5;
 static double      hpf_k2 = 0.95;
+#endif
 
 static char       *audio_in_filename;
 static float      *audio_in_data;
@@ -257,7 +273,7 @@ static void *audio_thread(void *cx)
 
 static int audio_out_get_frame(float *out_data, void *cx_arg)
 {
-    double vd;
+    double vd, vo;
 
     static double cx[200];
 
@@ -269,22 +285,44 @@ static int audio_out_get_frame(float *out_data, void *cx_arg)
     // filter the value
     switch (audio_out_filter) {
     case 0:
-        out_data[0] = vd;
+        vo = vd;
         break;
     case 1:
-        out_data[0] = low_pass_filter_ex(vd, cx, lpf_k1, lpf_k2);
+        vo = low_pass_filter_ex(vd, cx, lpf_k1, lpf_k2);
         break;
     case 2:
-        out_data[0] = high_pass_filter_ex(vd, cx, hpf_k1, hpf_k2);
+        vo = high_pass_filter_ex(vd, cx, hpf_k1, hpf_k2);
         break;
     case 3:
-        out_data[0] = band_pass_filter_ex(vd, cx, lpf_k1, lpf_k2, hpf_k1, hpf_k2);
+        vo = band_pass_filter_ex(vd, cx, lpf_k1, lpf_k2, hpf_k1, hpf_k2);
         break;
     default:
         printf("BUG: audio_out_filter=%d\n", audio_out_filter);
         exit(1);
         break;
     }
+
+#if 0
+    static double amplitude;
+    static int cnt;
+    #define K .99
+    amplitude = K * amplitude + (1 - K) * fabs(vo);
+    cnt++;
+    if ((cnt % SAMPLE_RATE) == 0) {
+        printf("amplitude %10.3e\n", amplitude);
+    }
+
+    if (audio_out_filter == 3) {
+        vo = vo * AF3_FACTOR;
+        if (vo > 0.9) {
+            if ((cnt % SAMPLE_RATE) == 0) {
+                printf("OOPS vo %0.3f\n", vo);
+            }
+        }
+    }
+#endif
+
+    out_data[0] = vo;
 
     // bump up audio_in_frame_idx 
     audio_in_frame_idx = (audio_in_frame_idx + 1) % audio_in_max_frames;
@@ -331,13 +369,6 @@ static int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_
         // ----------------------
         // plot fft of in_data
         // ----------------------
-        memcpy(in, in_data, N*sizeof(complex));
-        t1 = TIME(fftw_execute(plan));
-        y_origin = plot(pane, 0, out, N);
-
-        if (audio_in_filename == NULL) {
-            sdl_render_printf(pane, pane->w-95, y_origin-ROW2Y(5,30), 30, SDL_WHITE, SDL_BLACK, "NO_FLT");
-        } else if (audio_out_filter == 0) {
         memcpy(in, in_data, N*sizeof(complex));
         t1 = TIME(fftw_execute(plan));
         y_origin = plot(pane, 0, out, N);
@@ -603,6 +634,7 @@ static int plot(rect_t *pane, int idx, complex *data, int n)
     if (max_y_value > 0) {
         for (x = 0; x < x_max; x++) {
             double v = y_values[x] / max_y_value;
+            //XXX if (idx == 3) v *= AF3_FACTOR;
             if (v < .01) continue;
             if (v > 1) v = 1;
             sdl_render_line(pane, 
@@ -616,7 +648,6 @@ static int plot(rect_t *pane, int idx, complex *data, int n)
     sdl_render_line(pane, 0, y_origin, x_max, y_origin, SDL_GREEN);
     for (freq = 100; freq <= MAX_PLOT_FREQ-100; freq+= 100) {
         x = freq / MAX_PLOT_FREQ * x_max;
-        //sdl_render_line(pane, x, y_origin+5, x, y_origin-5, SDL_GREEN);
         sprintf(str, "%d", (int)nearbyint(freq));
         sdl_render_text(pane,
             x-COL2X(strlen(str),20)/2, y_origin+1, 20, str, SDL_GREEN, SDL_BLACK);
