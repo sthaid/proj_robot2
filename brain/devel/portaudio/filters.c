@@ -15,9 +15,7 @@
 //   component in out[0].
 
 #if 0
-XXX use f1 to F12 to select input source
-- get rid of SLCT of input
-- always play audio which is from the selected plot
+yyy print in_data src string
 #endif
 
 
@@ -50,8 +48,6 @@ XXX use f1 to F12 to select input source
 #define TIME(code) \
     ( { unsigned long start=microsec_timer(); code; (microsec_timer()-start)/1000000.; } )
 
-//XXX #define AF3_FACTOR 1e8
-
 //
 // variables
 //
@@ -61,8 +57,6 @@ static int         win_height = 800;
 static int         opt_fullscreen = false;
 
 static complex    *in_data;
-static char       *in_data_type_str = "sin";
-
 static complex    *in;
 static complex    *out;
 static fftw_plan   plan;
@@ -79,23 +73,21 @@ static int         hpf_k1 = 5;
 static double      hpf_k2 = 0.95;
 #endif
 
-static char       *audio_in_filename;
-static float      *audio_in_data;
-static int         audio_in_max_chan;
-static int         audio_in_max_data;
-static int         audio_in_max_frames;
-static int         audio_in_sample_rate;
-static int         audio_in_frame_idx;
-static char       *audio_out_device = DEFAULT_OUTPUT_DEVICE;
+static char  *file_name;
+static float *file_data;
+static int    file_max_chan;
+static int    file_max_data;
+static int    file_sample_rate;
+
+static char       *audio_out_dev = DEFAULT_OUTPUT_DEVICE;
 static int         audio_out_filter = 0;
 
 //
 // prototypes
 //
 
-static void init_data_sin(complex *data, int n, int freq_start, int freq_end, int freq_incr);
-static void init_data_white(complex *data, int n);
-static void *audio_thread(void *cx);
+static void init_in_data(int type);
+static void *audio_out_thread(void *cx);
 static int audio_out_get_frame(float *data, void *cx);
 static int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_event_t * event);
 static int plot(rect_t *pane, int idx, complex *data, int n);
@@ -109,29 +101,25 @@ static void clip_double(double *v, double low, double high);
 
 int main(int argc, char **argv)
 {
+    pthread_t tid;
+
     #define USAGE \
-    "usage: filters [-f file_name.wav] [-d out_dev] [-t sin|white] -h\n" \
-    "       - if file_name.wav is supplied then it is played in a loop through a filter"
+    "usage: filters [-f file_name.wav] [-d out_dev] -h"  // yyy better usage comment
+
+    setlinebuf(stdout);
 
     // parse options
     while (true) {
-        int ch = getopt(argc, argv, "f:d:t:h");
+        int ch = getopt(argc, argv, "f:d:h");
         if (ch == -1) {
             break;
         }
         switch (ch) {
         case 'f':
-            audio_in_filename = optarg;
-            if (strstr(audio_in_filename, ".wav") == NULL) {
-                printf("ERROR: file_name must have '.wav' extension\n");
-                return 1;
-            }
+            file_name = optarg;
             break;
         case 'd':
-            audio_out_device = optarg;
-            break;
-        case 't':
-            in_data_type_str = optarg;
+            audio_out_dev = optarg;
             break;
         case 'h':
             printf("%s\n", USAGE);
@@ -141,34 +129,47 @@ int main(int argc, char **argv)
         }
     }
 
-// xxx print args
+    // yyy print args
+    printf("INFO: audio_out_dev=%s file_name=%s\n", audio_out_dev, file_name);
 
-    // init the in_data array
-    in_data  = (complex*) fftw_malloc(sizeof(complex) * N);
-    if (strcmp(in_data_type_str, "sin") == 0) {
-        init_data_sin(in_data, N, 25, 1500, 25);
-    } else if (strcmp(in_data_type_str, "white") == 0) {
-        init_data_white(in_data, N);
-    } else {
-        printf("ERROR: invalid in_data_type_str '%s', expected 'sin' or 'white'\n", in_data_type_str);
+    // if file_name provided then read the wav file;
+    // this file's data will be one of the 'in' data sources
+    if (file_name) {
+        if (strstr(file_name, ".wav") == NULL) {
+            printf("FATAL: file_name must have '.wav' extension\n");
+            return 1;
+        }
+        if (sf_read_wav_file(file_name, &file_data, &file_max_chan, &file_max_data, &file_sample_rate) < 0) {
+            printf("FATAL: sf_read_wav_file %s failed\n", optarg);
+            return 1;
+        }
+        if (file_sample_rate != SAMPLE_RATE) {
+            printf("FATAL: file smaple_rate=%d, must be %d\n", file_sample_rate, SAMPLE_RATE);
+            return 1;
+        }
+    }
+
+    // init portaudio
+    if (pa_init() < 0) {
+        printf("FATAL: pa_init\n");
         return 1;
     }
 
     // allocate in and out arrays in create the plan
-    in  = (complex*) fftw_malloc(sizeof(complex) * N);
-    out = (complex*) fftw_malloc(sizeof(complex) * N);
+    in  = (complex*)fftw_malloc(sizeof(complex) * N);
+    out = (complex*)fftw_malloc(sizeof(complex) * N);
     plan = fftw_plan_dft_1d(N, in, out, FFTW_FORWARD, FFTW_ESTIMATE);
 
-    // if audio_in_fiename is provided then 
-    // create the audio_thread which will play this file in a loop through a filter
-    if (audio_in_filename) {
-        pthread_t tid;
-        pthread_create(&tid, NULL, audio_thread, NULL);
-    }
+    // init data, use white noise ('1') as default
+    in_data  = (complex*)fftw_malloc(sizeof(complex) * N);
+    init_in_data('1');
+
+    // create audio_out_thread
+    pthread_create(&tid, NULL, audio_out_thread, NULL);
 
     // init sdl
     if (sdl_init(&win_width, &win_height, opt_fullscreen, false, false) < 0) {
-        printf("sdl_init %dx%d failed\n", win_width, win_height);
+        printf("FATAL: sdl_init %dx%d failed\n", win_width, win_height);
         return 1;
     }
 
@@ -189,83 +190,74 @@ int main(int argc, char **argv)
     return 0;
 }
 
-static void init_data_sin(complex *data, int n, int freq_start, int freq_end, int freq_incr)
-{
-    int i, f;
+// -----------------  INIT IN DATA ARRAY  ------------------------
 
-    // set data values
-    memset(data, 0, n*sizeof(complex));
-    for (f = freq_start; f <= freq_end; f += freq_incr) {
-        for (i = 0; i < n; i++) {
-            data[i] += sin((2*M_PI) * f * ((double)i/SAMPLE_RATE));
+// arg: 'type'
+// - F1 ... F12:  tones 100 ... 1200 Hz
+// - '1':         white noise
+// - '2':         mix of sine waves
+// - '3':         file-data
+static void init_in_data(int type)
+{
+    int i, j, freq;
+
+    // zero the in_data array
+    memset(in_data, 0, N*sizeof(complex));
+
+    // fill the in_data array, based on 'type' arg
+    switch (type) {
+    case SDL_EVENT_KEY_F(1) ... SDL_EVENT_KEY_F(12):  // tone
+        freq = (type - SDL_EVENT_KEY_F(1) + 1) * 100.;
+        for (i = 0; i < N; i++) {
+            in_data[i] = sin((2*M_PI) * freq * ((double)i/SAMPLE_RATE));
         }
+        break;
+    case '1':  // white nosie
+        for (i = 0; i < N; i++) {
+            in_data[i] = ((double)random() / RAND_MAX) - 0.5;
+        }
+        break;
+    case '2':  // sum of sine waves
+        for (freq = 25; freq <= 1500; freq += 25) {
+            for (i = 0; i < N; i++) {
+                in_data[i] += sin((2*M_PI) * freq * ((double)i/SAMPLE_RATE));
+            }
+        }
+        break;
+    case '3':  // file data
+        if (file_max_data == 0) {
+            printf("WARNING: no file data\n");
+            break;
+        }
+        for (i=0, j=0; i < N; i++) {
+            in_data[i] = file_data[j];
+            j += file_max_chan;
+            if (j >= file_max_data) j = 0;
+        }
+        break;
+    default:
+        printf("FATAL: init_in_data, invalid type=%d\n", type);
+        exit(1);
+        break;
     }
 
-    // scale data values to range -1 to 1
+    // scale in_data values to range -1 to 1
     double max=0, v;
-    for (i = 0; i < n; i++) {
-        v = fabs(creal(data[i]));
+    for (i = 0; i < N; i++) {
+        v = fabs(creal(in_data[i]));
         if (v > max) max = v;
     }
-    for (i = 0; i < n; i++) {
-        data[i] *= (1 / max);
+    for (i = 0; i < N; i++) {
+        in_data[i] *= (1 / max);
     }
 }
 
-static void init_data_white(complex *data, int n)
+// -----------------  PLAY FILTERED AUDIO  -----------------------
+
+static void *audio_out_thread(void *cx)
 {
-    int i, cnt;
-
-    #define MAX_CNT 1  // change to 10 for pseudo normal distribution
-
-    // set data values
-    memset(data, 0, n*sizeof(complex));
-    for (i = 0; i < n; i++) {
-        for (cnt = 0; cnt < MAX_CNT; cnt++) {
-            data[i] += ((double)random() / RAND_MAX) - 0.5;
-        }
-    }
-
-    // scale data values to range -1 to 1
-    double max=0, v;
-    for (i = 0; i < n; i++) {
-        v = fabs(creal(data[i]));
-        if (v > max) max = v;
-    }
-    for (i = 0; i < n; i++) {
-        data[i] *= (1 / max);
-    }
-}
-
-// -----------------  PLAY AUDIO THROUGH A FILTER  ---------------
-
-static void *audio_thread(void *cx)
-{
-    if (pa_init() < 0) {
-        printf("ERROR: pa_init\n");
-        exit(1); 
-    }
-
-    if (sf_read_wav_file(audio_in_filename, 
-                         &audio_in_data, 
-                         &audio_in_max_chan, 
-                         &audio_in_max_data, 
-                         &audio_in_sample_rate) < 0) 
-    {
-        printf("ERROR: sf_read_wav_file %s failed\n", audio_in_filename);
-        exit(1); 
-    }
-
-    audio_in_max_frames = audio_in_max_data / audio_in_max_chan;
-    printf("sf_read_wav(%s) ret max_chan=%d max_data=%d max_frames=%d sample_rate=%d\n",
-           audio_in_filename, 
-           audio_in_max_chan, 
-           audio_in_max_data, 
-           audio_in_max_frames, 
-           audio_in_sample_rate);
-
-    if (pa_play2(audio_out_device, 1, audio_in_sample_rate, audio_out_get_frame, NULL) < 0) {
-        printf("ERROR: pa_play2 failed\n");
+    if (pa_play2(audio_out_dev, 1, SAMPLE_RATE, audio_out_get_frame, NULL) < 0) {
+        printf("FATAL: pa_play2 failed\n");
         exit(1); 
     }
     return NULL;
@@ -276,11 +268,11 @@ static int audio_out_get_frame(float *out_data, void *cx_arg)
     double vd, vo;
 
     static double cx[200];
+    static int idx;
 
-    // xxx reset cx when filter changes
-
-    // get next data value from chan 0 of the wav file,
-    vd = audio_in_data[audio_in_frame_idx * audio_in_max_chan + 0];
+    // get next in_data value
+    vd = creal(in_data[idx]);
+    idx = (idx + 1) % N;
 
     // filter the value
     switch (audio_out_filter) {
@@ -297,37 +289,15 @@ static int audio_out_get_frame(float *out_data, void *cx_arg)
         vo = band_pass_filter_ex(vd, cx, lpf_k1, lpf_k2, hpf_k1, hpf_k2);
         break;
     default:
-        printf("BUG: audio_out_filter=%d\n", audio_out_filter);
+        printf("FATAL: audio_out_filter=%d\n", audio_out_filter);
         exit(1);
         break;
     }
 
-#if 0
-    static double amplitude;
-    static int cnt;
-    #define K .99
-    amplitude = K * amplitude + (1 - K) * fabs(vo);
-    cnt++;
-    if ((cnt % SAMPLE_RATE) == 0) {
-        printf("amplitude %10.3e\n", amplitude);
-    }
-
-    if (audio_out_filter == 3) {
-        vo = vo * AF3_FACTOR;
-        if (vo > 0.9) {
-            if ((cnt % SAMPLE_RATE) == 0) {
-                printf("OOPS vo %0.3f\n", vo);
-            }
-        }
-    }
-#endif
-
+    // return the filtered value
     out_data[0] = vo;
 
-    // bump up audio_in_frame_idx 
-    audio_in_frame_idx = (audio_in_frame_idx + 1) % audio_in_max_frames;
-
-    // return 0 means continue
+    // continue 
     return 0;
 }
 
@@ -337,17 +307,15 @@ static int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_
 {
     rect_t *pane = &pane_cx->pane;
 
-    #define SDL_EVENT_INDAT_SLCT   (SDL_EVENT_USER_DEFINED + 4)
-
     #define SDL_EVENT_LPF_K1       (SDL_EVENT_USER_DEFINED + 0)
     #define SDL_EVENT_LPF_K2       (SDL_EVENT_USER_DEFINED + 1)
     #define SDL_EVENT_HPF_K1       (SDL_EVENT_USER_DEFINED + 2)
     #define SDL_EVENT_HPF_K2       (SDL_EVENT_USER_DEFINED + 3)
 
-    #define SDL_EVENT_AUDIO_NO_FLT (SDL_EVENT_USER_DEFINED + 10)
-    #define SDL_EVENT_AUDIO_LPF    (SDL_EVENT_USER_DEFINED + 11)
-    #define SDL_EVENT_AUDIO_HPF    (SDL_EVENT_USER_DEFINED + 12)
-    #define SDL_EVENT_AUDIO_BPF    (SDL_EVENT_USER_DEFINED + 13)
+    #define SDL_EVENT_AUDIO_OUT_NO_FLT (SDL_EVENT_USER_DEFINED + 10)
+    #define SDL_EVENT_AUDIO_OUT_LPF    (SDL_EVENT_USER_DEFINED + 11)
+    #define SDL_EVENT_AUDIO_OUT_HPF    (SDL_EVENT_USER_DEFINED + 12)
+    #define SDL_EVENT_AUDIO_OUT_BPF    (SDL_EVENT_USER_DEFINED + 13)
 
     // ----------------------------
     // -------- INITIALIZE --------
@@ -367,51 +335,28 @@ static int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_
         double t1;
 
         // ----------------------
-        // plot fft of in_data
+        // plot fft of 'in' data
         // ----------------------
         memcpy(in, in_data, N*sizeof(complex));
         t1 = TIME(fftw_execute(plan));
         y_origin = plot(pane, 0, out, N);
 
-        if (audio_in_filename == NULL) {
-            sdl_render_printf(pane, pane->w-95, y_origin-ROW2Y(5,30), 30, SDL_WHITE, SDL_BLACK, "NO_FLT");
-        } else if (audio_out_filter == 0) {
-            sdl_render_printf(pane, pane->w-95, y_origin-ROW2Y(5,30), 30, SDL_GREEN, SDL_BLACK, "NO_FLT");
-        } else {
-            sdl_render_text_and_register_event(
-                pane, 
-                pane->w-95, y_origin-ROW2Y(5,30),
-                30, "NO_FLT", SDL_LIGHT_BLUE, SDL_BLACK, 
-                SDL_EVENT_AUDIO_NO_FLT, SDL_EVENT_TYPE_MOUSE_CLICK, pane_cx);
-        }
+        sdl_render_printf(pane, pane->w-95, y_origin-ROW2Y(5,30), 30, SDL_WHITE, SDL_BLACK, "NO_FLT");
 
         sdl_render_printf(pane, pane->w-95, y_origin-ROW2Y(4,30), 30, SDL_WHITE, SDL_BLACK, "%0.3f", t1);
 
-        sdl_render_text_and_register_event(
-            pane, 
-            pane->w-95, y_origin-ROW2Y(1,30),
-            30, "SLCT", SDL_LIGHT_BLUE, SDL_BLACK, 
-            SDL_EVENT_INDAT_SLCT, SDL_EVENT_TYPE_MOUSE_CLICK, pane_cx);
+        sdl_register_event(pane, &(rect_t){0, y_origin-180, 1400, 180 },
+                           SDL_EVENT_AUDIO_OUT_NO_FLT, SDL_EVENT_TYPE_MOUSE_CLICK, pane_cx);
 
         // -------------------------------------
-        // plot fft of low pass filtered in_data
+        // plot fft of low pass filtered 'in' data
         // -------------------------------------
         memcpy(in, in_data, N*sizeof(complex));
         t1 = TIME(apply_low_pass_filter(in, N, lpf_k1, lpf_k2));
         fftw_execute(plan);
         y_origin = plot(pane, 1, out, N);
 
-        if (audio_in_filename == NULL) {
-            sdl_render_printf(pane, pane->w-95, y_origin-ROW2Y(5,30), 30, SDL_WHITE, SDL_BLACK, "LPF");
-        } else if (audio_out_filter == 1) {
-            sdl_render_printf(pane, pane->w-95, y_origin-ROW2Y(5,30), 30, SDL_GREEN, SDL_BLACK, "LPF");
-        } else {
-            sdl_render_text_and_register_event(
-                pane, 
-                pane->w-95, y_origin-ROW2Y(5,30),
-                30, "LPF", SDL_LIGHT_BLUE, SDL_BLACK, 
-                SDL_EVENT_AUDIO_LPF, SDL_EVENT_TYPE_MOUSE_CLICK, pane_cx);
-        }
+        sdl_render_printf(pane, pane->w-95, y_origin-ROW2Y(5,30), 30, SDL_WHITE, SDL_BLACK, "LPF");
 
         sdl_render_printf(pane, pane->w-95, y_origin-ROW2Y(4,30), 30, SDL_WHITE, SDL_BLACK, "%0.3f", t1);
 
@@ -429,25 +374,18 @@ static int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_
             30, str, SDL_LIGHT_BLUE, SDL_BLACK, 
             SDL_EVENT_LPF_K2, SDL_EVENT_TYPE_MOUSE_WHEEL, pane_cx);
 
+        sdl_register_event(pane, &(rect_t){0, y_origin-180, 1400, 180 },
+                           SDL_EVENT_AUDIO_OUT_LPF, SDL_EVENT_TYPE_MOUSE_CLICK, pane_cx);
+
         // -------------------------------------
-        // plot fft of high pass filtered in_data
+        // plot fft of high pass filtered 'in' data
         // -------------------------------------
         memcpy(in, in_data, N*sizeof(complex));
         t1 = TIME(apply_high_pass_filter(in, N, hpf_k1, hpf_k2));
         fftw_execute(plan);
         y_origin = plot(pane, 2, out, N);
 
-        if (audio_in_filename == NULL) {
-            sdl_render_printf(pane, pane->w-95, y_origin-ROW2Y(5,30), 30, SDL_WHITE, SDL_BLACK, "HPF");
-        } else if (audio_out_filter == 2) {
-            sdl_render_printf(pane, pane->w-95, y_origin-ROW2Y(5,30), 30, SDL_GREEN, SDL_BLACK, "HPF");
-        } else {
-            sdl_render_text_and_register_event(
-                pane,
-                pane->w-95, y_origin-ROW2Y(5,30),
-                30, "HPF", SDL_LIGHT_BLUE, SDL_BLACK,
-                SDL_EVENT_AUDIO_HPF, SDL_EVENT_TYPE_MOUSE_CLICK, pane_cx);
-        }
+        sdl_render_printf(pane, pane->w-95, y_origin-ROW2Y(5,30), 30, SDL_WHITE, SDL_BLACK, "HPF");
 
         sdl_render_printf(pane, pane->w-95, y_origin-ROW2Y(4,30), 30, SDL_WHITE, SDL_BLACK, "%0.3f", t1);
 
@@ -465,25 +403,18 @@ static int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_
             30, str, SDL_LIGHT_BLUE, SDL_BLACK, 
             SDL_EVENT_HPF_K2, SDL_EVENT_TYPE_MOUSE_WHEEL, pane_cx);
 
+        sdl_register_event(pane, &(rect_t){0, y_origin-180, 1400, 180 },
+                           SDL_EVENT_AUDIO_OUT_HPF, SDL_EVENT_TYPE_MOUSE_CLICK, pane_cx);
+
         // -------------------------------------
-        // plot fft of band pass filtered in_data
+        // plot fft of band pass filtered 'in' data
         // -------------------------------------
         memcpy(in, in_data, N*sizeof(complex));
         t1 = TIME(apply_band_pass_filter(in, N, lpf_k1, lpf_k2, hpf_k1, hpf_k2));
         fftw_execute(plan);
         y_origin = plot(pane, 3, out, N);
 
-        if (audio_in_filename == NULL) {
-            sdl_render_printf(pane, pane->w-95, y_origin-ROW2Y(6,30), 30, SDL_WHITE, SDL_BLACK, "BPF");
-        } else if (audio_out_filter == 3) {
-            sdl_render_printf(pane, pane->w-95, y_origin-ROW2Y(6,30), 30, SDL_GREEN, SDL_BLACK, "BPF");
-        } else {
-            sdl_render_text_and_register_event(
-                pane,
-                pane->w-95, y_origin-ROW2Y(6,30),
-                30, "BPF", SDL_LIGHT_BLUE, SDL_BLACK,
-                SDL_EVENT_AUDIO_BPF, SDL_EVENT_TYPE_MOUSE_CLICK, pane_cx);
-        }
+        sdl_render_printf(pane, pane->w-95, y_origin-ROW2Y(6,30), 30, SDL_WHITE, SDL_BLACK, "BPF");
 
         sdl_render_printf(pane, pane->w-95, y_origin-ROW2Y(5,30), 30, SDL_WHITE, SDL_BLACK, "%0.3f", t1);
 
@@ -515,6 +446,9 @@ static int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_
             30, str, SDL_LIGHT_BLUE, SDL_BLACK,
             SDL_EVENT_HPF_K2, SDL_EVENT_TYPE_MOUSE_WHEEL, pane_cx);
 
+        sdl_register_event(pane, &(rect_t){0, y_origin-180, 1400, 180 },
+                           SDL_EVENT_AUDIO_OUT_BPF, SDL_EVENT_TYPE_MOUSE_CLICK, pane_cx);
+
         return PANE_HANDLER_RET_NO_ACTION;
     }
 
@@ -534,6 +468,7 @@ static int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_
             if (event->mouse_wheel.delta_y < 0) lpf_k2 -= .01;
             clip_double(&lpf_k2, 0.0, 1.0);
             break;
+
         case SDL_EVENT_HPF_K1:
             if (event->mouse_wheel.delta_y > 0) hpf_k1++;
             if (event->mouse_wheel.delta_y < 0) hpf_k1--;
@@ -544,33 +479,26 @@ static int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_
             if (event->mouse_wheel.delta_y < 0) hpf_k2 -= .01;
             clip_double(&hpf_k2, 0.0, 1.0);
             break;
-        case SDL_EVENT_INDAT_SLCT:
-            if (strcmp(in_data_type_str, "sin") == 0) {
-                in_data_type_str = "rand";
-                init_data_white(in_data, N);
-            } else {
-                in_data_type_str = "sin";
-                init_data_sin(in_data, N, 25, 1500, 25);
-            }
+
+// xxx audio_out_filter
+        case SDL_EVENT_KEY_F(1) ... SDL_EVENT_KEY_F(12):
+        case '1' ... '3':
+            init_in_data(event->event_id);
             break;
-        case SDL_EVENT_KEY_F(1):
-            init_data_sin(in_data, N, 25, 1500, 25);
-            break;
-        case SDL_EVENT_KEY_F(2):
-            init_data_white(in_data, N);
-            break;
-        case SDL_EVENT_AUDIO_NO_FLT:
+
+        case SDL_EVENT_AUDIO_OUT_NO_FLT:
             audio_out_filter = 0;
             break;
-        case SDL_EVENT_AUDIO_LPF:
+        case SDL_EVENT_AUDIO_OUT_LPF:
             audio_out_filter = 1;
             break;
-        case SDL_EVENT_AUDIO_HPF:
+        case SDL_EVENT_AUDIO_OUT_HPF:
             audio_out_filter = 2;
             break;
-        case SDL_EVENT_AUDIO_BPF:
+        case SDL_EVENT_AUDIO_OUT_BPF:
             audio_out_filter = 3;
             break;
+
         default:
             break;
         }
@@ -587,7 +515,7 @@ static int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_
     }
 
     // not reached
-    printf("BUG: not reached\n");
+    printf("FATAL: not reached\n");
     exit(1);
     return PANE_HANDLER_RET_NO_ACTION;
 }
@@ -628,13 +556,12 @@ static int plot(rect_t *pane, int idx, complex *data, int n)
         }
     }
 
-    //printf("%d %f\n", idx, max_y_value);
+    if (idx == 0) printf("max_y_value = %0.3f\n", max_y_value);
 
     // plot y values
     if (max_y_value > 0) {
         for (x = 0; x < x_max; x++) {
             double v = y_values[x] / max_y_value;
-            //XXX if (idx == 3) v *= AF3_FACTOR;
             if (v < .01) continue;
             if (v > 1) v = 1;
             sdl_render_line(pane, 
@@ -645,12 +572,13 @@ static int plot(rect_t *pane, int idx, complex *data, int n)
     }
 
     // x axis
-    sdl_render_line(pane, 0, y_origin, x_max, y_origin, SDL_GREEN);
+    int color = (idx == audio_out_filter ? SDL_BLUE : SDL_GREEN);
+    sdl_render_line(pane, 0, y_origin, x_max, y_origin, color);
     for (freq = 100; freq <= MAX_PLOT_FREQ-100; freq+= 100) {
         x = freq / MAX_PLOT_FREQ * x_max;
         sprintf(str, "%d", (int)nearbyint(freq));
         sdl_render_text(pane,
-            x-COL2X(strlen(str),20)/2, y_origin+1, 20, str, SDL_GREEN, SDL_BLACK);
+            x-COL2X(strlen(str),20)/2, y_origin+1, 20, str, color, SDL_BLACK);
     }
 
     return y_origin;
