@@ -91,9 +91,9 @@ static void *audio_out_thread(void *cx);
 static int audio_out_get_frame(float *data, void *cx);
 static int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_event_t * event);
 static int plot(rect_t *pane, int idx, complex *data, int n);
-static void apply_low_pass_filter(complex *data, int n, int k1, double k2);
-static void apply_high_pass_filter(complex *data, int n, int k1, double k2);
-static void apply_band_pass_filter(complex *data, int n, int lpf_k1, double lpf_k2, int hpf_k1, double hpf_k2);
+static void apply_low_pass_filter(complex *data, int n);
+static void apply_high_pass_filter(complex *data, int n);
+static void apply_band_pass_filter(complex *data, int n);
 static void clip_int(int *v, int low, int high);
 static void clip_double(double *v, double low, double high);
 
@@ -201,13 +201,16 @@ static void init_in_data(int type)
 {
     int i, j, freq;
 
-    // zero the in_data array
-    memset(in_data, 0, N*sizeof(complex));
+    // xxx clear filter cx
 
     // fill the in_data array, based on 'type' arg
     switch (type) {
     case SDL_EVENT_KEY_F(1) ... SDL_EVENT_KEY_F(12):  // tone
-        freq = (type - SDL_EVENT_KEY_F(1) + 1) * 100.;
+    case SDL_EVENT_KEY_INSERT: case SDL_EVENT_KEY_HOME: case SDL_EVENT_KEY_PGUP:
+        freq = (type >= SDL_EVENT_KEY_F(1) && type <= SDL_EVENT_KEY_F(12)) ? (type-SDL_EVENT_KEY_F(1)+1)*100 :
+               (type == SDL_EVENT_KEY_INSERT)                              ? 1300 :
+               (type == SDL_EVENT_KEY_HOME)                                ? 1400 :
+                                                                             1500;
         for (i = 0; i < N; i++) {
             in_data[i] = sin((2*M_PI) * freq * ((double)i/SAMPLE_RATE));
         }
@@ -218,6 +221,7 @@ static void init_in_data(int type)
         }
         break;
     case '2':  // sum of sine waves
+        memset(in_data, 0, N*sizeof(complex));
         for (freq = 25; freq <= 1500; freq += 25) {
             for (i = 0; i < N; i++) {
                 in_data[i] += sin((2*M_PI) * freq * ((double)i/SAMPLE_RATE));
@@ -269,6 +273,15 @@ static int audio_out_get_frame(float *out_data, void *cx_arg)
 
     static double cx[200];
     static int idx;
+    static int last_audio_out_filter = -1;
+
+    // xxx
+    if (audio_out_filter != last_audio_out_filter) {
+        printf("Clear cx\n");
+        memset(cx, 0, sizeof(cx));
+        last_audio_out_filter = audio_out_filter;
+        idx = 0;
+    }
 
     // get next in_data value
     vd = creal(in_data[idx]);
@@ -293,6 +306,19 @@ static int audio_out_get_frame(float *out_data, void *cx_arg)
         exit(1);
         break;
     }
+
+#if 0
+    static double avg_amplitude;
+    static int cnt;
+    #define K .99999
+    avg_amplitude = K * avg_amplitude + (1 - K) * fabs(vo);
+    cnt++;
+    if ((cnt % SAMPLE_RATE) == 0) {
+        printf("avg_amplitude %10.3e\n", avg_amplitude);
+    }
+    if (audio_out_filter == 3) avg_amplitude = 1.481e-03;
+#endif
+    if (audio_out_filter == 3) vo *= 10; //xxx
 
     // return the filtered value
     out_data[0] = vo;
@@ -352,7 +378,7 @@ static int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_
         // plot fft of low pass filtered 'in' data
         // -------------------------------------
         memcpy(in, in_data, N*sizeof(complex));
-        t1 = TIME(apply_low_pass_filter(in, N, lpf_k1, lpf_k2));
+        t1 = TIME(apply_low_pass_filter(in, N));
         fftw_execute(plan);
         y_origin = plot(pane, 1, out, N);
 
@@ -381,7 +407,7 @@ static int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_
         // plot fft of high pass filtered 'in' data
         // -------------------------------------
         memcpy(in, in_data, N*sizeof(complex));
-        t1 = TIME(apply_high_pass_filter(in, N, hpf_k1, hpf_k2));
+        t1 = TIME(apply_high_pass_filter(in, N));
         fftw_execute(plan);
         y_origin = plot(pane, 2, out, N);
 
@@ -410,7 +436,7 @@ static int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_
         // plot fft of band pass filtered 'in' data
         // -------------------------------------
         memcpy(in, in_data, N*sizeof(complex));
-        t1 = TIME(apply_band_pass_filter(in, N, lpf_k1, lpf_k2, hpf_k1, hpf_k2));
+        t1 = TIME(apply_band_pass_filter(in, N));
         fftw_execute(plan);
         y_origin = plot(pane, 3, out, N);
 
@@ -482,6 +508,7 @@ static int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_
 
 // xxx audio_out_filter
         case SDL_EVENT_KEY_F(1) ... SDL_EVENT_KEY_F(12):
+        case SDL_EVENT_KEY_INSERT: case SDL_EVENT_KEY_HOME: case SDL_EVENT_KEY_PGUP:
         case '1' ... '3':
             init_in_data(event->event_id);
             break;
@@ -556,7 +583,7 @@ static int plot(rect_t *pane, int idx, complex *data, int n)
         }
     }
 
-    if (idx == 0) printf("max_y_value = %0.3f\n", max_y_value);
+    //xxx if (idx == 0) printf("max_y_value = %0.3f\n", max_y_value);
 
     // plot y values
     if (max_y_value > 0) {
@@ -584,25 +611,25 @@ static int plot(rect_t *pane, int idx, complex *data, int n)
     return y_origin;
 }
 
-static void apply_low_pass_filter(complex *data, int n, int k1, double k2)
+static void apply_low_pass_filter(complex *data, int n)
 {
     double cx[1000];
     memset(cx,0,sizeof(cx));
     for (int i = 0; i < n; i++) {
-        data[i] = low_pass_filter_ex(creal(data[i]), cx, k1, k2);
+        data[i] = low_pass_filter_ex(creal(data[i]), cx, lpf_k1, lpf_k2);
     }
 }
 
-static void apply_high_pass_filter(complex *data, int n, int k1, double k2)
+static void apply_high_pass_filter(complex *data, int n)
 {
     double cx[1000];
     memset(cx,0,sizeof(cx));
     for (int i = 0; i < n; i++) {
-        data[i] = high_pass_filter_ex(creal(data[i]), cx, k1, k2);
+        data[i] = high_pass_filter_ex(creal(data[i]), cx, hpf_k1, hpf_k2);
     }
 }
 
-static void apply_band_pass_filter(complex *data, int n, int lpf_k1, double lpf_k2, int hpf_k1, double hpf_k2)
+static void apply_band_pass_filter(complex *data, int n)
 {
     double cx[1000];
     memset(cx,0,sizeof(cx));
