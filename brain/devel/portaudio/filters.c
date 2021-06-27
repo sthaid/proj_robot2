@@ -14,11 +14,6 @@
 // - The DFT results are stored in-order in the array out, with the zero-frequency (DC) 
 //   component in out[0].
 
-#if 0
-yyy print in_data src string
-#endif
-
-
 #include <stdio.h>
 #include <stdbool.h>
 #include <stdlib.h>
@@ -61,7 +56,7 @@ static complex    *in;
 static complex    *out;
 static fftw_plan   plan;
 
-#if 0
+#if 0 // yyy
 static int         lpf_k1 = 7;
 static double      lpf_k2 = 0.95;
 static int         hpf_k1 = 7;
@@ -98,7 +93,7 @@ static void apply_high_pass_filter(complex *data, int n);
 static void apply_band_pass_filter(complex *data, int n);
 static void clip_int(int *v, int low, int high);
 static void clip_double(double *v, double low, double high);
-static int clipping(complex *data, int n, double vol, double *max);
+static int clip_meter(complex *data, int n, double vol, double *max);
 
 // -----------------  MAIN  --------------------------------------
 
@@ -132,7 +127,7 @@ int main(int argc, char **argv)
         }
     }
 
-    // yyy print args
+    // print args
     printf("INFO: audio_out_dev=%s file_name=%s\n", audio_out_dev, file_name);
 
     // if file_name provided then read the wav file;
@@ -205,6 +200,7 @@ static void init_in_data(int type)
     int i, j, freq;
 
     // xxx clear filter cx
+    // xxx auto adjust volume when starting
 
     // fill the in_data array, based on 'type' arg
     switch (type) {
@@ -278,7 +274,7 @@ static int audio_out_get_frame(float *out_data, void *cx_arg)
     static int idx;
     static int last_audio_out_filter = -1;
 
-    // xxx
+    // xxx OR params have changed
     if (audio_out_filter != last_audio_out_filter) {
         printf("Clear cx\n");
         memset(cx, 0, sizeof(cx));
@@ -310,14 +306,8 @@ static int audio_out_get_frame(float *out_data, void *cx_arg)
         break;
     }
 
-    // xxx
+    // scale the filtered value by volume
     vo *= audio_out_volume[audio_out_filter];
-    if (vo < -1) vo = -1;  // XXX needed?
-    if (vo > 1) vo = 1;
-
-    if (fabs(vo) > 1) {
-        printf("INFO vo %0.3f\n", vo);
-    }
 
     // return the filtered value
     out_data[0] = vo;
@@ -361,13 +351,11 @@ static int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_
 
     if (request == PANE_HANDLER_REQ_RENDER) {
         char str[100];
-        int y_origin, clip_meter;
-        double t1, data_max_val;
+        int y_origin;
+        double t1;
 
         #define FSZ         30
         #define X_TEXT      (pane->w-195)
-        #define LOC_GRAPH   &(rect_t){0, y_origin-180, pane->w-200, 180 }
-        #define LOC_CLIP    &(rect_t){pane->w-90, y_origin-ROW2Y(5,FSZ), clip_meter*15, FSZ}
 
         #define DISPLAY_TITLE_LINE(title) \
             do { \
@@ -377,6 +365,9 @@ static int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_
 
         #define DISPLAY_AUDIO(vol, ev_audio_vol, ev_audio_out_slct) \
             do { \
+                double data_max_val; \
+                int cm; \
+                \
                 sprintf(str, "%0.2f", (vol)); \
                 if (audio_out_auto_volume) { \
                     sdl_render_printf(pane, X_TEXT, y_origin-ROW2Y(5,FSZ), FSZ, SDL_WHITE, SDL_BLACK, "%s", str); \
@@ -388,13 +379,17 @@ static int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_
                         ev_audio_vol, SDL_EVENT_TYPE_MOUSE_WHEEL, pane_cx); \
                 } \
                 \
-                clip_meter = clipping(in, N, (vol), &data_max_val); \
+                cm = clip_meter(in, N, (vol), &data_max_val); \
                 if (audio_out_auto_volume) { \
                     (vol) = 0.99 / data_max_val; \
                 } \
-                sdl_render_fill_rect(pane, LOC_CLIP, SDL_RED); \
+                sdl_render_fill_rect(pane, \
+                                      &(rect_t){ pane->w-90, y_origin-ROW2Y(5,FSZ), cm*15, FSZ }, \
+                                     SDL_RED); \
                 \
-                sdl_register_event(pane, LOC_GRAPH, ev_audio_out_slct, SDL_EVENT_TYPE_MOUSE_CLICK, pane_cx); \
+                sdl_register_event(pane, \
+                                   &(rect_t){ 0, y_origin-180, pane->w-200, 180 }, \
+                                   ev_audio_out_slct, SDL_EVENT_TYPE_MOUSE_CLICK, pane_cx); \
             } while (0)
 
         // ----------------------
@@ -504,7 +499,10 @@ static int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_
     // -----------------------
 
     if (request == PANE_HANDLER_REQ_EVENT) {
+        #define DELA_VOL 0.1
+
         switch (event->event_id) {
+        // lpf / bpf filter params
         case SDL_EVENT_LPF_K1:
             if (event->mouse_wheel.delta_y > 0) lpf_k1++;
             if (event->mouse_wheel.delta_y < 0) lpf_k1--;
@@ -514,6 +512,7 @@ static int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_
             if (event->mouse_wheel.delta_y < 0) lpf_k2 -= .01;
             break;
 
+        // hpf / bpf filter params
         case SDL_EVENT_HPF_K1:
             if (event->mouse_wheel.delta_y > 0) hpf_k1++;
             if (event->mouse_wheel.delta_y < 0) hpf_k1--;
@@ -523,13 +522,14 @@ static int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_
             if (event->mouse_wheel.delta_y < 0) hpf_k2 -= .01;
             break;
 
-// xxx audio_out_filter
+        // in data selection
         case SDL_EVENT_KEY_F(1) ... SDL_EVENT_KEY_F(12):
         case SDL_EVENT_KEY_INSERT: case SDL_EVENT_KEY_HOME: case SDL_EVENT_KEY_PGUP:
         case '1' ... '3':
             init_in_data(event->event_id);
             break;
 
+        // audio out selection
         case SDL_EVENT_AUDIO_OUT_UNF:
             audio_out_filter = 0;
             break;
@@ -543,35 +543,35 @@ static int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_
             audio_out_filter = 3;
             break;
 
-        // xxx clip these
-#define VOL_CHANGE 0.1
+        // manual volume ctrls
         case SDL_EVENT_UNF_VOLUME:
-            if (event->mouse_wheel.delta_y > 0) audio_out_volume[0] += VOL_CHANGE;
-            if (event->mouse_wheel.delta_y < 0) audio_out_volume[0] -= VOL_CHANGE;
+            if (event->mouse_wheel.delta_y > 0) audio_out_volume[0] += DELA_VOL;
+            if (event->mouse_wheel.delta_y < 0) audio_out_volume[0] -= DELA_VOL;
             break;
         case SDL_EVENT_LPF_VOLUME:
-            if (event->mouse_wheel.delta_y > 0) audio_out_volume[1] += VOL_CHANGE;
-            if (event->mouse_wheel.delta_y < 0) audio_out_volume[1] -= VOL_CHANGE;
+            if (event->mouse_wheel.delta_y > 0) audio_out_volume[1] += DELA_VOL;
+            if (event->mouse_wheel.delta_y < 0) audio_out_volume[1] -= DELA_VOL;
             break;
         case SDL_EVENT_HPF_VOLUME:
-            if (event->mouse_wheel.delta_y > 0) audio_out_volume[2] += VOL_CHANGE;
-            if (event->mouse_wheel.delta_y < 0) audio_out_volume[2] -= VOL_CHANGE;
+            if (event->mouse_wheel.delta_y > 0) audio_out_volume[2] += DELA_VOL;
+            if (event->mouse_wheel.delta_y < 0) audio_out_volume[2] -= DELA_VOL;
             break;
         case SDL_EVENT_BPF_VOLUME:
-            if (event->mouse_wheel.delta_y > 0) audio_out_volume[3] += VOL_CHANGE;
-            if (event->mouse_wheel.delta_y < 0) audio_out_volume[3] -= VOL_CHANGE;
+            if (event->mouse_wheel.delta_y > 0) audio_out_volume[3] += DELA_VOL;
+            if (event->mouse_wheel.delta_y < 0) audio_out_volume[3] -= DELA_VOL;
             break;
         case SDL_EVENT_KEY_UP_ARROW:
             if (audio_out_auto_volume == false) {
-                audio_out_volume[audio_out_filter] += VOL_CHANGE;
+                audio_out_volume[audio_out_filter] += DELA_VOL;
             }
             break;
         case SDL_EVENT_KEY_DOWN_ARROW:
             if (audio_out_auto_volume == false) {
-                audio_out_volume[audio_out_filter] -= VOL_CHANGE;
+                audio_out_volume[audio_out_filter] -= DELA_VOL;
             }
             break;
 
+        // auto volume ctrls
         case 'a':
             audio_out_auto_volume = !audio_out_auto_volume;
             break;
@@ -585,7 +585,7 @@ static int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_
             break;
         }
 
-        // xxx
+        // clip values that may have been changed by code above
         clip_int(&lpf_k1, 1, 500);
         clip_double(&lpf_k2, 0.0, 1.0);
         clip_int(&hpf_k1, 1, 500);
@@ -621,6 +621,7 @@ static int plot(rect_t *pane, int idx, complex *data, int n)
 
     #define MAX_PLOT_FREQ 1501
 
+    // init
     y_pixels = pane->h / 4;
     y_origin = y_pixels * (idx + 1) - 20;
     y_max    = y_pixels - 20;
@@ -641,13 +642,14 @@ static int plot(rect_t *pane, int idx, complex *data, int n)
 
         if (absv > y_values[x]) {
             y_values[x] = absv;
+
+            // max_y_value is determined for plot idx 0, and is 
+            // subsequently used for plot idx 1 to 3 the are next called
             if (idx == 0 && y_values[x] > max_y_value) {
                 max_y_value = y_values[x];
             }
         }
     }
-
-    //xxx if (idx == 0) printf("max_y_value = %0.3f\n", max_y_value);
 
     // plot y values
     if (max_y_value > 0) {
@@ -672,8 +674,13 @@ static int plot(rect_t *pane, int idx, complex *data, int n)
             x-COL2X(strlen(str),20)/2, y_origin+1, 20, str, color, SDL_BLACK);
     }
 
+    // return the location of the y axis for this plot;
+    // this is used by caller when displaying plot information text 
+    // to the right of the plot
     return y_origin;
 }
+
+// -----------------  UTILS  -------------------------------------
 
 static void apply_low_pass_filter(complex *data, int n)
 {
@@ -720,7 +727,7 @@ static void clip_double(double *v, double low, double high)
     }
 }
 
-static int clipping(complex *data, int n, double vol, double *max_arg)
+static int clip_meter(complex *data, int n, double vol, double *max_arg)
 {
     int cnt=0, i;
     double max=0, v_clip=1/vol, v;
