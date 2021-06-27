@@ -56,17 +56,10 @@ static complex    *in;
 static complex    *out;
 static fftw_plan   plan;
 
-#if 0 // yyy
-static int         lpf_k1 = 7;
-static double      lpf_k2 = 0.95;
-static int         hpf_k1 = 7;
-static double      hpf_k2 = 0.50;
-#else
 static int         lpf_k1 = 5;
 static double      lpf_k2 = 0.95;
 static int         hpf_k1 = 5;
 static double      hpf_k2 = 0.95;
-#endif
 
 static char  *file_name;
 static float *file_data;
@@ -76,7 +69,7 @@ static int    file_sample_rate;
 
 static char       *audio_out_dev = DEFAULT_OUTPUT_DEVICE;
 static int         audio_out_filter = 0;
-static double      audio_out_volume[4] = {1,1,1,1};
+static double      audio_out_volume[4];
 static bool        audio_out_auto_volume;
 
 //
@@ -158,9 +151,9 @@ int main(int argc, char **argv)
     out = (complex*)fftw_malloc(sizeof(complex) * N);
     plan = fftw_plan_dft_1d(N, in, out, FFTW_FORWARD, FFTW_ESTIMATE);
 
-    // init data, use white noise ('1') as default
+    // init data, use file_data if avail, else white noise
     in_data  = (complex*)fftw_malloc(sizeof(complex) * N);
-    init_in_data('1');
+    init_in_data(file_data ? '3': '1');
 
     // create audio_out_thread
     pthread_create(&tid, NULL, audio_out_thread, NULL);
@@ -198,9 +191,6 @@ int main(int argc, char **argv)
 static void init_in_data(int type)
 {
     int i, j, freq;
-
-    // xxx clear filter cx
-    // xxx auto adjust volume when starting
 
     // fill the in_data array, based on 'type' arg
     switch (type) {
@@ -272,15 +262,6 @@ static int audio_out_get_frame(float *out_data, void *cx_arg)
 
     static double cx[200];
     static int idx;
-    static int last_audio_out_filter = -1;
-
-    // xxx OR params have changed
-    if (audio_out_filter != last_audio_out_filter) {
-        printf("Clear cx\n");
-        memset(cx, 0, sizeof(cx));
-        last_audio_out_filter = audio_out_filter;
-        idx = 0;
-    }
 
     // get next in_data value
     vd = creal(in_data[idx]);
@@ -380,7 +361,7 @@ static int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_
                 } \
                 \
                 cm = clip_meter(in, N, (vol), &data_max_val); \
-                if (audio_out_auto_volume) { \
+                if (audio_out_auto_volume || (vol) == 0) { \
                     (vol) = 0.99 / data_max_val; \
                 } \
                 sdl_render_fill_rect(pane, \
@@ -499,25 +480,29 @@ static int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_
     // -----------------------
 
     if (request == PANE_HANDLER_REQ_EVENT) {
-        #define DELA_VOL 0.1
+        #define DELTA_VOL(x) (audio_out_volume[x] >= 10 ? 1.0 : 0.1)
 
         switch (event->event_id) {
         // lpf / bpf filter params
         case SDL_EVENT_LPF_K1:
+            memset(audio_out_volume, 0, sizeof(audio_out_volume));
             if (event->mouse_wheel.delta_y > 0) lpf_k1++;
             if (event->mouse_wheel.delta_y < 0) lpf_k1--;
             break;
         case SDL_EVENT_LPF_K2:
+            memset(audio_out_volume, 0, sizeof(audio_out_volume));
             if (event->mouse_wheel.delta_y > 0) lpf_k2 += .01;
             if (event->mouse_wheel.delta_y < 0) lpf_k2 -= .01;
             break;
 
         // hpf / bpf filter params
         case SDL_EVENT_HPF_K1:
+            memset(audio_out_volume, 0, sizeof(audio_out_volume));
             if (event->mouse_wheel.delta_y > 0) hpf_k1++;
             if (event->mouse_wheel.delta_y < 0) hpf_k1--;
             break;
         case SDL_EVENT_HPF_K2:
+            memset(audio_out_volume, 0, sizeof(audio_out_volume));
             if (event->mouse_wheel.delta_y > 0) hpf_k2 += .01;
             if (event->mouse_wheel.delta_y < 0) hpf_k2 -= .01;
             break;
@@ -526,6 +511,7 @@ static int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_
         case SDL_EVENT_KEY_F(1) ... SDL_EVENT_KEY_F(12):
         case SDL_EVENT_KEY_INSERT: case SDL_EVENT_KEY_HOME: case SDL_EVENT_KEY_PGUP:
         case '1' ... '3':
+            memset(audio_out_volume, 0, sizeof(audio_out_volume));
             init_in_data(event->event_id);
             break;
 
@@ -545,29 +531,29 @@ static int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_
 
         // manual volume ctrls
         case SDL_EVENT_UNF_VOLUME:
-            if (event->mouse_wheel.delta_y > 0) audio_out_volume[0] += DELA_VOL;
-            if (event->mouse_wheel.delta_y < 0) audio_out_volume[0] -= DELA_VOL;
+            if (event->mouse_wheel.delta_y > 0) audio_out_volume[0] += DELTA_VOL(0);
+            if (event->mouse_wheel.delta_y < 0) audio_out_volume[0] -= DELTA_VOL(0);
             break;
         case SDL_EVENT_LPF_VOLUME:
-            if (event->mouse_wheel.delta_y > 0) audio_out_volume[1] += DELA_VOL;
-            if (event->mouse_wheel.delta_y < 0) audio_out_volume[1] -= DELA_VOL;
+            if (event->mouse_wheel.delta_y > 0) audio_out_volume[1] += DELTA_VOL(1);
+            if (event->mouse_wheel.delta_y < 0) audio_out_volume[1] -= DELTA_VOL(1);
             break;
         case SDL_EVENT_HPF_VOLUME:
-            if (event->mouse_wheel.delta_y > 0) audio_out_volume[2] += DELA_VOL;
-            if (event->mouse_wheel.delta_y < 0) audio_out_volume[2] -= DELA_VOL;
+            if (event->mouse_wheel.delta_y > 0) audio_out_volume[2] += DELTA_VOL(2);
+            if (event->mouse_wheel.delta_y < 0) audio_out_volume[2] -= DELTA_VOL(2);
             break;
         case SDL_EVENT_BPF_VOLUME:
-            if (event->mouse_wheel.delta_y > 0) audio_out_volume[3] += DELA_VOL;
-            if (event->mouse_wheel.delta_y < 0) audio_out_volume[3] -= DELA_VOL;
+            if (event->mouse_wheel.delta_y > 0) audio_out_volume[3] += DELTA_VOL(3);
+            if (event->mouse_wheel.delta_y < 0) audio_out_volume[3] -= DELTA_VOL(3);
             break;
         case SDL_EVENT_KEY_UP_ARROW:
             if (audio_out_auto_volume == false) {
-                audio_out_volume[audio_out_filter] += DELA_VOL;
+                audio_out_volume[audio_out_filter] += DELTA_VOL(audio_out_filter);
             }
             break;
         case SDL_EVENT_KEY_DOWN_ARROW:
             if (audio_out_auto_volume == false) {
-                audio_out_volume[audio_out_filter] -= DELA_VOL;
+                audio_out_volume[audio_out_filter] -= DELTA_VOL(audio_out_filter);
             }
             break;
 
@@ -591,7 +577,7 @@ static int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_
         clip_int(&hpf_k1, 1, 500);
         clip_double(&hpf_k2, 0.0, 1.0);
         for (int i = 0; i < 4; i++) {
-            clip_double(&audio_out_volume[i], 0.1, 999);
+            clip_double(&audio_out_volume[i], 0, 1e6);
         }
 
         return PANE_HANDLER_RET_NO_ACTION;
@@ -611,6 +597,7 @@ static int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_
     return PANE_HANDLER_RET_NO_ACTION;
 }
 
+// xxx magnify idx 3
 static int plot(rect_t *pane, int idx, complex *data, int n)
 {
     int y_pixels, y_max, y_origin, x_max, i, x;
