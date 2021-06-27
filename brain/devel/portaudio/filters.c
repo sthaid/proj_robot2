@@ -194,7 +194,7 @@ static void reset_params(void)
     hpf_k1 = 5;
     hpf_k2 = 0.95;
 
-    audio_out_auto_volume = false;
+    audio_out_auto_volume = true;
     for (i = 0; i < 4; i++) {
         audio_out_volume[i] = 0;
     }
