@@ -82,6 +82,7 @@ static int    file_sample_rate;
 static char       *audio_out_dev = DEFAULT_OUTPUT_DEVICE;
 static int         audio_out_filter = 0;
 static double      audio_out_volume[4] = {1,1,1,1};
+static bool        audio_out_auto_volume;
 
 //
 // prototypes
@@ -97,6 +98,7 @@ static void apply_high_pass_filter(complex *data, int n);
 static void apply_band_pass_filter(complex *data, int n);
 static void clip_int(int *v, int low, int high);
 static void clip_double(double *v, double low, double high);
+static int clipping(complex *data, int n, double vol, double *max);
 
 // -----------------  MAIN  --------------------------------------
 
@@ -310,6 +312,9 @@ static int audio_out_get_frame(float *out_data, void *cx_arg)
 
     // xxx
     vo *= audio_out_volume[audio_out_filter];
+    if (vo < -1) vo = -1;  // XXX needed?
+    if (vo > 1) vo = 1;
+
     if (fabs(vo) > 1) {
         printf("INFO vo %0.3f\n", vo);
     }
@@ -356,8 +361,41 @@ static int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_
 
     if (request == PANE_HANDLER_REQ_RENDER) {
         char str[100];
-        int y_origin;
-        double t1;
+        int y_origin, clip_meter;
+        double t1, data_max_val;
+
+        #define FSZ         30
+        #define X_TEXT      (pane->w-195)
+        #define LOC_GRAPH   &(rect_t){0, y_origin-180, pane->w-200, 180 }
+        #define LOC_CLIP    &(rect_t){pane->w-90, y_origin-ROW2Y(5,FSZ), clip_meter*15, FSZ}
+
+        #define DISPLAY_TITLE_LINE(title) \
+            do { \
+                sdl_render_printf(pane, X_TEXT, y_origin-ROW2Y(6,FSZ), FSZ, SDL_WHITE, SDL_BLACK,  \
+                                  title " %d", (int)nearbyint(t1*1000)); \
+            } while (0)
+
+        #define DISPLAY_AUDIO(vol, ev_audio_vol, ev_audio_out_slct) \
+            do { \
+                sprintf(str, "%0.2f", (vol)); \
+                if (audio_out_auto_volume) { \
+                    sdl_render_printf(pane, X_TEXT, y_origin-ROW2Y(5,FSZ), FSZ, SDL_WHITE, SDL_BLACK, "%s", str); \
+                } else { \
+                    sdl_render_text_and_register_event( \
+                        pane,  \
+                        X_TEXT, y_origin-ROW2Y(5,FSZ), \
+                        FSZ, str, SDL_LIGHT_BLUE, SDL_BLACK,  \
+                        ev_audio_vol, SDL_EVENT_TYPE_MOUSE_WHEEL, pane_cx); \
+                } \
+                \
+                clip_meter = clipping(in, N, (vol), &data_max_val); \
+                if (audio_out_auto_volume) { \
+                    (vol) = 0.99 / data_max_val; \
+                } \
+                sdl_render_fill_rect(pane, LOC_CLIP, SDL_RED); \
+                \
+                sdl_register_event(pane, LOC_GRAPH, ev_audio_out_slct, SDL_EVENT_TYPE_MOUSE_CLICK, pane_cx); \
+            } while (0)
 
         // ----------------------
         // plot fft of unfiltered 'in' data
@@ -366,18 +404,8 @@ static int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_
         t1 = TIME(fftw_execute(plan));
         y_origin = plot(pane, 0, out, N);
 
-        sdl_render_printf(pane, pane->w-195, y_origin-ROW2Y(5,30), 30, SDL_WHITE, SDL_BLACK, 
-                          "UNF %d", (int)nearbyint(t1*1000));
-
-        sprintf(str, "%0.1f", audio_out_volume[0]);
-        sdl_render_text_and_register_event(
-            pane, 
-            pane->w-195, y_origin-ROW2Y(4,30),
-            30, str, SDL_LIGHT_BLUE, SDL_BLACK, 
-            SDL_EVENT_UNF_VOLUME, SDL_EVENT_TYPE_MOUSE_WHEEL, pane_cx);
-
-        sdl_register_event(pane, &(rect_t){0, y_origin-180, 1400, 180 },
-                           SDL_EVENT_AUDIO_OUT_UNF, SDL_EVENT_TYPE_MOUSE_CLICK, pane_cx);
+        DISPLAY_TITLE_LINE("UNF");
+        DISPLAY_AUDIO(audio_out_volume[0], SDL_EVENT_UNF_VOLUME, SDL_EVENT_AUDIO_OUT_UNF);
 
         // -------------------------------------
         // plot fft of low pass filtered 'in' data
@@ -387,32 +415,22 @@ static int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_
         fftw_execute(plan);
         y_origin = plot(pane, 1, out, N);
 
-        sdl_render_printf(pane, pane->w-195, y_origin-ROW2Y(5,30), 30, SDL_WHITE, SDL_BLACK,
-                          "LPF %d", (int)nearbyint(t1*1000));
-
-        sprintf(str, "%0.1f", audio_out_volume[1]);
-        sdl_render_text_and_register_event(
-            pane,
-            pane->w-195, y_origin-ROW2Y(4,30),
-            30, str, SDL_LIGHT_BLUE, SDL_BLACK,
-            SDL_EVENT_LPF_VOLUME, SDL_EVENT_TYPE_MOUSE_WHEEL, pane_cx);
+        DISPLAY_TITLE_LINE("LPF");
+        DISPLAY_AUDIO(audio_out_volume[1], SDL_EVENT_LPF_VOLUME, SDL_EVENT_AUDIO_OUT_LPF);
 
         sprintf(str, "%4d", lpf_k1);
         sdl_render_text_and_register_event(
             pane, 
-            pane->w-195, y_origin-ROW2Y(2,30),
-            30, str, SDL_LIGHT_BLUE, SDL_BLACK, 
+            X_TEXT, y_origin-ROW2Y(2,FSZ),
+            FSZ, str, SDL_LIGHT_BLUE, SDL_BLACK, 
             SDL_EVENT_LPF_K1, SDL_EVENT_TYPE_MOUSE_WHEEL, pane_cx);
 
         sprintf(str, "%4.2f", lpf_k2);
         sdl_render_text_and_register_event(
             pane, 
-            pane->w-195, y_origin-ROW2Y(1,30),
-            30, str, SDL_LIGHT_BLUE, SDL_BLACK, 
+            X_TEXT, y_origin-ROW2Y(1,FSZ),
+            FSZ, str, SDL_LIGHT_BLUE, SDL_BLACK, 
             SDL_EVENT_LPF_K2, SDL_EVENT_TYPE_MOUSE_WHEEL, pane_cx);
-
-        sdl_register_event(pane, &(rect_t){0, y_origin-180, 1400, 180 },
-                           SDL_EVENT_AUDIO_OUT_LPF, SDL_EVENT_TYPE_MOUSE_CLICK, pane_cx);
 
         // -------------------------------------
         // plot fft of high pass filtered 'in' data
@@ -422,32 +440,22 @@ static int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_
         fftw_execute(plan);
         y_origin = plot(pane, 2, out, N);
 
-        sdl_render_printf(pane, pane->w-195, y_origin-ROW2Y(5,30), 30, SDL_WHITE, SDL_BLACK,
-                          "HPF %d", (int)nearbyint(t1*1000));
-
-        sprintf(str, "%0.1f", audio_out_volume[2]);
-        sdl_render_text_and_register_event(
-            pane,
-            pane->w-195, y_origin-ROW2Y(4,30),
-            30, str, SDL_LIGHT_BLUE, SDL_BLACK,
-            SDL_EVENT_HPF_VOLUME, SDL_EVENT_TYPE_MOUSE_WHEEL, pane_cx);
+        DISPLAY_TITLE_LINE("HPF");
+        DISPLAY_AUDIO(audio_out_volume[2], SDL_EVENT_HPF_VOLUME, SDL_EVENT_AUDIO_OUT_HPF);
 
         sprintf(str, "%4d", hpf_k1);
         sdl_render_text_and_register_event(
             pane, 
-            pane->w-195, y_origin-ROW2Y(2,30),
-            30, str, SDL_LIGHT_BLUE, SDL_BLACK, 
+            X_TEXT, y_origin-ROW2Y(2,FSZ),
+            FSZ, str, SDL_LIGHT_BLUE, SDL_BLACK, 
             SDL_EVENT_HPF_K1, SDL_EVENT_TYPE_MOUSE_WHEEL, pane_cx);
 
         sprintf(str, "%4.2f", hpf_k2);
         sdl_render_text_and_register_event(
             pane, 
-            pane->w-195, y_origin-ROW2Y(1,30),
-            30, str, SDL_LIGHT_BLUE, SDL_BLACK, 
+            X_TEXT, y_origin-ROW2Y(1,FSZ),
+            FSZ, str, SDL_LIGHT_BLUE, SDL_BLACK, 
             SDL_EVENT_HPF_K2, SDL_EVENT_TYPE_MOUSE_WHEEL, pane_cx);
-
-        sdl_register_event(pane, &(rect_t){0, y_origin-180, 1400, 180 },
-                           SDL_EVENT_AUDIO_OUT_HPF, SDL_EVENT_TYPE_MOUSE_CLICK, pane_cx);
 
         // -------------------------------------
         // plot fft of band pass filtered 'in' data
@@ -457,46 +465,36 @@ static int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_
         fftw_execute(plan);
         y_origin = plot(pane, 3, out, N);
 
-        sdl_render_printf(pane, pane->w-195, y_origin-ROW2Y(6,30), 30, SDL_WHITE, SDL_BLACK,
-                          "BPF %d", (int)nearbyint(t1*1000));
-
-        sprintf(str, "%0.1f", audio_out_volume[3]);
-        sdl_render_text_and_register_event(
-            pane,
-            pane->w-195, y_origin-ROW2Y(5,30),
-            30, str, SDL_LIGHT_BLUE, SDL_BLACK,
-            SDL_EVENT_BPF_VOLUME, SDL_EVENT_TYPE_MOUSE_WHEEL, pane_cx);
+        DISPLAY_TITLE_LINE("BPF");
+        DISPLAY_AUDIO(audio_out_volume[3], SDL_EVENT_BPF_VOLUME, SDL_EVENT_AUDIO_OUT_BPF);
 
         sprintf(str, "%4d", lpf_k1);
         sdl_render_text_and_register_event(
             pane, 
-            pane->w-195, y_origin-ROW2Y(4,30),
-            30, str, SDL_LIGHT_BLUE, SDL_BLACK,
+            X_TEXT, y_origin-ROW2Y(4,FSZ),
+            FSZ, str, SDL_LIGHT_BLUE, SDL_BLACK,
             SDL_EVENT_LPF_K1, SDL_EVENT_TYPE_MOUSE_WHEEL, pane_cx);
 
         sprintf(str, "%4.2f", lpf_k2);
         sdl_render_text_and_register_event(
             pane, 
-            pane->w-195, y_origin-ROW2Y(3,30),
-            30, str, SDL_LIGHT_BLUE, SDL_BLACK,
+            X_TEXT, y_origin-ROW2Y(3,FSZ),
+            FSZ, str, SDL_LIGHT_BLUE, SDL_BLACK,
             SDL_EVENT_LPF_K2, SDL_EVENT_TYPE_MOUSE_WHEEL, pane_cx);
 
         sprintf(str, "%4d", hpf_k1);
         sdl_render_text_and_register_event(
             pane, 
-            pane->w-195, y_origin-ROW2Y(2,30),
-            30, str, SDL_LIGHT_BLUE, SDL_BLACK,
+            X_TEXT, y_origin-ROW2Y(2,FSZ),
+            FSZ, str, SDL_LIGHT_BLUE, SDL_BLACK,
             SDL_EVENT_HPF_K1, SDL_EVENT_TYPE_MOUSE_WHEEL, pane_cx);
 
         sprintf(str, "%4.2f", hpf_k2);
         sdl_render_text_and_register_event(
             pane, 
-            pane->w-195, y_origin-ROW2Y(1,30),
-            30, str, SDL_LIGHT_BLUE, SDL_BLACK,
+            X_TEXT, y_origin-ROW2Y(1,FSZ),
+            FSZ, str, SDL_LIGHT_BLUE, SDL_BLACK,
             SDL_EVENT_HPF_K2, SDL_EVENT_TYPE_MOUSE_WHEEL, pane_cx);
-
-        sdl_register_event(pane, &(rect_t){0, y_origin-180, 1400, 180 },
-                           SDL_EVENT_AUDIO_OUT_BPF, SDL_EVENT_TYPE_MOUSE_CLICK, pane_cx);
 
         return PANE_HANDLER_RET_NO_ACTION;
     }
@@ -564,10 +562,23 @@ static int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_
             if (event->mouse_wheel.delta_y < 0) audio_out_volume[3] -= VOL_CHANGE;
             break;
         case SDL_EVENT_KEY_UP_ARROW:
-            audio_out_volume[audio_out_filter] += VOL_CHANGE;
+            if (audio_out_auto_volume == false) {
+                audio_out_volume[audio_out_filter] += VOL_CHANGE;
+            }
             break;
         case SDL_EVENT_KEY_DOWN_ARROW:
-            audio_out_volume[audio_out_filter] -= VOL_CHANGE;
+            if (audio_out_auto_volume == false) {
+                audio_out_volume[audio_out_filter] -= VOL_CHANGE;
+            }
+            break;
+
+        case 'a':
+            audio_out_auto_volume = !audio_out_auto_volume;
+            break;
+        case 'r':
+            for (int i = 0; i < 4; i++) {
+                audio_out_volume[i] = 1;
+            }
             break;
 
         default:
@@ -580,7 +591,7 @@ static int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_
         clip_int(&hpf_k1, 1, 500);
         clip_double(&hpf_k2, 0.0, 1.0);
         for (int i = 0; i < 4; i++) {
-            clip_double(&audio_out_volume[i], 0.1, 100);
+            clip_double(&audio_out_volume[i], 0.1, 999);
         }
 
         return PANE_HANDLER_RET_NO_ACTION;
@@ -709,3 +720,24 @@ static void clip_double(double *v, double low, double high)
     }
 }
 
+static int clipping(complex *data, int n, double vol, double *max_arg)
+{
+    int cnt=0, i;
+    double max=0, v_clip=1/vol, v;
+
+    for (i = 0; i < n; i++) {
+        v = fabs(creal(data[i]));
+        if (v > v_clip) cnt++;
+        if (v > max) max = v;
+    }
+
+    *max_arg = max;
+
+    return (cnt == 0     ? 0 :
+            cnt < 10     ? 1 :
+            cnt < 100    ? 2 :
+            cnt < 1000   ? 3 :
+            cnt < 10000  ? 4 :
+            cnt < 100000 ? 5 :
+                           6);
+}
