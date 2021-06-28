@@ -156,7 +156,7 @@ int main(int argc, char **argv)
 
 static void init_sine_data(void)
 {
-    double freq;
+    double freq = 500;
     int i;
 
     max_data = duration * SAMPLE_RATE * MAX_CHAN;
