@@ -218,7 +218,7 @@ static void reset_params(void)
 // - '3':         file-data
 static void init_in_data(int type)
 {
-    int i, freq;
+    int i, j, freq;
 
     // fill the in_data array, based on 'type' arg
     switch (type) {
@@ -250,8 +250,9 @@ static void init_in_data(int type)
             printf("WARNING: no file data\n");
             break;
         }
-        for (i = 0; i < N; i++) {
-            in_data[i] = file_data[i];
+        for (i = 0, j = 0; i < N; i++) {
+            in_data[i] = file_data[j];
+            j += file_max_chan;
         }
         break;
     default:
