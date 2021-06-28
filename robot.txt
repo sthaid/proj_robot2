@@ -427,6 +427,78 @@ write sdl pgm to plot the 4 channels of raw data
 xxxxxxxxxxxxxxxxxxxxxxxxxxxx
 xxxxxxxxxxxxxxxxxxxxxxxxxxxx
 xxxxxxxxxxxxxxxxxxxxxxxxxxxx
+TODO
+- play filtered wav file from the filters pgm
+
+filters    playback a wave file
+test plot using sine wave sweep recorded on 4mic
+
+analyze 
+
+avoid use of NOTICE, etc
+
+use consistent options
+
+update usage comment and -h
+
+-----------
+XXXXXXX
+- record, drop first 1 second but still use DURATION as recording time
+- make 5 sec recording with 1 TEST
+- in filter.c  require file duration is >= 
+
+vvvvvvvvvv
+
+amplitude
+- amplitude cliping
+- clean up display fmt
+
+audio out for mixed data
+
+'a'  reset to 1
+'A' auto amp
+
+incr vol by 1 when over 10
+----------
+
+
+filters.c
+-f filename:outdev
+-t sin|rand
+-h 
+
+
+analyze.c
+
+
+
+DONE
+gen                                          pa_play          clean up select
+devs
+sf_utils
+record    uses file_utils      pa_record 
+plot      uses file_utils      pa_record
+- get rid of file_utils, use wav instead
+
+gen.c
+-d device
+-t white | 500 | 500,600
+-f filename
+-T duration    default 10
+
+record.c
+-d device
+-f filename
+-T duration    default 10
+-h
+
+plot.c
+-f filename
+-d device
+-h 
+
+----------------------------
+
 file
 - magic
 - max_channel

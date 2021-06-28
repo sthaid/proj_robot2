@@ -17,7 +17,7 @@
 #define SAMPLE_RATE          48000  // samples per sec
 
 #define DEFAULT_IN_DEV       SEEED_4MIC_VOICECARD
-#define DEFAULT_DURATION     10     // secs
+#define DEFAULT_DURATION     5      // secs
 #define DEFAULT_FILE_NAME    "record.wav"
 
 //
@@ -82,7 +82,7 @@ int main(int argc, char **argv)
     }
 
     // record sound data
-    if (pa_record(input_device, max_chan, max_data, SAMPLE_RATE, data) < 0) {
+    if (pa_record(input_device, max_chan, max_data, SAMPLE_RATE, data, 48000) < 0) {
         printf("ERROR: pa_record failed\n");
         return 1;
     }

@@ -200,7 +200,7 @@ typedef struct {
 
 static int record_cb(const float *data, void *cx);
 
-int pa_record(char *input_device, int max_chan, int max_data, int sample_rate, float *data)
+int pa_record(char *input_device, int max_chan, int max_data, int sample_rate, float *data, int discard_samples)
 {
     record_cx_t cx;
 
@@ -214,7 +214,7 @@ int pa_record(char *input_device, int max_chan, int max_data, int sample_rate, f
     cx.frame_idx  = 0;
     cx.data       = data;
 
-    return pa_record2(input_device, max_chan, sample_rate, record_cb, &cx);
+    return pa_record2(input_device, max_chan, sample_rate, record_cb, &cx, discard_samples);
 }
 
 static int record_cb(const float *data, void *cx_arg)
@@ -242,6 +242,7 @@ typedef struct {
     record2_put_frame_t put_frame;
     void               *put_frame_cx;
     int                 max_chan;
+    int                 discard_samples;
     bool                done;
 } record2_user_data_t;
 
@@ -254,7 +255,7 @@ static int record_stream_cb2(const void *input,
 
 static void record_stream_finished_cb2(void *user_data);
 
-int pa_record2(char *input_device, int max_chan, int sample_rate, record2_put_frame_t put_frame, void *put_frame_cx)
+int pa_record2(char *input_device, int max_chan, int sample_rate, record2_put_frame_t put_frame, void *put_frame_cx, int discard_samples)
 {
     PaError             rc;
     PaStream           *stream = NULL;
@@ -264,10 +265,11 @@ int pa_record2(char *input_device, int max_chan, int sample_rate, record2_put_fr
 
     // init user_data
     memset(&ud, 0, sizeof(ud));
-    ud.put_frame     = put_frame;
-    ud.put_frame_cx  = put_frame_cx;
-    ud.max_chan      = max_chan;
-    ud.done          = false;
+    ud.put_frame       = put_frame;
+    ud.put_frame_cx    = put_frame_cx;
+    ud.max_chan        = max_chan;
+    ud.discard_samples = discard_samples;
+    ud.done            = false;
 
     // get the input device idx
     devidx = pa_find_device(input_device);
@@ -341,6 +343,11 @@ static int record_stream_cb2(const void *input,
     int i, rc;
 
     for (i = 0; i < frame_count; i++) {
+        if (ud->discard_samples > 0) {
+            ud->discard_samples--;
+            continue;
+        }
+
         rc = ud->put_frame(input, ud->put_frame_cx);
         input += (ud->max_chan * sizeof(float));
         if (rc != 0) return paComplete;

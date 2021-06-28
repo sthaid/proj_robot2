@@ -142,6 +142,11 @@ int main(int argc, char **argv)
             printf("FATAL: file smaple_rate=%d, must be %d\n", file_sample_rate, SAMPLE_RATE);
             return 1;
         }
+        if (file_max_data/file_max_chan < N) {
+            printf("FATAL: file frames=%d (%d / %d) is < %d\n",
+                   file_max_data/file_max_chan, file_max_data, file_max_chan, N);
+            return 1;
+        }
     }
 
     // init portaudio
@@ -213,7 +218,7 @@ static void reset_params(void)
 // - '3':         file-data
 static void init_in_data(int type)
 {
-    int i, j, freq;
+    int i, freq;
 
     // fill the in_data array, based on 'type' arg
     switch (type) {
@@ -245,10 +250,8 @@ static void init_in_data(int type)
             printf("WARNING: no file data\n");
             break;
         }
-        for (i=0, j=0; i < N; i++) {
-            in_data[i] = file_data[j];
-            j += file_max_chan;
-            if (j >= file_max_data) j = 0;
+        for (i = 0; i < N; i++) {
+            in_data[i] = file_data[i];
         }
         break;
     default:

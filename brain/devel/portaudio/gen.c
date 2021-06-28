@@ -14,7 +14,7 @@
 
 #define SAMPLE_RATE         48000  // samples per sec
 #define MAX_CHAN            2
-#define DEFAULT_DURATION    10
+#define DEFAULT_DURATION    5
 #define DEFAULT_START_FREQ  100
 #define DEFAULT_END_FREQ    1000
 
