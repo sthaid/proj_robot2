@@ -61,7 +61,7 @@ static int play_cb(float *data, void *cx_arg)
         return -1;
     }
 
-    // copy a frame to caller's buffer
+    // copy a frame to portaudio buffer
     memcpy(data, 
            &cx->data[cx->frame_idx * cx->max_chan], 
            cx->max_chan * sizeof(float));
@@ -189,49 +189,85 @@ static void play_stream_finished_cb2(void *user_data)
     ud->done = true;
 }
 
-// -----------------  RECORD  ----------------------------------------------------
-
-// XXX make this similar to PLAY
+// -----------------  RECORD - DATA SUPPLIED IN CALLER SUPPLIED ARRAY  -------------
 
 typedef struct {
-    int     max_chan;
-    int     max_data;
-    int     sample_rate;
-    float  *data;
-    int     data_idx;
-    bool    done;
-} record_user_data_t;
+    int max_chan;
+    int max_frames;
+    int frame_idx;
+    float *data;
+} record_cx_t;
 
-static int record_stream_cb(const void *input,
-                            void *output,
-                            unsigned long frame_count,
-                            const PaStreamCallbackTimeInfo *timeinfo,
-                            PaStreamCallbackFlags status_flags,
-                            void *ud);
-static void record_stream_finished_cb(void *ud);
+static int record_cb(const float *data, void *cx);
 
 int pa_record(char *input_device, int max_chan, int max_data, int sample_rate, float *data)
 {
-    PaError             rc;
-    PaStream           *stream = NULL;
-    PaStreamParameters  input_params;
-    PaDeviceIndex       devidx;
-    record_user_data_t  ud;
+    record_cx_t cx;
 
-    // verify max_data is a multiple of max_chan
     if ((max_data % max_chan) != 0) {
         printf("ERROR: max_data=%d must be a multiple of max_chan=%d\n", max_data, max_chan);
         return -1;
     }
 
+    cx.max_chan   = max_chan;
+    cx.max_frames = max_data / max_chan;
+    cx.frame_idx  = 0;
+    cx.data       = data;
+
+    return pa_record2(input_device, max_chan, sample_rate, record_cb, &cx);
+}
+
+static int record_cb(const float *data, void *cx_arg)
+{
+    record_cx_t *cx = cx_arg;
+
+    // if no more frames available to record then return -1
+    if (cx->frame_idx == cx->max_frames) {
+        return -1;
+    }
+
+    // copy a frame from portaudio buffer
+    memcpy(&cx->data[cx->frame_idx * cx->max_chan], 
+           data,
+           cx->max_chan * sizeof(float));
+    cx->frame_idx++;
+
+    // return 0, meaning continue
+    return 0;
+}
+
+// -----------------  RECORD - DATA SUPPLIED BY CALLER SUPPLIED CALLBACK PROC  -----
+
+typedef struct {
+    record2_put_frame_t put_frame;
+    void               *put_frame_cx;
+    int                 max_chan;
+    bool                done;
+} record2_user_data_t;
+
+static int record_stream_cb2(const void *input,
+                             void *output,
+                             unsigned long frame_count,
+                             const PaStreamCallbackTimeInfo *timeinfo,
+                             PaStreamCallbackFlags status_flags,
+                             void *user_data);
+
+static void record_stream_finished_cb2(void *user_data);
+
+int pa_record2(char *input_device, int max_chan, int sample_rate, record2_put_frame_t put_frame, void *put_frame_cx)
+{
+    PaError             rc;
+    PaStream           *stream = NULL;
+    PaStreamParameters  input_params;
+    PaDeviceIndex       devidx;
+    record2_user_data_t ud;
+
     // init user_data
     memset(&ud, 0, sizeof(ud));
-    ud.max_chan    = max_chan;
-    ud.max_data    = max_data;
-    ud.sample_rate = sample_rate;
-    ud.data        = data;
-    ud.data_idx    = 0;
-    ud.done        = false;
+    ud.put_frame     = put_frame;
+    ud.put_frame_cx  = put_frame_cx;
+    ud.max_chan      = max_chan;
+    ud.done          = false;
 
     // get the input device idx
     devidx = pa_find_device(input_device);
@@ -245,24 +281,24 @@ int pa_record(char *input_device, int max_chan, int max_data, int sample_rate, f
     input_params.device            = devidx;
     input_params.channelCount      = max_chan;
     input_params.sampleFormat      = paFloat32;
-    input_params.suggestedLatency  = Pa_GetDeviceInfo(input_params.device)->defaultLowOutputLatency;
+    input_params.suggestedLatency  = Pa_GetDeviceInfo(input_params.device)->defaultLowInputLatency;
     input_params.hostApiSpecificStreamInfo = NULL;
 
     rc = Pa_OpenStream(&stream,
                        &input_params,
-                       NULL,   // output
+                       NULL,   // output_params
                        sample_rate,
                        paFramesPerBufferUnspecified,
                        0,       // stream flags
-                       record_stream_cb,
+                       record_stream_cb2,
                        &ud);   // user_data
     if (rc != paNoError) {
         printf("ERROR: Pa_OpenStream rc=%d, %s\n", rc, Pa_GetErrorText(rc));
         goto error;
     }
 
-    // register callback for when the the audio input compltes
-    rc = Pa_SetStreamFinishedCallback(stream, record_stream_finished_cb);
+    // register callback for when the the audio input completes
+    rc = Pa_SetStreamFinishedCallback(stream, record_stream_finished_cb2);
     if (rc != paNoError) {
         printf("ERROR: Pa_SetStreamFinishedCallback rc=%d, %s\n", rc, Pa_GetErrorText(rc));
         goto error;
@@ -294,33 +330,27 @@ error:
     return -1;
 }
 
-static int record_stream_cb(const void *input,
-                            void *output,
-                            unsigned long frame_count,
-                            const PaStreamCallbackTimeInfo *timeinfo,
-                            PaStreamCallbackFlags status_flags,
-                            void *user_data)
+static int record_stream_cb2(const void *input,
+                             void *output,
+                             unsigned long frame_count,
+                             const PaStreamCallbackTimeInfo *timeinfo,
+                             PaStreamCallbackFlags status_flags,
+                             void *user_data)
 {
-    record_user_data_t *ud = user_data;
-    int frames_avail = (ud->max_data - ud->data_idx) / ud->max_chan;
+    record2_user_data_t *ud = user_data;
+    int i, rc;
 
-    // reduce frame_count if there is not enough space remaining in data
-    if (frame_count > frames_avail) {
-        frame_count = frames_avail;
+    for (i = 0; i < frame_count; i++) {
+        rc = ud->put_frame(input, ud->put_frame_cx);
+        input += (ud->max_chan * sizeof(float));
+        if (rc != 0) return paComplete;
     }
-
-    // copy the frames from the input buffer, and
-    // updata data_idx
-    memcpy(&ud->data[ud->data_idx], input, frame_count * ud->max_chan * sizeof(float));
-    ud->data_idx += frame_count * ud->max_chan;
-
-    // return either paComplete or paContinue
-    return ud->data_idx == ud->max_data ? paComplete : paContinue;
+    return paContinue;
 }
 
-static void record_stream_finished_cb(void *user_data)
+static void record_stream_finished_cb2(void *user_data)
 {
-    record_user_data_t *ud = user_data;
+    record2_user_data_t *ud = user_data;
     ud->done = true;
 }
 
