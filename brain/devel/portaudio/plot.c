@@ -137,6 +137,7 @@ int main(int argc, char **argv)
 
 static void *get_mic_data_thread(void *cx)
 {
+    // XXX comment 48000
     if (pa_record(data_src_name, max_chan, max_data, sample_rate, data, 48000) < 0) {
         FATAL("failed pa_record, %s\n", data_src_name);
     }

@@ -46,5 +46,6 @@ brain/devel/portaudio/devs
 brain/devel/portaudio/gen
 brain/devel/portaudio/record
 brain/devel/portaudio/plot
+brain/devel/portaudio/filters
 brain/devel/portaudio/analyze
 
