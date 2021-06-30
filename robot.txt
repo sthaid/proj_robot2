@@ -442,10 +442,6 @@ use consistent options
 update usage comment and -h
 
 -----------
-XXXXXXX
-- record, drop first 1 second but still use DURATION as recording time
-- make 5 sec recording with 1 TEST
-- in filter.c  require file duration is >= 
 
 vvvvvvvvvv
 
