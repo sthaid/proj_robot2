@@ -8,9 +8,11 @@
 #include <string.h>
 #include <errno.h>
 #include <pthread.h>
+#include <math.h>
 
-#include <util_misc.h>
+#include <util_misc.h>  // xxx needed?
 #include <sf_utils.h>
+#include <filter_utils.h>
 
 //
 // defines
@@ -38,12 +40,15 @@ static double squared(double v);
 static void *get_data_from_file_thread(void *cx);
 static void process_data(float *frame, double time_secs, void *cx);
 
+static char *stars(double v, double max_v, int max_stars, char *s);
+
 // -----------------  MAIN  ------------------------------------------------
 
 int main(int argc, char **argv)
 {
     pthread_t tid;
-    char *file_name = "4mic_0.wav";  // xxx arg for this and mic
+    //char *file_name = "4mic_0.wav";  // xxx arg for this and mic
+    char *file_name = "4mic_270.wav";  // xxx arg for this and mic
 
     setlinebuf(stdout);
 
@@ -163,6 +168,7 @@ static void process_data(float *frame, double time_now, void *cx)
 
     #define WINDOW_DURATION   ((double)MAX_CHAN_DATA / SAMPLE_RATE)
 
+    // xxx make this an inline and check the offset
     #define DATA(_chan,_offset) \
         data [ _chan ] [ idx+(_offset) >= 0 ? idx+(_offset) : idx+(_offset)+MAX_CHAN_DATA ]
 
@@ -172,6 +178,7 @@ static void process_data(float *frame, double time_now, void *cx)
     static double   time_sound_start;
 
     bool got_sound;
+    int  i;
 
     // notes:
     // - time values used in this routine have units of seconds
@@ -192,13 +199,23 @@ static void process_data(float *frame, double time_now, void *cx)
     // increment data idx
     idx = (idx + 1) % MAX_CHAN_DATA;
 
+    // xxx filter
+    static double filter_cx[MAX_CHAN][10];
+#if 0
+    for (int chan = 0; chan < MAX_CHAN; chan++) {
+        frame[chan] = low_pass_filter_ex(frame[chan], filter_cx[chan], 1, 0.80);
+    }
+#endif
+
     // copy the input frame data to the static 'data' arrray
     for (int chan = 0; chan < MAX_CHAN; chan++) {
-        DATA(chan,0) = frame[chan];
+        //DATA(chan,0) = frame[chan];
+        //DATA(chan,0) = low_pass_filter_ex(frame[chan], filter_cx[chan], 1, 0.95);
+        //DATA(chan,0) = high_pass_filter_ex(frame[chan], filter_cx[chan], 1, 0.95);
+        //DATA(chan,0) = high_pass_filter_ex(frame[chan], filter_cx[chan], 1, 0.80);
+        DATA(chan,0) = high_pass_filter_ex(frame[chan], filter_cx[chan], 1, 0.75);  // looks okay
     }
 
-    // determine the avg amplitude ovr the past WINDOW_DURATION for chan 0
-    amp += (squared(DATA(0,0)) - squared(DATA(0,-(MAX_CHAN_DATA-1))));
 
 #if 0
     // XXX temp
@@ -206,6 +223,32 @@ static void process_data(float *frame, double time_now, void *cx)
         printf("%0.3f  -  %10.3f\n", time_now, amp);
     }
 #endif
+
+    // corr[10] is center
+    static double corr02[41];
+    static double corr13[41];
+    const int max = MAX_CHAN_DATA-1;
+#if 0
+    for (i = -20; i <= 20; i++) {
+        corr02[i+20] += DATA(0,-20) * DATA(2,-(20+i))  -
+                        DATA(0,-(max-20)) * DATA(2,-(max-20+i));
+    }
+    for (i = -20; i <= 20; i++) {
+        corr13[i+20] += DATA(1,-20) * DATA(3,-(20+i))  -
+                        DATA(1,-(max-20)) * DATA(3,-(max-20+i));
+    }
+#endif
+    for (i = -20; i <= 20; i++) {
+        corr02[i+20] += DATA(0,-20) * DATA(1,-(20+i))  -
+                        DATA(0,-(max-20)) * DATA(1,-(max-20+i));
+    }
+    for (i = -20; i <= 20; i++) {
+        corr13[i+20] += DATA(0,-20) * DATA(3,-(20+i))  -
+                        DATA(0,-(max-20)) * DATA(3,-(max-20+i));
+    }
+
+    // determine the avg amplitude ovr the past WINDOW_DURATION for chan 0
+    amp += (squared(DATA(0,0)) - squared(DATA(0,-(MAX_CHAN_DATA-1))));
 
     // xxx comments
     got_sound = false;
@@ -225,6 +268,17 @@ static void process_data(float *frame, double time_now, void *cx)
         time_sound_start = 0;
     }
 
+#if 0
+    static int flag = 1;
+    if (flag) {
+        if (time_now >= 1) {
+            printf("TEST\n");
+            got_sound = true;
+            flag = false;
+        }
+    }
+#endif
+
     // if there is not sound data to analyze then return
     if (got_sound == false) {
         return;
@@ -234,5 +288,35 @@ static void process_data(float *frame, double time_now, void *cx)
     printf("%0.3f - ANALYZE SOUND amp=%0.3f  intvl=%0.3f ... %0.3f\n", 
                    time_now, amp, time_sound_start, time_now);
 
+    double max_corr02=0, max_corr13=0;
+    for (i = -20; i <= 20; i++) {
+        if (corr02[i+20] > max_corr02) max_corr02 = corr02[i+20];
+        if (corr13[i+20] > max_corr13) max_corr13 = corr13[i+20];
+    }
+
+    for (i = -20; i <= 20; i++) {
+        char s1[100], s2[100];
+        printf("%3d: %5.1f %-30s - %5.1f %-30s\n",
+               i,
+               corr02[i+20], stars(corr02[i+20], max_corr02, 30, s1),
+               corr13[i+20],  stars(corr13[i+20], max_corr13, 30, s2));
+    }
+
+
+    //memset(corr02,0,sizeof(corr02));
+    //memset(corr13,0,sizeof(corr13));
+    //memset(filter_cx,0,sizeof(filter_cx));
     // xxx continue here
+}
+
+static char *stars(double v, double max_v, int max_stars, char *s)
+{
+    if (v < 0) v = 0;
+    if (v > max_v) v = max_v;
+
+    int n = nearbyint(v / max_v * max_stars);
+    memset(s, '*', n);
+    s[n] = '\0';
+
+    return s;
 }
