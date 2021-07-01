@@ -22,8 +22,10 @@
 #include <math.h>
 
 #include <util_misc.h>  // xxx needed?
+
 #include <sf_utils.h>
-#include <filter_utils.h>
+#include <filter_utils.h>  // xxx rename to filters.h
+#include <poly_fit.h>
 
 //
 // defines
@@ -51,6 +53,7 @@ static double squared(double v);
 static void *get_data_from_file_thread(void *cx);
 static void process_data(float *frame, double time_secs, void *cx);
 
+static double normalize(double angle);
 static char *stars(double v, double max_v, int max_stars, char *s);
 static void print_frame_rate(double time_now);
 
@@ -194,6 +197,7 @@ static void *get_data_from_file_thread(void *cx)
 
 // -------------------------------------------------------------------------
 
+// time values used in this routine have units of seconds
 static void process_data(float *frame, double time_now, void *cx)
 {
     // window = 0.5 secs
@@ -216,9 +220,6 @@ static void process_data(float *frame, double time_now, void *cx)
     bool got_sound;
     int  i;
 
-    // notes:
-    // - time values used in this routine have units of seconds
-
     // print the frame rate once per sec
     print_frame_rate(time_now);
 
@@ -227,38 +228,46 @@ static void process_data(float *frame, double time_now, void *cx)
 
     // copy the input frame data to the static 'data' arrray
     // xxx comment about filtering
+    // xxx dont need the ex filter
     for (int chan = 0; chan < MAX_CHAN; chan++) {
         DATA(chan,0) = high_pass_filter_ex(frame[chan], filter_cx[chan], 1, 0.75);
     }
 
-#if 0 // XXX temp
+#if 0 
+    // xxx used to unit test amplitude monitoring
     if (time_now > 1 && time_now < 3) {
         printf("%0.3f  -  %10.3f\n", time_now, amp);
     }
 #endif
 
+//cross_corr_a
+//corr_a
+//corr_b
+//cca
+//ccb
     // corr[10] is center
-    static double corr02[41];
-    static double corr13[41];
+    static double cca[41];
+    static double ccb[41];
     const int max = MAX_CHAN_DATA-1;
-#if 0  // xxx use defines for which channels
+#if 1  // xxx use defines for which channels
     for (i = -20; i <= 20; i++) {
-        corr02[i+20] += DATA(0,-20) * DATA(2,-(20+i))  -
+        cca[i+20] += DATA(0,-20) * DATA(2,-(20+i))  -
                         DATA(0,-(max-20)) * DATA(2,-(max-20+i));
     }
     for (i = -20; i <= 20; i++) {
-        corr13[i+20] += DATA(1,-20) * DATA(3,-(20+i))  -
+        ccb[i+20] += DATA(1,-20) * DATA(3,-(20+i))  -
                         DATA(1,-(max-20)) * DATA(3,-(max-20+i));
     }
-#endif
+#else
     for (i = -20; i <= 20; i++) {
-        corr02[i+20] += DATA(0,-20) * DATA(1,-(20+i))  -
+        cca[i+20] += DATA(0,-20) * DATA(1,-(20+i))  -
                         DATA(0,-(max-20)) * DATA(1,-(max-20+i));
     }
     for (i = -20; i <= 20; i++) {
-        corr13[i+20] += DATA(0,-20) * DATA(3,-(20+i))  -
+        ccb[i+20] += DATA(0,-20) * DATA(3,-(20+i))  -
                         DATA(0,-(max-20)) * DATA(3,-(max-20+i));
     }
+#endif
 
     // determine the avg amplitude ovr the past WINDOW_DURATION for chan 0
     amp += (squared(DATA(0,0)) - squared(DATA(0,-(MAX_CHAN_DATA-1))));
@@ -275,6 +284,7 @@ static void process_data(float *frame, double time_now, void *cx)
     if (time_sound_start > 0 && time_now >= time_sound_start + WINDOW_DURATION) {
         got_sound = (amp > MIN_END_AMP);
         if (got_sound == false) {
+            // xxx see this printed now for 4mic_270.wav
             printf("%0.3f - *** DISCARD *** SOUND amp=%0.3f  intvl=%0.3f ... %0.3f\n", 
                    time_now, amp, time_sound_start, time_now);
         }
@@ -290,20 +300,76 @@ static void process_data(float *frame, double time_now, void *cx)
     printf("%0.3f - ANALYZE SOUND amp=%0.3f  intvl=%0.3f ... %0.3f\n", 
                    time_now, amp, time_now-WINDOW_DURATION, time_now);
 
-    double max_corr02=0, max_corr13=0;
+    double max_cca=0, max_ccb=0;
+    int max_cca_idx=-1, max_ccb_idx=-1;
     for (i = -20; i <= 20; i++) {
-        if (corr02[i+20] > max_corr02) max_corr02 = corr02[i+20];
-        if (corr13[i+20] > max_corr13) max_corr13 = corr13[i+20];
+        if (cca[i+20] > max_cca) {
+            max_cca = cca[i+20];
+            max_cca_idx = i;
+        }
+        if (ccb[i+20] > max_ccb) {
+            max_ccb = ccb[i+20];
+            max_ccb_idx = i;
+        }
     }
 
     for (i = -20; i <= 20; i++) {
         char s1[100], s2[100];
         printf("%3d: %5.1f %-30s - %5.1f %-30s\n",
                i,
-               corr02[i+20], stars(corr02[i+20], max_corr02, 30, s1),
-               corr13[i+20],  stars(corr13[i+20], max_corr13, 30, s2));
+               cca[i+20], stars(cca[i+20], max_cca, 30, s1),
+               ccb[i+20],  stars(ccb[i+20], max_ccb, 30, s2));
     }
+
+    // if the max_corr idx is invalid then return
+    // 
+
+
+    // fit to parabola (degree 2 polynomial)
+    double coeffs[3] = {0,0,0};
+    double x[41];
+    for (i = -20; i <= 20; i++) {
+        x[i+20] = i;
+    }
+
+    printf("max_cor02_idx, val = %d %0.3f\n", max_cca_idx, max_cca);
+
+    //poly_fit(5, &x[max_cca_idx-2+20], &cca[max_cca_idx-2+20], 2, coeffs);
+    poly_fit(3, &x[max_cca_idx-1+20], &cca[max_cca_idx-1+20], 2, coeffs);
+    //printf("COEFFS %0.3f %0.3f %0.3f\n", coeffs[0], coeffs[1], coeffs[2]);
+    double answer02 = -coeffs[1] / (2 * coeffs[2]);
+    printf("ANSWER02 %0.3f\n", answer02);
+
+    poly_fit(3, &x[max_ccb_idx-1+20], &ccb[max_ccb_idx-1+20], 2, coeffs);
+    //printf("COEFFS %0.3f %0.3f %0.3f\n", coeffs[0], coeffs[1], coeffs[2]);
+    double answer13 = -coeffs[1] / (2 * coeffs[2]);
+    printf("ANSWER13 %0.3f\n", answer13);
+
+    double angle;
+    //angle = atan2(answer02, answer13) * (180/M_PI);
+    //angle = normalize(angle-90);
+    angle = atan2(answer13, answer02) * (180/M_PI);
+#if 0
+    angle = normalize(angle);
+#else
+    angle = normalize(angle+45);
+#endif
+    printf("***** angle = %0.1f degs *****\n", angle);
+
+// plot y = -16.136 * x^2 + 6.4 * x - 0.4
+
 }
+
+static double normalize(double angle)
+{
+    if (angle < 0) {
+        while (angle < 0) angle += 360;
+    } else if (angle > 360) {
+        while (angle > 360) angle -= 360;
+    }
+    return angle;
+}
+
 
 // xxx move to debug section
 static char *stars(double v, double max_v, int max_stars, char *s)
