@@ -172,7 +172,7 @@ static void *get_data_from_file_thread(void *cx)
         return NULL;
     }
     max_frames = max_data / max_chan;
-    printf("XXX FILE MAX_FRAMES %d\n", max_frames);
+    printf("read okay, file_name=%s  max_frames=%d\n", file_name, max_frames);
 
     // set get_data_from_file_init_status to success
     get_data_from_file_init_status = 0;
@@ -218,17 +218,21 @@ static void *get_data_from_file_thread(void *cx)
 
 #define WINDOW_DURATION   ((double)MAX_CHAN_DATA / SAMPLE_RATE)
 
-// time values used in this routine have units of seconds
+#define N 15
+
 static void process_data(float *frame, double time_now, void *cx)
 {
     // xxx make this an inline and check the offset
     #define DATA(_chan,_offset) \
         data [ _chan ] [ idx+(_offset) >= 0 ? idx+(_offset) : idx+(_offset)+MAX_CHAN_DATA ]
 
-    int  i;
+    int          i;
 
     static float data[MAX_CHAN][MAX_CHAN_DATA];
     static int   idx;
+
+    // notes:
+    // - time values used in this routine have units of seconds
 
     // print the frame rate once per sec
     print_frame_rate(time_now);
@@ -240,18 +244,18 @@ static void process_data(float *frame, double time_now, void *cx)
     // xxx comment about filtering
     // xxx dont need the ex filter
     for (int chan = 0; chan < MAX_CHAN; chan++) {
-        static double filter_cx[MAX_CHAN][10];  // xxx move decls to where first used
-        DATA(chan,0) = high_pass_filter_ex(frame[chan], filter_cx[chan], 1, 0.75);
+        static double filter_cx[MAX_CHAN];
+        DATA(chan,0) = high_pass_filter(frame[chan], &filter_cx[chan], 0.75);
     }
 
     // corr[10] is center
-    static double cca[41];  // xxx define for 41 or 20
-    static double ccb[41];
-    for (i = -20; i <= 20; i++) {
-        cca[i+20] += DATA(CCA_MICX,-20) * DATA(CCA_MICY,-(20+i))  -
-                     DATA(CCA_MICX,-((MAX_CHAN_DATA-1)-20)) * DATA(CCA_MICY,-((MAX_CHAN_DATA-1)-20+i));
-        ccb[i+20] += DATA(CCB_MICX,-20) * DATA(CCB_MICY,-(20+i))  -
-                     DATA(CCB_MICX,-((MAX_CHAN_DATA-1)-20)) * DATA(CCB_MICY,-((MAX_CHAN_DATA-1)-20+i));
+    static double cca[2*N+1];  
+    static double ccb[2*N+1];
+    for (i = -N; i <= N; i++) {
+        cca[i+N] += DATA(CCA_MICX,-N) * DATA(CCA_MICY,-(N+i))  -
+                     DATA(CCA_MICX,-((MAX_CHAN_DATA-1)-N)) * DATA(CCA_MICY,-((MAX_CHAN_DATA-1)-N+i));
+        ccb[i+N] += DATA(CCB_MICX,-N) * DATA(CCB_MICY,-(N+i))  -
+                     DATA(CCB_MICX,-((MAX_CHAN_DATA-1)-N)) * DATA(CCB_MICY,-((MAX_CHAN_DATA-1)-N+i));
     }
 
     // determine the avg amplitude ovr the past WINDOW_DURATION for chan 0
@@ -297,54 +301,52 @@ static void process_data(float *frame, double time_now, void *cx)
 
     int max_cca_idx=-99, max_ccb_idx=-99;
     double max_cca=0, max_ccb=0, coeffs[3], cca_x, ccb_x, angle;
-    static double x[41];
-
+    static double x[2*N+1];
     // init x array on first call
     if (x[0] == 0) {
-        for (i = -20; i <= 20; i++) x[i+20] = i;
+        for (i = -N; i <= N; i++) x[i+N] = i;
     }
 
     // xxx
-    for (i = -20; i <= 20; i++) {
-        if (cca[i+20] > max_cca) {
-            max_cca = cca[i+20];
+    for (i = -N; i <= N; i++) {
+        if (cca[i+N] > max_cca) {
+            max_cca = cca[i+N];
             max_cca_idx = i;
         }
-        if (ccb[i+20] > max_ccb) {
-            max_ccb = ccb[i+20];
+        if (ccb[i+N] > max_ccb) {
+            max_ccb = ccb[i+N];
             max_ccb_idx = i;
         }
     }
 
     // xxx if xxx explain
-    if ((max_cca_idx <= -20 || max_cca_idx >= 20) ||
-        (max_ccb_idx <= -20 || max_ccb_idx >= 20))
+    if ((max_cca_idx <= -N || max_cca_idx >= N) ||
+        (max_ccb_idx <= -N || max_ccb_idx >= N))
     {
         printf("ERROR: max_cca_idx=%d max_ccb_idx=%d\n", max_cca_idx, max_ccb_idx);
         return;
     }
 
     // fit to parabola (degree 2 polynomial)
-    poly_fit(3, &x[max_cca_idx-1+20], &cca[max_cca_idx-1+20], 2, coeffs);
+    poly_fit(3, &x[max_cca_idx-1+N], &cca[max_cca_idx-1+N], 2, coeffs);
     cca_x = -coeffs[1] / (2 * coeffs[2]);
-    poly_fit(3, &x[max_ccb_idx-1+20], &ccb[max_ccb_idx-1+20], 2, coeffs);
+    poly_fit(3, &x[max_ccb_idx-1+N], &ccb[max_ccb_idx-1+N], 2, coeffs);
     ccb_x = -coeffs[1] / (2 * coeffs[2]);
 
-
+    // xxx
     angle = atan2(ccb_x, cca_x) * (180/M_PI);
     angle = normalize_angle(angle + ANGLE_OFFSET);
 
     // prints
-    for (i = -20; i <= 20; i++) {
+    for (i = -N; i <= N; i++) {
         char s1[100], s2[100];
         printf("%3d: %5.1f %-30s - %5.1f %-30s\n",
                i,
-               cca[i+20], stars(cca[i+20], max_cca, 30, s1),
-               ccb[i+20],  stars(ccb[i+20], max_ccb, 30, s2));
+               cca[i+N], stars(cca[i+N], max_cca, 30, s1),
+               ccb[i+N],  stars(ccb[i+N], max_ccb, 30, s2));
     }
     printf("       LARGEST AT %-10.3f                 LARGEST AT %-10.3f\n", cca_x, ccb_x);
     printf("       SOUND ANGLE = %0.1f degs *****\n", angle);
-
 }
 
 static double normalize_angle(double angle)
@@ -356,7 +358,6 @@ static double normalize_angle(double angle)
     }
     return angle;
 }
-
 
 // xxx move to debug section
 static char *stars(double v, double max_v, int max_stars, char *s)
