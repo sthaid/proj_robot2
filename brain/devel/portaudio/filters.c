@@ -25,7 +25,7 @@
 #include <pthread.h>
 #include <fftw3.h>
 
-#include <filter_utils.h>
+#include <audio_filters.h>
 #include <pa_utils.h>
 #include <sf_utils.h>
 

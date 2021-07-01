@@ -1,7 +1,5 @@
-#ifndef __FILTER_UTILS_H__
-#define __FILTER_UTILS_H__
-
-// XXX commetns needed
+#ifndef __AUDIO_FILTERS_H__
+#define __AUDIO_FILTERS_H__
 
 // Low pass filter
 
