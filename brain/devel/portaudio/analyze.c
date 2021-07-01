@@ -53,7 +53,7 @@ static double squared(double v);
 static void *get_data_from_file_thread(void *cx);
 static void process_data(float *frame, double time_secs, void *cx);
 
-static double normalize(double angle);
+static double normalize_angle(double angle);
 static char *stars(double v, double max_v, int max_stars, char *s);
 static void print_frame_rate(double time_now);
 
@@ -196,29 +196,39 @@ static void *get_data_from_file_thread(void *cx)
 }
 
 // -------------------------------------------------------------------------
+// xxx comments
+#if 0
+#define CCA_MICX 0  // cross
+#define CCA_MICY 2
+#define CCB_MICX 1
+#define CCB_MICY 3
+#define ANGLE_OFFSET 45
+#else
+#define CCA_MICX 0  // adjacanet
+#define CCA_MICY 1
+#define CCB_MICX 0
+#define CCB_MICY 3
+#define ANGLE_OFFSET 0
+#endif
+
+// window = 0.5 secs
+#define MIN_START_AMP    0.5
+#define MIN_END_AMP      5.0 
+#define MAX_CHAN_DATA    (SAMPLE_RATE/2)
+
+#define WINDOW_DURATION   ((double)MAX_CHAN_DATA / SAMPLE_RATE)
 
 // time values used in this routine have units of seconds
 static void process_data(float *frame, double time_now, void *cx)
 {
-    // window = 0.5 secs
-    #define MIN_START_AMP    0.5
-    #define MIN_END_AMP      5.0 
-    #define MAX_CHAN_DATA    (SAMPLE_RATE/2)
-
-    #define WINDOW_DURATION   ((double)MAX_CHAN_DATA / SAMPLE_RATE)
-
     // xxx make this an inline and check the offset
     #define DATA(_chan,_offset) \
         data [ _chan ] [ idx+(_offset) >= 0 ? idx+(_offset) : idx+(_offset)+MAX_CHAN_DATA ]
 
-    static float    data[MAX_CHAN][MAX_CHAN_DATA];
-    static int      idx;
-    static double   amp;
-    static double   time_sound_start;
-    static double   filter_cx[MAX_CHAN][10];  // xxx move decls to where first used
-
-    bool got_sound;
     int  i;
+
+    static float data[MAX_CHAN][MAX_CHAN_DATA];
+    static int   idx;
 
     // print the frame rate once per sec
     print_frame_rate(time_now);
@@ -230,50 +240,32 @@ static void process_data(float *frame, double time_now, void *cx)
     // xxx comment about filtering
     // xxx dont need the ex filter
     for (int chan = 0; chan < MAX_CHAN; chan++) {
+        static double filter_cx[MAX_CHAN][10];  // xxx move decls to where first used
         DATA(chan,0) = high_pass_filter_ex(frame[chan], filter_cx[chan], 1, 0.75);
     }
 
+    // corr[10] is center
+    static double cca[41];  // xxx define for 41 or 20
+    static double ccb[41];
+    for (i = -20; i <= 20; i++) {
+        cca[i+20] += DATA(CCA_MICX,-20) * DATA(CCA_MICY,-(20+i))  -
+                     DATA(CCA_MICX,-((MAX_CHAN_DATA-1)-20)) * DATA(CCA_MICY,-((MAX_CHAN_DATA-1)-20+i));
+        ccb[i+20] += DATA(CCB_MICX,-20) * DATA(CCB_MICY,-(20+i))  -
+                     DATA(CCB_MICX,-((MAX_CHAN_DATA-1)-20)) * DATA(CCB_MICY,-((MAX_CHAN_DATA-1)-20+i));
+    }
+
+    // determine the avg amplitude ovr the past WINDOW_DURATION for chan 0
+    static double  amp;
+    amp += (squared(DATA(0,0)) - squared(DATA(0,-(MAX_CHAN_DATA-1))));
 #if 0 
-    // xxx used to unit test amplitude monitoring
     if (time_now > 1 && time_now < 3) {
         printf("%0.3f  -  %10.3f\n", time_now, amp);
     }
 #endif
 
-//cross_corr_a
-//corr_a
-//corr_b
-//cca
-//ccb
-    // corr[10] is center
-    static double cca[41];
-    static double ccb[41];
-    const int max = MAX_CHAN_DATA-1;
-#if 1  // xxx use defines for which channels
-    for (i = -20; i <= 20; i++) {
-        cca[i+20] += DATA(0,-20) * DATA(2,-(20+i))  -
-                        DATA(0,-(max-20)) * DATA(2,-(max-20+i));
-    }
-    for (i = -20; i <= 20; i++) {
-        ccb[i+20] += DATA(1,-20) * DATA(3,-(20+i))  -
-                        DATA(1,-(max-20)) * DATA(3,-(max-20+i));
-    }
-#else
-    for (i = -20; i <= 20; i++) {
-        cca[i+20] += DATA(0,-20) * DATA(1,-(20+i))  -
-                        DATA(0,-(max-20)) * DATA(1,-(max-20+i));
-    }
-    for (i = -20; i <= 20; i++) {
-        ccb[i+20] += DATA(0,-20) * DATA(3,-(20+i))  -
-                        DATA(0,-(max-20)) * DATA(3,-(max-20+i));
-    }
-#endif
-
-    // determine the avg amplitude ovr the past WINDOW_DURATION for chan 0
-    amp += (squared(DATA(0,0)) - squared(DATA(0,-(MAX_CHAN_DATA-1))));
-
     // xxx comments
-    got_sound = false;
+    static double time_sound_start;
+    bool          got_sound = false;
     if (amp > MIN_START_AMP) {
         if (time_sound_start == 0) {
             time_sound_start = time_now;
@@ -296,12 +288,23 @@ static void process_data(float *frame, double time_now, void *cx)
         return;
     }
 
+    // ----------------------------
     // xxx comment
+    // ----------------------------
+
     printf("%0.3f - ANALYZE SOUND amp=%0.3f  intvl=%0.3f ... %0.3f\n", 
                    time_now, amp, time_now-WINDOW_DURATION, time_now);
 
-    double max_cca=0, max_ccb=0;
-    int max_cca_idx=-1, max_ccb_idx=-1;
+    int max_cca_idx=-99, max_ccb_idx=-99;
+    double max_cca=0, max_ccb=0, coeffs[3], cca_x, ccb_x, angle;
+    static double x[41];
+
+    // init x array on first call
+    if (x[0] == 0) {
+        for (i = -20; i <= 20; i++) x[i+20] = i;
+    }
+
+    // xxx
     for (i = -20; i <= 20; i++) {
         if (cca[i+20] > max_cca) {
             max_cca = cca[i+20];
@@ -313,6 +316,25 @@ static void process_data(float *frame, double time_now, void *cx)
         }
     }
 
+    // xxx if xxx explain
+    if ((max_cca_idx <= -20 || max_cca_idx >= 20) ||
+        (max_ccb_idx <= -20 || max_ccb_idx >= 20))
+    {
+        printf("ERROR: max_cca_idx=%d max_ccb_idx=%d\n", max_cca_idx, max_ccb_idx);
+        return;
+    }
+
+    // fit to parabola (degree 2 polynomial)
+    poly_fit(3, &x[max_cca_idx-1+20], &cca[max_cca_idx-1+20], 2, coeffs);
+    cca_x = -coeffs[1] / (2 * coeffs[2]);
+    poly_fit(3, &x[max_ccb_idx-1+20], &ccb[max_ccb_idx-1+20], 2, coeffs);
+    ccb_x = -coeffs[1] / (2 * coeffs[2]);
+
+
+    angle = atan2(ccb_x, cca_x) * (180/M_PI);
+    angle = normalize_angle(angle + ANGLE_OFFSET);
+
+    // prints
     for (i = -20; i <= 20; i++) {
         char s1[100], s2[100];
         printf("%3d: %5.1f %-30s - %5.1f %-30s\n",
@@ -320,47 +342,12 @@ static void process_data(float *frame, double time_now, void *cx)
                cca[i+20], stars(cca[i+20], max_cca, 30, s1),
                ccb[i+20],  stars(ccb[i+20], max_ccb, 30, s2));
     }
-
-    // if the max_corr idx is invalid then return
-    // 
-
-
-    // fit to parabola (degree 2 polynomial)
-    double coeffs[3] = {0,0,0};
-    double x[41];
-    for (i = -20; i <= 20; i++) {
-        x[i+20] = i;
-    }
-
-    printf("max_cor02_idx, val = %d %0.3f\n", max_cca_idx, max_cca);
-
-    //poly_fit(5, &x[max_cca_idx-2+20], &cca[max_cca_idx-2+20], 2, coeffs);
-    poly_fit(3, &x[max_cca_idx-1+20], &cca[max_cca_idx-1+20], 2, coeffs);
-    //printf("COEFFS %0.3f %0.3f %0.3f\n", coeffs[0], coeffs[1], coeffs[2]);
-    double answer02 = -coeffs[1] / (2 * coeffs[2]);
-    printf("ANSWER02 %0.3f\n", answer02);
-
-    poly_fit(3, &x[max_ccb_idx-1+20], &ccb[max_ccb_idx-1+20], 2, coeffs);
-    //printf("COEFFS %0.3f %0.3f %0.3f\n", coeffs[0], coeffs[1], coeffs[2]);
-    double answer13 = -coeffs[1] / (2 * coeffs[2]);
-    printf("ANSWER13 %0.3f\n", answer13);
-
-    double angle;
-    //angle = atan2(answer02, answer13) * (180/M_PI);
-    //angle = normalize(angle-90);
-    angle = atan2(answer13, answer02) * (180/M_PI);
-#if 0
-    angle = normalize(angle);
-#else
-    angle = normalize(angle+45);
-#endif
-    printf("***** angle = %0.1f degs *****\n", angle);
-
-// plot y = -16.136 * x^2 + 6.4 * x - 0.4
+    printf("       LARGEST AT %-10.3f                 LARGEST AT %-10.3f\n", cca_x, ccb_x);
+    printf("       SOUND ANGLE = %0.1f degs *****\n", angle);
 
 }
 
-static double normalize(double angle)
+static double normalize_angle(double angle)
 {
     if (angle < 0) {
         while (angle < 0) angle += 360;
