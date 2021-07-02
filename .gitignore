@@ -2,7 +2,6 @@
 *.ko
 *.cmd
 *.swp
-*.wav
 
 devel/tests/button/button_test
 devel/tests/current/current_test

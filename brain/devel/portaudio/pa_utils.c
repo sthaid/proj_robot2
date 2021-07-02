@@ -189,7 +189,7 @@ static void play_stream_finished_cb2(void *user_data)
     ud->done = true;
 }
 
-// -----------------  RECORD - DATA SUPPLIED IN CALLER SUPPLIED ARRAY  -------------
+// -----------------  RECORD - DATA PROVIDED TO CALLER SUPPLIED ARRAY  -------------
 
 typedef struct {
     int max_chan;
@@ -236,7 +236,7 @@ static int record_cb(const float *data, void *cx_arg)
     return 0;
 }
 
-// -----------------  RECORD - DATA SUPPLIED BY CALLER SUPPLIED CALLBACK PROC  -----
+// -----------------  RECORD - DATA PROVIDED TO CALLER SUPPLIED CALLBACK PROC  -----
 
 typedef struct {
     record2_put_frame_t put_frame;

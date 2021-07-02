@@ -21,6 +21,7 @@
 #include <pthread.h>
 #include <math.h>
 
+#include <pa_utils.h>
 #include <sf_utils.h>
 #include <audio_filters.h>
 #include <poly_fit.h>
@@ -36,6 +37,9 @@
 #define DEBUG_ANALYZE_SOUND 2
 #define DEBUG_AMP           4
 
+#define DATA_SRC_MIC  1
+#define DATA_SRC_FILE 2
+
 //
 // typedefs
 //
@@ -44,16 +48,17 @@
 // variables
 //
 
-static int get_data_from_file_init_status;
-static int debug = DEBUG_ANALYZE_SOUND | 
-                   DEBUG_FRAME_RATE;
+static int    debug = DEBUG_ANALYZE_SOUND | 
+                      DEBUG_FRAME_RATE;
 
 //
 // prototpes
 //
 
+static int init_get_data_from_file(char *file_name, int *file_max_frames);
 static void *get_data_from_file_thread(void *cx);
-static void process_data(float *frame, double time_secs, void *cx);
+
+static int process_data(const float *frame, void *cx);
 
 static void dbgpr(char *fmt, ...) __attribute__ ((format (printf, 1, 2)));
 static void *dbgpr_thread(void *cx);
@@ -68,28 +73,32 @@ static uint64_t microsec_timer(void);
 
 int main(int argc, char **argv)
 {
-    char *file_name = "4mic_0.wav";  // xxx temporary default
+    int       data_src      = DATA_SRC_MIC;
+    char     *data_src_name = "seeed-4mic-voicecard";
     pthread_t tid;
-
-    #define USAGE \
-    "usage: analyze [-f file_name.wav]"
 
     // use line buffered stdout
     setlinebuf(stdout);
 
+   #define USAGE \
+    "usage: analyze [-d indev] [-f filename]\n" \
+    "       - use either -d or -f\n" \
+    "       - default is -d seeed-4mic-voicecard"
+
     // get options
     while (true) {
-        int ch = getopt(argc, argv, "f:h");
+        int ch = getopt(argc, argv, "f:d:h");
         if (ch == -1) {
             break;
         }
         switch (ch) {
         case 'f':
-            file_name = optarg;
-            if (strstr(file_name, ".wav") == NULL) {
-                printf("ERROR: file_name must have '.wav' extension\n");
-                return 1;
-            }
+            data_src_name = optarg;
+            data_src = DATA_SRC_FILE;
+            break;
+        case 'd':
+            data_src_name = optarg;
+            data_src = DATA_SRC_MIC;
             break;
         case 'h':
             printf("%s\n", USAGE);
@@ -100,26 +109,31 @@ int main(int argc, char **argv)
         };
     }
 
-    // print startup msg
-    printf("file_name = %s\n", file_name);
-    // xxx print other stuff, like filter options
-
     // create dbgpr_thread, this thread supports process_data calls to dbgpr;
-    // needed because process_data should avoid calls that may take a long time to complete
+    // this is needed because process_data should avoid calls that may take a 
+    //  long time to complete
     pthread_create(&tid, NULL, dbgpr_thread, NULL);
 
-    // create get_data_from_file_thread, and
-    // wait for it to complete initialization
-    if (file_name) {
-        get_data_from_file_init_status = 1;
-        pthread_create(&tid, NULL, get_data_from_file_thread, file_name);
-        while (get_data_from_file_init_status == 1) {
-            usleep(10000);
-        }
-        if (get_data_from_file_init_status != 0) {
-            printf("FATAL: get_data_from_file init failed\n");
+    // initialize get data from either a wav file or the 4 channel microphone;
+    // this initialization starts periodic callbacks to process_data()
+    if (data_src == DATA_SRC_FILE) {
+        int file_max_frames;
+        if (init_get_data_from_file(data_src_name, &file_max_frames) < 0) {
+            printf("ERROR: init_get_data_from_file failed\n");
             return 1;
         }
+        printf("data from file %s:  max_frames=%d  duration=%0.1f secs\n\n",
+               data_src_name, file_max_frames, (double)file_max_frames/SAMPLE_RATE);
+    } else {
+        if (pa_init() < 0) {
+            printf("ERROR: pa_init failed\n");
+            return 1;
+        }
+        if (pa_record2(data_src_name, MAX_CHAN, SAMPLE_RATE, process_data, NULL, 0) < 0) {
+            printf("ERROR: pa_record2 failed\n");
+            return 1;
+        }
+        printf("data from microphone %s\n\n", data_src_name);
     }
 
     // pause forever
@@ -131,51 +145,58 @@ int main(int argc, char **argv)
     return 0;
 }
 
-// -----------------  GET DATA FROM FILE THREAD  ---------------------------
+// -----------------  GET DATA FROM FILE  ----------------------------------
 
-static void *get_data_from_file_thread(void *cx)
+static float *file_data;
+static int    file_max_chan;
+static int    file_max_frames;
+
+static int init_get_data_from_file(char *file_name, int *file_max_frames_arg)
 {
-    char    *file_name = cx;
-    float   *data;
-    int      max_data, max_chan, max_frames, sample_rate, frame_idx=0, i;
-    uint64_t time_start_us, time_next_us;
-    double   time_secs;
+    int file_max_data, file_sample_rate;
+    pthread_t tid;
 
     // read file
     if (strstr(file_name, ".wav") == NULL) {
         printf("ERROR: file_name must have '.wav' extension\n");
-        get_data_from_file_init_status = -1;
-        return NULL;
+        return -1;
     }
-    if (sf_read_wav_file(file_name, &data, &max_chan, &max_data, &sample_rate) < 0) {
-        printf("ERROR: sf_read_wav_file %s failed\n", optarg);
-        get_data_from_file_init_status = -1;
-        return NULL;
+    if (sf_read_wav_file(file_name, &file_data, &file_max_chan, &file_max_data, &file_sample_rate) < 0) {
+        printf("ERROR: sf_read_wav_file %s failed\n", file_name);
+        return -1;
     }
-    if (sample_rate != SAMPLE_RATE) {
-        printf("ERROR: file sample_rate=%d, must be %d\n", sample_rate, SAMPLE_RATE);
-        get_data_from_file_init_status = -1;
-        return NULL;
+    if (file_sample_rate != SAMPLE_RATE) {
+        printf("ERROR: file sample_rate=%d, must be %d\n", file_sample_rate, SAMPLE_RATE);
+        return -1;
     }
-    if (max_chan != MAX_CHAN) {
-        printf("ERROR: file max_chan=%d, must be %d\n", max_chan, MAX_CHAN);
-        get_data_from_file_init_status = -1;
-        return NULL;
+    if (file_max_chan != MAX_CHAN) {
+        printf("ERROR: file max_chan=%d, must be %d\n", file_max_chan, MAX_CHAN);
+        return -1;
     }
-    max_frames = max_data / max_chan;
-    printf("read okay, file_name=%s  max_frames=%d\n", file_name, max_frames);
+    file_max_frames = file_max_data / file_max_chan;
 
-    // set get_data_from_file_init_status to success
-    get_data_from_file_init_status = 0;
+    // create get_data_from_file_thread
+    pthread_create(&tid, NULL, get_data_from_file_thread, NULL);
+
+    // return file_max_frames 
+    *file_max_frames_arg = file_max_frames;
+
+    // return success
+    return 0;
+}
+
+static void *get_data_from_file_thread(void *cx)
+{
+    int      frame_idx=0, i;
+    uint64_t time_next_us;
 
     // loop, passing file data to routine for procesing
-    time_start_us = time_next_us = microsec_timer();
+    time_next_us = microsec_timer();
     while (true) {
         // provide 48 samples to the process_data routine
-        time_secs = (microsec_timer()-time_start_us) / 1000000.;
         for (i = 0; i < 48; i++) {
-            process_data(&data[frame_idx*max_chan], time_secs, NULL);
-            frame_idx = (frame_idx + 1) % max_frames;
+            process_data(&file_data[frame_idx*file_max_chan], NULL);
+            frame_idx = (frame_idx + 1) % file_max_frames;
         }
 
         // sleep until time_next_us
@@ -212,15 +233,23 @@ static void *get_data_from_file_thread(void *cx)
 
 #define                  N 15   // N is half the number of cross correlations 
 
-static void process_data(float *frame, double time_secs, void *cx)
+static int process_data(const float *frame, void *cx)
 {
     // xxx make this an inline and check the offset
     #define DATA(_chan,_offset) \
         data [ _chan ] [ data_idx+(_offset) >= 0 ? data_idx+(_offset) : data_idx+(_offset)+MAX_FRAME ]
 
+    #define TIME_SECS ((microsec_timer()-time_start_us) / 1000000.)
+
     static float    data[MAX_CHAN][MAX_FRAME];
     static int      data_idx;
     static uint64_t frame_cnt;
+    static uint64_t time_start_us;
+
+    // on first call, init time_start_us, this is used by the TIME_SECS for debug prints
+    if (time_start_us == 0) {
+        time_start_us = microsec_timer();
+    }
 
     // increment data_idx, and frame_cnt
     data_idx = (data_idx + 1) % MAX_FRAME;
@@ -230,11 +259,11 @@ static void process_data(float *frame, double time_secs, void *cx)
     if (debug & DEBUG_FRAME_RATE) {
         static double   time_last_frame_rate_print;
         static uint64_t frame_cnt_last_print;
-        if (time_secs - time_last_frame_rate_print >= 1) {
+        if (TIME_SECS - time_last_frame_rate_print >= 1) {
             dbgpr("FC=%" PRId64 " T=%0.3f: FRAME RATE = %d\n", 
-                  frame_cnt, time_secs, (int)(frame_cnt-frame_cnt_last_print));
+                  frame_cnt, TIME_SECS, (int)(frame_cnt-frame_cnt_last_print));
             frame_cnt_last_print = frame_cnt;
-            time_last_frame_rate_print = time_secs;
+            time_last_frame_rate_print = TIME_SECS;
         }
     }
 
@@ -261,7 +290,7 @@ static void process_data(float *frame, double time_secs, void *cx)
     amp = amp_sum / MS_TO_FRAMES(20);
     if (debug & DEBUG_AMP) {
         dbgpr("FC=%" PRId64 " T=%0.3f: amp_sum=%0.6f  amp=%10.6f\n", 
-              frame_cnt, time_secs, amp_sum, amp);
+              frame_cnt, TIME_SECS, amp_sum, amp);
     }
 
     // determine if sound data should now be analyzed;
@@ -286,7 +315,7 @@ static void process_data(float *frame, double time_secs, void *cx)
             trigger_integral = 0;
             if (debug & DEBUG_ANALYZE_SOUND) {
                 dbgpr("FC=%" PRId64 " T=%0.3f: start_frame_cnt=%" PRId64 "\n",
-                      frame_cnt, time_secs, start_frame_cnt);
+                      frame_cnt, TIME_SECS, start_frame_cnt);
             }
         }
     } else {
@@ -297,12 +326,12 @@ static void process_data(float *frame, double time_secs, void *cx)
                 start_frame_cnt = 0;
                 if (debug & DEBUG_ANALYZE_SOUND) {
                     dbgpr("FC=%" PRId64 " T=%0.3f: CANCELLING, integral=%0.3f MIN_INTEGRAL=%0.3f\n",
-                          frame_cnt, time_secs, integral, MIN_INTEGRAL);
+                          frame_cnt, TIME_SECS, integral, MIN_INTEGRAL);
                 }
             } else {
                 if (debug & DEBUG_ANALYZE_SOUND) {
                     dbgpr("FC=%" PRId64 " T=%0.3f: ACCEPTING, integral=%0.3f MIN_INTEGRAL=%0.3f\n",
-                          frame_cnt, time_secs, integral, MIN_INTEGRAL);
+                          frame_cnt, TIME_SECS, integral, MIN_INTEGRAL);
                 }
             }
         } else if (frame_cnt == start_frame_cnt + MS_TO_FRAMES(480)) {
@@ -313,7 +342,7 @@ static void process_data(float *frame, double time_secs, void *cx)
 
     // if there is not sound data to analyze then return
     if (analyze == false) {
-        return;
+        return 0;
     }
 
     // -----------------------------------------------------
@@ -347,7 +376,7 @@ static void process_data(float *frame, double time_secs, void *cx)
         }
     }
 
-    // The deviation of the max cross correlation from center should be 
+    // The deviation of the max cross correlation from center is
     // limitted by the speed of sound, the distance between the mics, and
     // the sample_rate. Using:
     // - distance between mics = 0.061 m
@@ -367,8 +396,8 @@ static void process_data(float *frame, double time_secs, void *cx)
         (max_ccb_idx <= -N || max_ccb_idx >= N))
     {
         dbgpr("FC=%" PRId64 " T=%0.3f: ANALYZE SOUND - ERROR max_cca_idx=%d max_ccb_idx=%d\n", 
-              frame_cnt, time_secs, max_cca_idx, max_ccb_idx);
-        return;
+              frame_cnt, TIME_SECS, max_cca_idx, max_ccb_idx);
+        return 0;
     }
 
     // Instead of using the max_cca/b_idx that is obtained above; this code
@@ -393,7 +422,7 @@ static void process_data(float *frame, double time_secs, void *cx)
     // debug prints
     if (debug & DEBUG_ANALYZE_SOUND) {
         dbgpr("FC=%" PRId64 " T=%0.3f: ANALYZE SOUND - trigger_integral=%0.3f %0.3f  integral=%0.3f  intvl=%0.3f ... %0.3f\n", 
-              frame_cnt, time_secs, trigger_integral, MIN_INTEGRAL, integral, time_secs-WINDOW_DURATION, time_secs);
+              frame_cnt, TIME_SECS, trigger_integral, MIN_INTEGRAL, integral, TIME_SECS-WINDOW_DURATION, TIME_SECS);
         for (int i = -N; i <= N; i++) {
             char s1[100], s2[100];
             dbgpr("%3d: %5.1f %-30s - %5.1f %-30s\n",
@@ -405,6 +434,8 @@ static void process_data(float *frame, double time_secs, void *cx)
         dbgpr("       SOUND ANGLE = %0.1f degs *****\n", angle);
         dbgpr("\n");
     }
+
+    return 0;
 }
 
 // -----------------  PROCESS DATA - DEBUG PRINT SUPPORT  ------------------
