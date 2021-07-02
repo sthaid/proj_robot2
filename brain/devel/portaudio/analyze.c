@@ -1,6 +1,5 @@
 // xxx
 // - comments
-// - support microphone option
 // - adjustment knobs for tuning
 // - integrate with leds 
 // - test on rpi
@@ -209,15 +208,36 @@ static void *get_data_from_file_thread(void *cx)
 
 // -----------------  PROCESS 4 CHANNEL AUDIO DATA --------------------------
 
-// xxx comments
 #if 0
-#define CCA_MICX     0  // cross
+//      Cross correlate data fro mics:
+//      - AX and AY
+//      - BX and BY
+//      ---------------------
+//      |BX               AY|
+//      |                   |
+//      |                   |
+//      |     RESPEAKER     |
+//      |                   |
+//      |AX               BY|
+//      ---------------------
+#define CCA_MICX     0
 #define CCA_MICY     2
 #define CCB_MICX     1
 #define CCB_MICY     3
 #define ANGLE_OFFSET 45
 #else
-#define CCA_MICX     0  // adjacanet
+//      Cross correlate data fro mics:
+//      - AX/BX and AY
+//      - AX/BX and BY
+//      ---------------------
+//      |AY               --|
+//      |                   |
+//      |                   |
+//      |     RESPEAKER     |
+//      |                   |
+//      |AX/BX            BY|
+//      ---------------------
+#define CCA_MICX     0
 #define CCA_MICY     1
 #define CCB_MICX     0
 #define CCB_MICY     3
