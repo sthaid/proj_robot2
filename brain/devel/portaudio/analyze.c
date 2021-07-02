@@ -14,6 +14,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdarg.h>
+#include <inttypes.h>
 #include <unistd.h>
 #include <string.h>
 #include <errno.h>
@@ -33,6 +34,7 @@
 
 #define DEBUG_FRAME_RATE    1
 #define DEBUG_ANALYZE_SOUND 2
+#define DEBUG_AMP           4
 
 //
 // typedefs
@@ -43,7 +45,8 @@
 //
 
 static int get_data_from_file_init_status;
-static int debug = DEBUG_ANALYZE_SOUND;
+static int debug = DEBUG_ANALYZE_SOUND | 
+                   DEBUG_FRAME_RATE;
 
 //
 // prototpes
@@ -185,6 +188,7 @@ static void *get_data_from_file_thread(void *cx)
 
 // -----------------  PROCESS 4 CHANNEL AUDIO DATA --------------------------
 
+// xxx comments
 #if 0
 #define CCA_MICX     0  // cross
 #define CCA_MICY     2
@@ -208,19 +212,18 @@ static void *get_data_from_file_thread(void *cx)
 
 #define                  N 15   // N is half the number of cross correlations 
 
-// xxx check all printts, incl FC
 static void process_data(float *frame, double time_secs, void *cx)
 {
     // xxx make this an inline and check the offset
     #define DATA(_chan,_offset) \
-        data [ _chan ] [ idx+(_offset) >= 0 ? idx+(_offset) : idx+(_offset)+MAX_FRAME ]
+        data [ _chan ] [ data_idx+(_offset) >= 0 ? data_idx+(_offset) : data_idx+(_offset)+MAX_FRAME ]
 
     static float    data[MAX_CHAN][MAX_FRAME];
-    static int      idx;  // xxx call this data_idx
+    static int      data_idx;
     static uint64_t frame_cnt;
 
-    // increment data idx, and frame_cnt
-    idx = (idx + 1) % MAX_FRAME;
+    // increment data_idx, and frame_cnt
+    data_idx = (data_idx + 1) % MAX_FRAME;
     frame_cnt++;
 
     // print the frame rate once per sec
@@ -228,7 +231,8 @@ static void process_data(float *frame, double time_secs, void *cx)
         static double   time_last_frame_rate_print;
         static uint64_t frame_cnt_last_print;
         if (time_secs - time_last_frame_rate_print >= 1) {
-            dbgpr("T=%0.3f: FRAME RATE = %d\n", time_secs, (int)(frame_cnt-frame_cnt_last_print));
+            dbgpr("FC=%" PRId64 " T=%0.3f: FRAME RATE = %d\n", 
+                  frame_cnt, time_secs, (int)(frame_cnt-frame_cnt_last_print));
             frame_cnt_last_print = frame_cnt;
             time_last_frame_rate_print = time_secs;
         }
@@ -255,7 +259,10 @@ static void process_data(float *frame, double time_secs, void *cx)
     double amp;
     amp_sum += (squared(DATA(0,0)) - squared(DATA(0,-MS_TO_FRAMES(20))));
     amp = amp_sum / MS_TO_FRAMES(20);
-    //dbgpr("FC=%ld  T=%0.3f: sum=%0.6f  amp=%10.6f\n", frame_cnt, time_secs, sum, amp);
+    if (debug & DEBUG_AMP) {
+        dbgpr("FC=%" PRId64 " T=%0.3f: amp_sum=%0.6f  amp=%10.6f\n", 
+              frame_cnt, time_secs, amp_sum, amp);
+    }
 
     // determine if sound data should now be analyzed;
     // if so, then the 'analyze' flag is set;
@@ -277,20 +284,28 @@ static void process_data(float *frame, double time_secs, void *cx)
             start_frame_cnt = frame_cnt;
             integral = 0;
             trigger_integral = 0;
-            dbgpr("START FRAME CNT = %ld\n", start_frame_cnt);
+            if (debug & DEBUG_ANALYZE_SOUND) {
+                dbgpr("FC=%" PRId64 " T=%0.3f: start_frame_cnt=%" PRId64 "\n",
+                      frame_cnt, time_secs, start_frame_cnt);
+            }
         }
     } else {
         integral += squared(DATA(0,0));
-        //dbgpr("integral = %0.6f\n", integral);
         if (frame_cnt == start_frame_cnt + MS_TO_FRAMES(150)) {
-            dbgpr("CHECKING FOR MIN_INTEGRAL %0.6f  %0.6f\n", integral, MIN_INTEGRAL);
             trigger_integral = integral;
             if (integral < MIN_INTEGRAL) {
-                dbgpr("*** FAILED\n");
                 start_frame_cnt = 0;
+                if (debug & DEBUG_ANALYZE_SOUND) {
+                    dbgpr("FC=%" PRId64 " T=%0.3f: CANCELLING, integral=%0.3f MIN_INTEGRAL=%0.3f\n",
+                          frame_cnt, time_secs, integral, MIN_INTEGRAL);
+                }
+            } else {
+                if (debug & DEBUG_ANALYZE_SOUND) {
+                    dbgpr("FC=%" PRId64 " T=%0.3f: ACCEPTING, integral=%0.3f MIN_INTEGRAL=%0.3f\n",
+                          frame_cnt, time_secs, integral, MIN_INTEGRAL);
+                }
             }
         } else if (frame_cnt == start_frame_cnt + MS_TO_FRAMES(480)) {
-            dbgpr("START ANALYZE\n");
             analyze = true;
             start_frame_cnt = 0;
         }
@@ -351,8 +366,8 @@ static void process_data(float *frame, double time_secs, void *cx)
     if ((max_cca_idx <= -N || max_cca_idx >= N) ||
         (max_ccb_idx <= -N || max_ccb_idx >= N))
     {
-        dbgpr("T=%0.3f: ANALYZE SOUND - ERROR max_cca_idx=%d max_ccb_idx=%d\n", 
-              time_secs, max_cca_idx, max_ccb_idx);
+        dbgpr("FC=%" PRId64 " T=%0.3f: ANALYZE SOUND - ERROR max_cca_idx=%d max_ccb_idx=%d\n", 
+              frame_cnt, time_secs, max_cca_idx, max_ccb_idx);
         return;
     }
 
@@ -377,8 +392,8 @@ static void process_data(float *frame, double time_secs, void *cx)
 
     // debug prints
     if (debug & DEBUG_ANALYZE_SOUND) {
-        dbgpr("T=%0.3f: ANALYZE SOUND - trigger_integral=%0.3f %0.3f  integral=%0.3f  intvl=%0.3f ... %0.3f\n", 
-                       time_secs, trigger_integral, MIN_INTEGRAL, integral, time_secs-WINDOW_DURATION, time_secs);
+        dbgpr("FC=%" PRId64 " T=%0.3f: ANALYZE SOUND - trigger_integral=%0.3f %0.3f  integral=%0.3f  intvl=%0.3f ... %0.3f\n", 
+              frame_cnt, time_secs, trigger_integral, MIN_INTEGRAL, integral, time_secs-WINDOW_DURATION, time_secs);
         for (int i = -N; i <= N; i++) {
             char s1[100], s2[100];
             dbgpr("%3d: %5.1f %-30s - %5.1f %-30s\n",
@@ -398,9 +413,10 @@ static void process_data(float *frame, double time_secs, void *cx)
 // cause unpredicatable execution delays. Instead, process_data calls dbgpr(),
 // which prints to dbgpr_buff. And, the dbgpr_thread performes the printf.
 
-#define MAX_DBGPR 10000
+#define MAX_DBGPR     10000
+#define MAX_DBGPR_STR 150
 
-static char dbgpr_buff[MAX_DBGPR][150];
+static char dbgpr_buff[MAX_DBGPR][MAX_DBGPR_STR];
 static volatile uint64_t prints_produced;
 static volatile uint64_t prints_consumed;
 
@@ -424,9 +440,9 @@ static void dbgpr(char *fmt, ...)
     // print to buffer
     va_start(ap, fmt);
     idx = (prints_produced % MAX_DBGPR);
-    cnt = vsnprintf(dbgpr_buff[idx], 150, fmt, ap);
-    if (cnt >= 150) {
-        dbgpr_buff[idx][150-2] = '\n';
+    cnt = vsnprintf(dbgpr_buff[idx], MAX_DBGPR_STR, fmt, ap);
+    if (cnt >= MAX_DBGPR_STR) {
+        dbgpr_buff[idx][MAX_DBGPR_STR-2] = '\n';
     }
     va_end(ap);
     __sync_synchronize();
