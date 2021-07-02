@@ -5,8 +5,6 @@
 // - integrate with leds 
 // - test on rpi
 // - add Time option, and filter params options, so different filter params can be scripted  MAYBE
-
-// xxx later
 // - make a stanalone demo pgm and put in new repo  LATER
 
 #include <stdio.h>
@@ -77,7 +75,6 @@ int main(int argc, char **argv)
     setlinebuf(stdout);
 
     // get options
-    // xxx add mic option, and default to mic
     while (true) {
         int ch = getopt(argc, argv, "f:h");
         if (ch == -1) {
@@ -202,90 +199,116 @@ static void *get_data_from_file_thread(void *cx)
 #define ANGLE_OFFSET 0
 #endif
 
-#define MIN_START_AMP    0.5
-#define MIN_END_AMP      5.0 
-#define MAX_CHAN_DATA    (SAMPLE_RATE/2)
-#define WINDOW_DURATION  ((double)MAX_CHAN_DATA / SAMPLE_RATE)
-#define                  N 15
+#define MAX_FRAME        (MS_TO_FRAMES(500))
+#define MIN_AMP          0.0003
+#define MIN_INTEGRAL     (MIN_AMP * 2 * MS_TO_FRAMES(150))
 
-static void process_data(float *frame, double time_now, void *cx)
+#define WINDOW_DURATION  ((double)MAX_FRAME / SAMPLE_RATE)
+#define MS_TO_FRAMES(ms) (SAMPLE_RATE * (ms) / 1000)
+
+#define                  N 15   // N is half the number of cross correlations 
+
+// xxx check all printts, incl FC
+static void process_data(float *frame, double time_secs, void *cx)
 {
     // xxx make this an inline and check the offset
     #define DATA(_chan,_offset) \
-        data [ _chan ] [ idx+(_offset) >= 0 ? idx+(_offset) : idx+(_offset)+MAX_CHAN_DATA ]
+        data [ _chan ] [ idx+(_offset) >= 0 ? idx+(_offset) : idx+(_offset)+MAX_FRAME ]
 
-    static float data[MAX_CHAN][MAX_CHAN_DATA];
-    static int   idx;
+    static float    data[MAX_CHAN][MAX_FRAME];
+    static int      idx;  // xxx call this data_idx
+    static uint64_t frame_cnt;
 
-    // notes:
-    // - time values used in this routine have units of seconds
+    // increment data idx, and frame_cnt
+    idx = (idx + 1) % MAX_FRAME;
+    frame_cnt++;
 
     // print the frame rate once per sec
     if (debug & DEBUG_FRAME_RATE) {
-        static uint64_t frame_count;
         static double   time_last_frame_rate_print;
-        static uint64_t frame_count_last_print;
-        frame_count++;
-        if (time_now - time_last_frame_rate_print >= 1) {
-            dbgpr("T=%0.3f: FRAME RATE = %d\n", time_now, (int)(frame_count-frame_count_last_print));
-            frame_count_last_print = frame_count;
-            time_last_frame_rate_print = time_now;
+        static uint64_t frame_cnt_last_print;
+        if (time_secs - time_last_frame_rate_print >= 1) {
+            dbgpr("T=%0.3f: FRAME RATE = %d\n", time_secs, (int)(frame_cnt-frame_cnt_last_print));
+            frame_cnt_last_print = frame_cnt;
+            time_last_frame_rate_print = time_secs;
         }
     }
 
-    // increment data idx
-    idx = (idx + 1) % MAX_CHAN_DATA;
-
-    // copy the input frame data to the static 'data' arrray
-    // xxx comment about filtering
+    // apply high pass filter to the input frame and store in 'data' array
     for (int chan = 0; chan < MAX_CHAN; chan++) {
         static double filter_cx[MAX_CHAN];
         DATA(chan,0) = high_pass_filter(frame[chan], &filter_cx[chan], 0.75);
     }
 
-    // corr[10] is center
+    // compute cross correlations for the 2 pairs of mic channels
     static double cca[2*N+1];  
     static double ccb[2*N+1];
     for (int i = -N; i <= N; i++) {
         cca[i+N] += DATA(CCA_MICX,-N) * DATA(CCA_MICY,-(N+i))  -
-                     DATA(CCA_MICX,-((MAX_CHAN_DATA-1)-N)) * DATA(CCA_MICY,-((MAX_CHAN_DATA-1)-N+i));
+                    DATA(CCA_MICX,-((MAX_FRAME-1)-N)) * DATA(CCA_MICY,-((MAX_FRAME-1)-N+i));
         ccb[i+N] += DATA(CCB_MICX,-N) * DATA(CCB_MICY,-(N+i))  -
-                     DATA(CCB_MICX,-((MAX_CHAN_DATA-1)-N)) * DATA(CCB_MICY,-((MAX_CHAN_DATA-1)-N+i));
+                    DATA(CCB_MICX,-((MAX_FRAME-1)-N)) * DATA(CCB_MICY,-((MAX_FRAME-1)-N+i));
     }
 
-    // determine the avg amplitude ovr the past WINDOW_DURATION for chan 0
-    static double  amp;
-    amp += (squared(DATA(0,0)) - squared(DATA(0,-(MAX_CHAN_DATA-1))));
-    // dbgpr("T=%0.3f: amp=%10.3f\n", time_now, amp);
+    // compute average amp over the past 20 ms, this is compted using mic chan 0
+    static double amp_sum;
+    double amp;
+    amp_sum += (squared(DATA(0,0)) - squared(DATA(0,-MS_TO_FRAMES(20))));
+    amp = amp_sum / MS_TO_FRAMES(20);
+    //dbgpr("FC=%ld  T=%0.3f: sum=%0.6f  amp=%10.6f\n", frame_cnt, time_secs, sum, amp);
 
-    // xxx comments
-    static double time_sound_start;
-    bool got_sound = false;
-    if (amp > MIN_START_AMP) {
-        if (time_sound_start == 0) {
-            time_sound_start = time_now;
+    // determine if sound data should now be analyzed;
+    // if so, then the 'analyze' flag is set;
+    // summary:
+    // - if amp is > MIN_AMP then start_frame_cnt is set, indicating that 
+    //   a block of frames is being considered to be analyzed
+    // - if after 150 ms after start_frame_cnt was set, there was not much
+    //   total amplitude over the past 150 ms; then cancel considering this data 
+    // - if not cancelled, then the data will be analyzed once the frame_cnt advances
+    //   to 480 ms beyond the start_frame_cnt
+    // - the analysis that is performed covers a 500 ms range; so the range that will
+    //   be analyzed extends from 20 ms before the start_frame_cnt to now
+    bool            analyze = false;
+    static uint64_t start_frame_cnt;
+    static double   integral, trigger_integral;
+
+    if (start_frame_cnt == 0) {
+        if (amp > MIN_AMP) {
+            start_frame_cnt = frame_cnt;
+            integral = 0;
+            trigger_integral = 0;
+            dbgpr("START FRAME CNT = %ld\n", start_frame_cnt);
         }
     } else {
-        time_sound_start = 0;
-    }
-    if (time_sound_start > 0 && time_now >= time_sound_start + WINDOW_DURATION) {
-        got_sound = (amp > MIN_END_AMP);
-        if (got_sound == false) {
-            // xxx seeing this printed now for 4mic_270.wav
-            dbgpr("T=%0.3f: DISCARD SOUND amp=%0.3f  intvl=%0.3f ... %0.3f\n", 
-                   time_now, amp, time_sound_start, time_now);
+        integral += squared(DATA(0,0));
+        //dbgpr("integral = %0.6f\n", integral);
+        if (frame_cnt == start_frame_cnt + MS_TO_FRAMES(150)) {
+            dbgpr("CHECKING FOR MIN_INTEGRAL %0.6f  %0.6f\n", integral, MIN_INTEGRAL);
+            trigger_integral = integral;
+            if (integral < MIN_INTEGRAL) {
+                dbgpr("*** FAILED\n");
+                start_frame_cnt = 0;
+            }
+        } else if (frame_cnt == start_frame_cnt + MS_TO_FRAMES(480)) {
+            dbgpr("START ANALYZE\n");
+            analyze = true;
+            start_frame_cnt = 0;
         }
-        time_sound_start = 0;
     }
 
     // if there is not sound data to analyze then return
-    if (got_sound == false) {
+    if (analyze == false) {
         return;
     }
 
-    // ----------------------------
-    // xxx comment
-    // ----------------------------
+    // -----------------------------------------------------
+    // the following code determines the angle to the sound
+    //                         0
+    //                         ^
+    //              270 <- RESPEAKER -> 90
+    //                         v
+    //                        180
+    // -----------------------------------------------------
 
     int           max_cca_idx=-99, max_ccb_idx=-99;
     double        max_cca=0, max_ccb=0, coeffs[3], cca_x, ccb_x, angle;
@@ -294,7 +317,10 @@ static void process_data(float *frame, double time_now, void *cx)
         for (int i = -N; i <= N; i++) x[i+N] = i;
     }
 
-    // xxx
+    // Each of the 2 pairs of mics has 2*N+1 cross correlation results that
+    // is computed by the code near the top of this routine.
+    // Determine the max cross-corr value for the sets of cross correlations
+    // performed for the 2 pairs of mics.
     for (int i = -N; i <= N; i++) {
         if (cca[i+N] > max_cca) {
             max_cca = cca[i+N];
@@ -306,16 +332,40 @@ static void process_data(float *frame, double time_now, void *cx)
         }
     }
 
-    // xxx if xxx explain
+    // The deviation of the max cross correlation from center should be 
+    // limitted by the speed of sound, the distance between the mics, and
+    // the sample_rate. Using:
+    // - distance between mics = 0.061 m
+    // - speed of sond         = 343 m/s
+    // - sample rate           = 48000 samples per second
+    // time = .061 / 343 = .00018
+    // samples = .00018 * 48000 = 8.5
+    //
+    // When using N=15 there is room for location of the max to be in the
+    // range of -15 to +15 samples.
+    // 
+    // This code block ensures that the max is in the range -14 to +14;
+    // this range is needed (insead of -15 to +15) because the poly_fit 
+    // that is performed below is using the max value and 1 value on either
+    // side of the max.
     if ((max_cca_idx <= -N || max_cca_idx >= N) ||
         (max_ccb_idx <= -N || max_ccb_idx >= N))
     {
         dbgpr("T=%0.3f: ANALYZE SOUND - ERROR max_cca_idx=%d max_ccb_idx=%d\n", 
-              time_now, max_cca_idx, max_ccb_idx);
+              time_secs, max_cca_idx, max_ccb_idx);
         return;
     }
 
-    // fit to parabola (degree 2 polynomial)
+    // Instead of using the max_cca/b_idx that is obtained above; this code
+    // attempts to find a better value by fitting a 2nd degree polynomial 
+    // (a parabola) using the max value, and the 2 values on either side of the max.
+    //
+    // For example, the max value is located at 7 samples; but the following
+    // graph indicates that the 'true' max would be a little larger than 7.
+    //   6:   5.3 **************************
+    //   7:   6.2 ******************************
+    //   8:   5.5 ***************************  
+    // The vale computed, for this example, is: 7.064
     poly_fit(3, &x[max_cca_idx-1+N], &cca[max_cca_idx-1+N], 2, coeffs);
     cca_x = -coeffs[1] / (2 * coeffs[2]);
     poly_fit(3, &x[max_ccb_idx-1+N], &ccb[max_ccb_idx-1+N], 2, coeffs);
@@ -325,10 +375,10 @@ static void process_data(float *frame, double time_now, void *cx)
     angle = atan2(ccb_x, cca_x) * (180/M_PI);
     angle = normalize_angle(angle + ANGLE_OFFSET);
 
-    // prints
+    // debug prints
     if (debug & DEBUG_ANALYZE_SOUND) {
-        dbgpr("T=%0.3f: ANALYZE SOUND - amp=%0.3f  intvl=%0.3f ... %0.3f\n", 
-                       time_now, amp, time_now-WINDOW_DURATION, time_now);
+        dbgpr("T=%0.3f: ANALYZE SOUND - trigger_integral=%0.3f %0.3f  integral=%0.3f  intvl=%0.3f ... %0.3f\n", 
+                       time_secs, trigger_integral, MIN_INTEGRAL, integral, time_secs-WINDOW_DURATION, time_secs);
         for (int i = -N; i <= N; i++) {
             char s1[100], s2[100];
             dbgpr("%3d: %5.1f %-30s - %5.1f %-30s\n",
@@ -344,7 +394,11 @@ static void process_data(float *frame, double time_now, void *cx)
 
 // -----------------  PROCESS DATA - DEBUG PRINT SUPPORT  ------------------
 
-#define MAX_DBGPR 1000
+// The process_data routine should not call printf directly, because that could
+// cause unpredicatable execution delays. Instead, process_data calls dbgpr(),
+// which prints to dbgpr_buff. And, the dbgpr_thread performes the printf.
+
+#define MAX_DBGPR 10000
 
 static char dbgpr_buff[MAX_DBGPR][150];
 static volatile uint64_t prints_produced;
@@ -356,8 +410,15 @@ static void dbgpr(char *fmt, ...)
     va_list ap;
 
     // if out of print buffers then return
-    if (prints_produced - prints_consumed >= MAX_DBGPR) {
-        return;
+    if (prints_produced - prints_consumed == MAX_DBGPR) {
+        static bool printed;
+        if (printed == false) {
+            printf("WARNING: dbgpr is delaying\n");
+            printed = true;
+        }
+        while (prints_produced - prints_consumed == MAX_DBGPR) {
+            usleep(100);
+        }
     }
 
     // print to buffer
@@ -386,6 +447,8 @@ static void *dbgpr_thread(void *cx)
         while (prints_produced > prints_consumed) {
             idx = (prints_consumed % MAX_DBGPR);
             printf("%s", dbgpr_buff[idx]);
+            __sync_synchronize();
+
             prints_consumed++;
         }
     }

@@ -1,3 +1,4 @@
+// XXX screech when K set to 1 in HPF or LPF?
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
