@@ -255,7 +255,6 @@ static void *get_data_from_file_thread(void *cx)
 
 static int process_data(const float *frame, void *cx)
 {
-    // xxx make this an inline and check the offset
     #define DATA(_chan,_offset) \
         data [ _chan ] [ data_idx+(_offset) >= 0 ? data_idx+(_offset) : data_idx+(_offset)+MAX_FRAME ]
 
