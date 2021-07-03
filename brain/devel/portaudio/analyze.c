@@ -5,6 +5,11 @@
 // - test on rpi
 // - add Time option, and filter params options, so different filter params can be scripted  MAYBE
 // - make a stanalone demo pgm and put in new repo  LATER
+//
+// - identify a set of words to test with
+// - see how various adjustments, such as filter helps
+// - try to rule out graphs that don't have a clear single peak
+// - increase sound sensitivity
 
 #include <stdio.h>
 #include <stdbool.h>
@@ -20,14 +25,13 @@
 #include <pthread.h>
 #include <math.h>
 
+#include <wiringPi.h>
+
 #include <pa_utils.h>
 #include <sf_utils.h>
 #include <audio_filters.h>
 #include <poly_fit.h>
 #include <apa102.h>
-
-// xxx
-#include "../../../common/include/gpio.h"
 
 //
 // defines
@@ -47,6 +51,11 @@
 // typedefs
 //
 
+typedef struct {
+    double   angle;
+    uint64_t angle_frame_cnt;
+} leds_t;
+
 //
 // variables
 //
@@ -60,12 +69,12 @@ static pthread_t tid_leds_thread;
 static pthread_t tid_get_data_from_mic_thread;
 static pthread_t tid_get_data_from_file_thread;
 
+static uint64_t  frame_cnt;
+static leds_t    leds;
+
 //
 // prototpes
 //
-
-static int leds_init(void);
-static void * leds_thread(void * cx);
 
 static int init_get_data_from_mic(char *dev_name);
 static void * get_data_from_mic_thread(void *cx);
@@ -81,7 +90,11 @@ static void sleep_until(uint64_t time_next_us);
 static double squared(double v);
 static double normalize_angle(double angle);
 static char *stars(double v, double max_v, int max_stars, char *s);
-//static uint64_t microsec_timer(void);
+static uint64_t microsec_timer(void);
+
+static int leds_init(void);
+static void * leds_thread(void * cx);
+static void convert_angle_to_led_num(double angle, int *led_a, int *led_b);
 
 // -----------------  MAIN  ------------------------------------------------
 
@@ -152,6 +165,9 @@ int main(int argc, char **argv)
     while (printf("> "), fgets(cmd, sizeof(cmd), stdin) != NULL) {
         cmd[strcspn(cmd, "\n")] = '\0';
         printf("GOT CMD: %s\n", cmd);
+        if (strcmp(cmd, "q") == 0) {
+            break;
+        }
     }
 
     // program terminating:
@@ -182,7 +198,6 @@ static int init_get_data_from_mic(char *dev_name)
 
     // xxx wait for up to 3 secs for process_data_cb to be called
     //     or for pa_record2 to return an error
-
     return 0;
 }
 
@@ -194,7 +209,7 @@ static void * get_data_from_mic_thread(void *cx)
         printf("ERROR: pa_record2 failed\n");
         return NULL;
     }
-    return NULL;  //xxx how to check error status
+    return NULL;
 }
 
 // -----------------  GET DATA FROM FILE  ----------------------------------
@@ -260,7 +275,7 @@ static void *get_data_from_file_thread(void *cx)
 // -----------------  PROCESS 4 CHANNEL AUDIO DATA --------------------------
 
 #if 0
-//      Cross correlate data fro mics:
+//      Cross correlate data for mics:
 //      - AX and AY
 //      - BX and BY
 //      ---------------------
@@ -277,7 +292,7 @@ static void *get_data_from_file_thread(void *cx)
 #define CCB_MICY     3
 #define ANGLE_OFFSET 45
 #else
-//      Cross correlate data fro mics:
+//      Cross correlate data for mics:
 //      - AX/BX and AY
 //      - AX/BX and BY
 //      ---------------------
@@ -295,28 +310,29 @@ static void *get_data_from_file_thread(void *cx)
 #define ANGLE_OFFSET 0
 #endif
 
-#define MAX_FRAME        (MS_TO_FRAMES(500))
-#define MIN_AMP          0.0003
-#define MIN_INTEGRAL     (MIN_AMP * 2 * MS_TO_FRAMES(150))
+#define N (15)   // N is half the number of cross correlations 
 
-#define WINDOW_DURATION  ((double)MAX_FRAME / SAMPLE_RATE)
-#define MS_TO_FRAMES(ms) (SAMPLE_RATE * (ms) / 1000)
+#define MAX_FRAME            (MS_TO_FRAMES(500))
+#define MIN_AMP              0.0003
+#define MIN_INTEGRAL         (MIN_AMP * 2 * MS_TO_FRAMES(150))
 
-#define                  N 15   // N is half the number of cross correlations 
+#define WINDOW_DURATION      ((double)MAX_FRAME / SAMPLE_RATE)
+#define MS_TO_FRAMES(ms)     (SAMPLE_RATE * (ms) / 1000)
+#define FRAMES_TO_MS(frames) (1000 * (frames) / SAMPLE_RATE)
+
 
 static int process_data(const float *frame, void *cx)
 {
     #define DATA(_chan,_offset) \
-        data [ _chan ] [ data_idx+(_offset) >= 0 ? data_idx+(_offset) : data_idx+(_offset)+MAX_FRAME ]
+        ( data [ _chan ] [ data_idx+(_offset) >= 0 ? data_idx+(_offset) : data_idx+(_offset)+MAX_FRAME ] )
 
     #define TIME_SECS ((microsec_timer()-time_start_us) / 1000000.)
 
-    static float    data[MAX_CHAN][MAX_FRAME];
+    static double   data[MAX_CHAN][MAX_FRAME];
     static int      data_idx;
-    static uint64_t frame_cnt;
     static uint64_t time_start_us;
 
-    // XXX delete TIME_SECS, simulate in analyze by dividing by frame_count
+    // xxx delete TIME_SECS, simulate in analyze by dividing by frame_count
 
     // if this program is returning, return -1, which causes the caller to stop recording
     if (prog_terminating) {
@@ -345,6 +361,7 @@ static int process_data(const float *frame, void *cx)
     }
 
     // apply high pass filter to the input frame and store in 'data' array
+    // xxx use the ex filter
     for (int chan = 0; chan < MAX_CHAN; chan++) {
         static double filter_cx[MAX_CHAN];
         DATA(chan,0) = high_pass_filter(frame[chan], &filter_cx[chan], 0.75);
@@ -496,6 +513,11 @@ static int process_data(const float *frame, void *cx)
     angle = atan2(ccb_x, cca_x) * (180/M_PI);
     angle = normalize_angle(angle + ANGLE_OFFSET);
 
+    // make sound angle available to the led_thread
+    leds.angle = angle;
+    __sync_synchronize();
+    leds.angle_frame_cnt = frame_cnt;
+
     // debug prints
     if (debug & DEBUG_ANALYZE_SOUND) {
         dbgpr("FC=%" PRId64 " T=%0.3f: ANALYZE SOUND - trigger_integral=%0.3f %0.3f  integral=%0.3f  intvl=%0.3f ... %0.3f\n", 
@@ -512,6 +534,7 @@ static int process_data(const float *frame, void *cx)
         dbgpr("\n");
     }
 
+    // continue receiving sound data
     return 0;
 }
 
@@ -619,7 +642,6 @@ static char *stars(double v, double max_v, int max_stars, char *s)
     return s;
 }
 
-#if 0  // xxx include this again
 uint64_t microsec_timer(void)
 {
     struct timespec ts;
@@ -627,77 +649,100 @@ uint64_t microsec_timer(void)
     clock_gettime(CLOCK_MONOTONIC,&ts);
     return  ((uint64_t)ts.tv_sec * 1000000) + ((uint64_t)ts.tv_nsec / 1000);
 }
-#endif
-
 
 // -----------------  LEDS  ------------------------------------------------
-/**
-// notes:
-// - led_brightness range  0 - 100
-// - all_brightness range  0 - 31
 
-int apa102_init(int max_led);
-
-void apa102_set_led(int num, unsigned int rgb, int led_brightness);
-void apa102_set_all_leds(unsigned int rgb, int led_brightness);
-void apa102_set_all_leds_off(void);
-void apa102_rotate_leds(int mode);
-
-void apa102_show_leds(int all_brightness);
-
-unsigned int apa102_wavelen_to_rgb(double wavelength);
-
-#define LED_WHITE      LED_RGB(255,255,255)
-#define LED_RED        LED_RGB(255,0,0)
-#define LED_PINK       LED_RGB(255,105,180)
-#define LED_ORANGE     LED_RGB(255,128,0)
-#define LED_YELLOW     LED_RGB(255,255,0)
-#define LED_GREEN      LED_RGB(0,255,0)
-#define LED_BLUE       LED_RGB(0,0,255)
-#define LED_LIGHT_BLUE LED_RGB(0,255,255)
-#define LED_PURPLE     LED_RGB(127,0,255)
-#define LED_OFF        LED_RGB(0,0,0)
-
-**/
-
-#define MAX_LED 12
+#define MAX_LEDS 12
 
 static int leds_init(void)
 {
-    // xxx use wiringpi,  and dont include misc.c or ../../../common/include
-    if (gpio_init() < 0) {
-        printf("ERROR: gpio_init\n");
+    // this enables Vcc for the Respeaker LEDs
+    if (wiringPiSetupGpio() == -1) {
+        printf("ERROR: wiringPiSetupGpio failed\n");
         return -1;
     }
-    set_gpio_func(5,FUNC_OUT);
-    gpio_write(5,1);
+    pinMode (5, OUTPUT);
+    digitalWrite(5, 1);
 
-    if (apa102_init(12) < 0) {
+    // init apa102 leds support code
+    if (apa102_init(MAX_LEDS) < 0) {
         printf("ERROR: apa102_init\n");
         return -1;
     }
 
+    // create thread to update leds
     pthread_create(&tid_leds_thread, NULL, leds_thread, NULL);;
     return 0;
 }
 
 static void * leds_thread(void * cx) 
 {
-// xxx control leds here
-    for (int i = 0; i < MAX_LED; i++) {
-        apa102_set_led(i,
-                       LED_LIGHT_BLUE,
-                       i * 100 / (MAX_LED-1));
-    }
+    int i, led_a, led_b;
 
-    while (prog_terminating == false) {
-        apa102_rotate_leds(1);
-        apa102_show_leds(31);
+    static struct {
+        unsigned int rgb;
+        int brightness;
+    } desired[MAX_LEDS], current[MAX_LEDS];
+
+    while (true) {
+        // if program terminating then break
+        if (prog_terminating) {
+            break;
+        }
+
+        // determine desired led values
+        for (i = 0; i < MAX_LEDS; i++) {
+            desired[i].rgb = LED_LIGHT_BLUE;
+            desired[i].brightness = 25;
+        }
+
+        if (leds.angle_frame_cnt != 0 && FRAMES_TO_MS(frame_cnt-leds.angle_frame_cnt) < 2000) {
+            convert_angle_to_led_num(leds.angle, &led_a, &led_b);
+            desired[led_a].rgb = LED_WHITE;
+            desired[led_a].brightness = 100;
+            if (led_b != -1) {
+                desired[led_b].rgb = LED_WHITE;
+                desired[led_b].brightness = 100;
+            }
+        }
+
+        // if desired led values are different than current then update
+        if (memcmp(&desired, &current, sizeof(current)) != 0) {
+            for (i = 0; i < MAX_LEDS; i++) {
+                apa102_set_led(i, desired[i].rgb, desired[i].brightness);
+            }
+            apa102_show_leds(31);
+            memcpy(current, desired, sizeof(current));
+        }
+
+        // sleep 100 ms
         usleep(100000);
     }
 
+    // clear leds and terminate thread
     apa102_set_all_leds_off();
     apa102_show_leds(0);
-
     return NULL;
+}
+
+static void convert_angle_to_led_num(double angle, int *led_a, int *led_b)
+{
+#if 1
+    *led_a = nearbyint( normalize_angle(angle) / 30 );
+    if (*led_a == 12) *led_a = 0;
+    *led_b = -1;
+#else
+    int tmp = nearbyint( normalize_angle(angle) / (360/(2*MAX_LEDS)) );
+
+    if ((tmp & 1) == 0) {
+        *led_a = tmp/2;
+        *led_b = -1;
+    } else {
+        *led_a = tmp/2;
+        *led_b = *led_a + 1;
+    }
+
+    if (*led_a == MAX_LEDS) *led_a = 0;
+    if (*led_b == MAX_LEDS) *led_b = 0;
+#endif
 }

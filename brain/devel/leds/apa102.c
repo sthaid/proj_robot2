@@ -56,9 +56,12 @@ int apa102_init(int max_led_arg)
         exit(1);
     }
 
-    // a short delay after opening seems to eliminate 
-    // initial erroneous led colors 
-    usleep(200000);
+    // the default speed does not work reliably, so reduce to 250 khz
+    int max_spd_hz = 25000000;
+    if (ioctl(fd, SPI_IOC_WR_MAX_SPEED_HZ, &max_spd_hz) < 0) {
+        ERROR("ioctl SPI_IOC_WR_MAX_SPEED_HZ failed, %s\n", strerror(errno));
+        return -1;
+    }
 
     // save max_led_arg in global
     max_led = max_led_arg;
