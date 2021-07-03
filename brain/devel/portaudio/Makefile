@@ -24,8 +24,8 @@ filters: filters.c pa_utils.c sf_utils.c util/util_sdl.c util/util_misc.c util/u
             -lSDL2 -lSDL2_ttf -ljpeg -lpng -lfftw3 -lsndfile -lportaudio -lpthread -lm \
             -o $@ 
 
-analyze: analyze.c sf_utils.c pa_utils.c poly_fit.c
-	gcc -g -Wall -O2 -I. -Iutil $^ -lsndfile -lportaudio -lpthread -lm -o $@ 
+analyze: analyze.c sf_utils.c pa_utils.c poly_fit.c apa102.c ../../../common/util/misc.c
+	gcc -g -Wall -O2 -I. -I../../../common/include $^ -lsndfile -lportaudio -lpthread -lm -o $@ 
 
 clean:
 	rm -f $(TARGETS)

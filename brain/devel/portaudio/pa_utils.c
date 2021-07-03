@@ -221,7 +221,7 @@ static int record_cb(const float *data, void *cx_arg)
 {
     record_cx_t *cx = cx_arg;
 
-    // if no more frames available to record then return -1
+    // if no more record frame buffers available then return -1
     if (cx->frame_idx == cx->max_frames) {
         return -1;
     }

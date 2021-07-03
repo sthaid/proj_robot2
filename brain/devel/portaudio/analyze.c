@@ -24,6 +24,10 @@
 #include <sf_utils.h>
 #include <audio_filters.h>
 #include <poly_fit.h>
+#include <apa102.h>
+
+// xxx
+#include "../../../common/include/gpio.h"
 
 //
 // defines
@@ -47,14 +51,25 @@
 // variables
 //
 
-static int    debug = DEBUG_ANALYZE_SOUND | 
-                      DEBUG_FRAME_RATE;
+static int       debug = DEBUG_ANALYZE_SOUND;
+
+static bool      prog_terminating;
+
+static pthread_t tid_dbgpr_thread;
+static pthread_t tid_leds_thread;
+static pthread_t tid_get_data_from_mic_thread;
+static pthread_t tid_get_data_from_file_thread;
 
 //
 // prototpes
 //
 
-static int init_get_data_from_file(char *file_name, int *file_max_frames);
+static int leds_init(void);
+static void * leds_thread(void * cx);
+
+static int init_get_data_from_mic(char *dev_name);
+static void * get_data_from_mic_thread(void *cx);
+static int init_get_data_from_file(char *file_name);
 static void *get_data_from_file_thread(void *cx);
 
 static int process_data(const float *frame, void *cx);
@@ -66,7 +81,7 @@ static void sleep_until(uint64_t time_next_us);
 static double squared(double v);
 static double normalize_angle(double angle);
 static char *stars(double v, double max_v, int max_stars, char *s);
-static uint64_t microsec_timer(void);
+//static uint64_t microsec_timer(void);
 
 // -----------------  MAIN  ------------------------------------------------
 
@@ -74,7 +89,6 @@ int main(int argc, char **argv)
 {
     int       data_src      = DATA_SRC_MIC;
     char     *data_src_name = "seeed-4mic-voicecard";
-    pthread_t tid;
 
     // use line buffered stdout
     setlinebuf(stdout);
@@ -108,40 +122,79 @@ int main(int argc, char **argv)
         };
     }
 
+    // init leds, which will be used to indicate the direction of the sound
+    if (leds_init() < 0) {
+        printf("ERROR: leds_int failed\n");
+        return 1;
+    }
+
     // create dbgpr_thread, this thread supports process_data calls to dbgpr;
     // this is needed because process_data should avoid calls that may take a 
     //  long time to complete
-    pthread_create(&tid, NULL, dbgpr_thread, NULL);
+    pthread_create(&tid_dbgpr_thread, NULL, dbgpr_thread, NULL);
 
     // initialize get data from either a wav file or the 4 channel microphone;
     // this initialization starts periodic callbacks to process_data()
     if (data_src == DATA_SRC_FILE) {
-        int file_max_frames;
-        if (init_get_data_from_file(data_src_name, &file_max_frames) < 0) {
+        if (init_get_data_from_file(data_src_name) < 0) {
             printf("ERROR: init_get_data_from_file failed\n");
             return 1;
         }
-        printf("data from file %s:  max_frames=%d  duration=%0.1f secs\n\n",
-               data_src_name, file_max_frames, (double)file_max_frames/SAMPLE_RATE);
     } else {
-        if (pa_init() < 0) {
-            printf("ERROR: pa_init failed\n");
+        if (init_get_data_from_mic(data_src_name) < 0) {
+            printf("ERROR: init_get_data_from_mic failed\n");
             return 1;
         }
-        if (pa_record2(data_src_name, MAX_CHAN, SAMPLE_RATE, process_data, NULL, 0) < 0) {
-            printf("ERROR: pa_record2 failed\n");
-            return 1;
-        }
-        printf("data from microphone %s\n\n", data_src_name);
     }
 
-    // pause forever
-    while (true) {
-        pause();
+    // command loop
+    char cmd[200];
+    while (printf("> "), fgets(cmd, sizeof(cmd), stdin) != NULL) {
+        cmd[strcspn(cmd, "\n")] = '\0';
+        printf("GOT CMD: %s\n", cmd);
     }
+
+    // program terminating:
+    // - set prog_terminating flag, and
+    // - wait for all threads to exit
+    printf("terminating\n");
+    prog_terminating = true;
+    if (tid_leds_thread) pthread_join(tid_leds_thread, NULL);
+    if (tid_get_data_from_file_thread) pthread_join(tid_get_data_from_file_thread, NULL);
+    if (tid_get_data_from_mic_thread) pthread_join(tid_get_data_from_mic_thread, NULL);
+    if (tid_dbgpr_thread) pthread_join(tid_dbgpr_thread, NULL);
 
     // done
     return 0;
+}
+
+// -----------------  GET_DATA FROM MIC  -----------------------------------
+
+static int init_get_data_from_mic(char *dev_name)
+{
+    if (pa_init() < 0) {
+        printf("ERROR: pa_init failed\n");
+        return 1;
+    }
+
+    // create get_data_from_mic_thread
+    pthread_create(&tid_get_data_from_mic_thread, NULL, get_data_from_mic_thread, dev_name);
+
+    // xxx wait for up to 3 secs for process_data_cb to be called
+    //     or for pa_record2 to return an error
+
+    return 0;
+}
+
+static void * get_data_from_mic_thread(void *cx)
+{
+    char *dev_name = cx;
+
+    if (pa_record2(dev_name, MAX_CHAN, SAMPLE_RATE, process_data, NULL, 0) < 0) {
+        printf("ERROR: pa_record2 failed\n");
+        return NULL;
+    }
+    return NULL;  //xxx how to check error status
 }
 
 // -----------------  GET DATA FROM FILE  ----------------------------------
@@ -150,10 +203,9 @@ static float *file_data;
 static int    file_max_chan;
 static int    file_max_frames;
 
-static int init_get_data_from_file(char *file_name, int *file_max_frames_arg)
+static int init_get_data_from_file(char *file_name)
 {
     int file_max_data, file_sample_rate;
-    pthread_t tid;
 
     // read file
     if (strstr(file_name, ".wav") == NULL) {
@@ -175,10 +227,7 @@ static int init_get_data_from_file(char *file_name, int *file_max_frames_arg)
     file_max_frames = file_max_data / file_max_chan;
 
     // create get_data_from_file_thread
-    pthread_create(&tid, NULL, get_data_from_file_thread, NULL);
-
-    // return file_max_frames 
-    *file_max_frames_arg = file_max_frames;
+    pthread_create(&tid_get_data_from_file_thread, NULL, get_data_from_file_thread, NULL);
 
     // return success
     return 0;
@@ -194,7 +243,9 @@ static void *get_data_from_file_thread(void *cx)
     while (true) {
         // provide 48 samples to the process_data routine
         for (i = 0; i < 48; i++) {
-            process_data(&file_data[frame_idx*file_max_chan], NULL);
+            if (process_data(&file_data[frame_idx*file_max_chan], NULL) < 0) {
+                return NULL;
+            }
             frame_idx = (frame_idx + 1) % file_max_frames;
         }
 
@@ -265,6 +316,13 @@ static int process_data(const float *frame, void *cx)
     static uint64_t frame_cnt;
     static uint64_t time_start_us;
 
+    // XXX delete TIME_SECS, simulate in analyze by dividing by frame_count
+
+    // if this program is returning, return -1, which causes the caller to stop recording
+    if (prog_terminating) {
+        return -1;
+    }
+
     // on first call, init time_start_us, this is used by the TIME_SECS for debug prints
     if (time_start_us == 0) {
         time_start_us = microsec_timer();
@@ -332,7 +390,7 @@ static int process_data(const float *frame, void *cx)
             start_frame_cnt = frame_cnt;
             integral = 0;
             trigger_integral = 0;
-            if (debug & DEBUG_ANALYZE_SOUND) {
+            if (debug & DEBUG_AMP) {
                 dbgpr("FC=%" PRId64 " T=%0.3f: start_frame_cnt=%" PRId64 "\n",
                       frame_cnt, TIME_SECS, start_frame_cnt);
             }
@@ -343,12 +401,12 @@ static int process_data(const float *frame, void *cx)
             trigger_integral = integral;
             if (integral < MIN_INTEGRAL) {
                 start_frame_cnt = 0;
-                if (debug & DEBUG_ANALYZE_SOUND) {
+                if (debug & DEBUG_AMP) {
                     dbgpr("FC=%" PRId64 " T=%0.3f: CANCELLING, integral=%0.3f MIN_INTEGRAL=%0.3f\n",
                           frame_cnt, TIME_SECS, integral, MIN_INTEGRAL);
                 }
             } else {
-                if (debug & DEBUG_ANALYZE_SOUND) {
+                if (debug & DEBUG_AMP) {
                     dbgpr("FC=%" PRId64 " T=%0.3f: ACCEPTING, integral=%0.3f MIN_INTEGRAL=%0.3f\n",
                           frame_cnt, TIME_SECS, integral, MIN_INTEGRAL);
                 }
@@ -507,6 +565,7 @@ static void *dbgpr_thread(void *cx)
 
     while (true) {
         while (prints_produced == prints_consumed) {
+            if (prog_terminating) return NULL;
             usleep(10000);
         }
 
@@ -560,11 +619,85 @@ static char *stars(double v, double max_v, int max_stars, char *s)
     return s;
 }
 
-static uint64_t microsec_timer(void)
+#if 0  // xxx include this again
+uint64_t microsec_timer(void)
 {
     struct timespec ts;
 
     clock_gettime(CLOCK_MONOTONIC,&ts);
     return  ((uint64_t)ts.tv_sec * 1000000) + ((uint64_t)ts.tv_nsec / 1000);
 }
+#endif
 
+
+// -----------------  LEDS  ------------------------------------------------
+/**
+// notes:
+// - led_brightness range  0 - 100
+// - all_brightness range  0 - 31
+
+int apa102_init(int max_led);
+
+void apa102_set_led(int num, unsigned int rgb, int led_brightness);
+void apa102_set_all_leds(unsigned int rgb, int led_brightness);
+void apa102_set_all_leds_off(void);
+void apa102_rotate_leds(int mode);
+
+void apa102_show_leds(int all_brightness);
+
+unsigned int apa102_wavelen_to_rgb(double wavelength);
+
+#define LED_WHITE      LED_RGB(255,255,255)
+#define LED_RED        LED_RGB(255,0,0)
+#define LED_PINK       LED_RGB(255,105,180)
+#define LED_ORANGE     LED_RGB(255,128,0)
+#define LED_YELLOW     LED_RGB(255,255,0)
+#define LED_GREEN      LED_RGB(0,255,0)
+#define LED_BLUE       LED_RGB(0,0,255)
+#define LED_LIGHT_BLUE LED_RGB(0,255,255)
+#define LED_PURPLE     LED_RGB(127,0,255)
+#define LED_OFF        LED_RGB(0,0,0)
+
+**/
+
+#define MAX_LED 12
+
+static int leds_init(void)
+{
+    // xxx use wiringpi,  and dont include misc.c or ../../../common/include
+    if (gpio_init() < 0) {
+        printf("ERROR: gpio_init\n");
+        return -1;
+    }
+    set_gpio_func(5,FUNC_OUT);
+    gpio_write(5,1);
+
+    if (apa102_init(12) < 0) {
+        printf("ERROR: apa102_init\n");
+        return -1;
+    }
+
+    pthread_create(&tid_leds_thread, NULL, leds_thread, NULL);;
+    return 0;
+}
+
+static void * leds_thread(void * cx) 
+{
+// xxx control leds here
+    for (int i = 0; i < MAX_LED; i++) {
+        apa102_set_led(i,
+                       LED_LIGHT_BLUE,
+                       i * 100 / (MAX_LED-1));
+    }
+
+    while (prog_terminating == false) {
+        apa102_rotate_leds(1);
+        apa102_show_leds(31);
+        usleep(100000);
+    }
+
+    apa102_set_all_leds_off();
+    apa102_show_leds(0);
+
+    return NULL;
+}
