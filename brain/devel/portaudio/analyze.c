@@ -43,6 +43,7 @@
 #define DEBUG_FRAME_RATE    1
 #define DEBUG_ANALYZE_SOUND 2
 #define DEBUG_AMP           4
+#define DEBUG_AMP_VERBOSE   8
 
 #define DATA_SRC_MIC  1
 #define DATA_SRC_FILE 2
@@ -313,13 +314,12 @@ static void *get_data_from_file_thread(void *cx)
 #define N (15)   // N is half the number of cross correlations 
 
 #define MAX_FRAME            (MS_TO_FRAMES(500))
-#define MIN_AMP              0.0003
-#define MIN_INTEGRAL         (MIN_AMP * 2 * MS_TO_FRAMES(150))
+#define MIN_AMP              (0.0002)
+#define MIN_INTEGRAL         (1.0)
 
 #define WINDOW_DURATION      ((double)MAX_FRAME / SAMPLE_RATE)
 #define MS_TO_FRAMES(ms)     (SAMPLE_RATE * (ms) / 1000)
 #define FRAMES_TO_MS(frames) (1000 * (frames) / SAMPLE_RATE)
-
 
 static int process_data(const float *frame, void *cx)
 {
@@ -382,7 +382,7 @@ static int process_data(const float *frame, void *cx)
     double amp;
     amp_sum += (squared(DATA(0,0)) - squared(DATA(0,-MS_TO_FRAMES(20))));
     amp = amp_sum / MS_TO_FRAMES(20);
-    if (debug & DEBUG_AMP) {
+    if (debug & DEBUG_AMP_VERBOSE) {
         dbgpr("FC=%" PRId64 " T=%0.3f: amp_sum=%0.6f  amp=%10.6f\n", 
               frame_cnt, TIME_SECS, amp_sum, amp);
     }
@@ -408,7 +408,7 @@ static int process_data(const float *frame, void *cx)
             integral = 0;
             trigger_integral = 0;
             if (debug & DEBUG_AMP) {
-                dbgpr("FC=%" PRId64 " T=%0.3f: start_frame_cnt=%" PRId64 "\n",
+                dbgpr("FC=%" PRId64 " T=%0.3f: START_FRAME_CNT=%" PRId64 "\n",
                       frame_cnt, TIME_SECS, start_frame_cnt);
             }
         }
@@ -728,7 +728,7 @@ static void * leds_thread(void * cx)
 static void convert_angle_to_led_num(double angle, int *led_a, int *led_b)
 {
 #if 1
-    *led_a = nearbyint( normalize_angle(angle) / 30 );
+    *led_a = nearbyint( normalize_angle(angle) / (360/MAX_LEDS) );
     if (*led_a == 12) *led_a = 0;
     *led_b = -1;
 #else
