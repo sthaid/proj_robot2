@@ -326,22 +326,12 @@ static int process_data(const float *frame, void *cx)
     #define DATA(_chan,_offset) \
         ( data [ _chan ] [ data_idx+(_offset) >= 0 ? data_idx+(_offset) : data_idx+(_offset)+MAX_FRAME ] )
 
-    #define TIME_SECS ((microsec_timer()-time_start_us) / 1000000.)
-
     static double   data[MAX_CHAN][MAX_FRAME];
     static int      data_idx;
-    static uint64_t time_start_us;
-
-    // xxx delete TIME_SECS, simulate in analyze by dividing by frame_count
 
     // if this program is returning, return -1, which causes the caller to stop recording
     if (prog_terminating) {
         return -1;
-    }
-
-    // on first call, init time_start_us, this is used by the TIME_SECS for debug prints
-    if (time_start_us == 0) {
-        time_start_us = microsec_timer();
     }
 
     // increment data_idx, and frame_cnt
@@ -350,13 +340,17 @@ static int process_data(const float *frame, void *cx)
 
     // print the frame rate once per sec
     if (debug & DEBUG_FRAME_RATE) {
-        static double   time_last_frame_rate_print;
+        static double   time_last_frame_rate_print_us;
         static uint64_t frame_cnt_last_print;
-        if (TIME_SECS - time_last_frame_rate_print >= 1) {
-            dbgpr("FC=%" PRId64 " T=%0.3f: FRAME RATE = %d\n", 
-                  frame_cnt, TIME_SECS, (int)(frame_cnt-frame_cnt_last_print));
+        uint64_t time_now_us = microsec_timer();
+        if (time_last_frame_rate_print_us == 0) {
+            time_last_frame_rate_print_us = time_now_us;
+        }
+        if (time_now_us - time_last_frame_rate_print_us >= 1000000) {
+            dbgpr("FC=%" PRId64 ": FRAME RATE = %d\n", 
+                  frame_cnt, (int)(frame_cnt-frame_cnt_last_print));
             frame_cnt_last_print = frame_cnt;
-            time_last_frame_rate_print = TIME_SECS;
+            time_last_frame_rate_print_us = time_now_us;
         }
     }
 
@@ -383,8 +377,7 @@ static int process_data(const float *frame, void *cx)
     amp_sum += (squared(DATA(0,0)) - squared(DATA(0,-MS_TO_FRAMES(20))));
     amp = amp_sum / MS_TO_FRAMES(20);
     if (debug & DEBUG_AMP_VERBOSE) {
-        dbgpr("FC=%" PRId64 " T=%0.3f: amp_sum=%0.6f  amp=%10.6f\n", 
-              frame_cnt, TIME_SECS, amp_sum, amp);
+        dbgpr("FC=%" PRId64 ": amp_sum=%0.6f  amp=%10.6f\n", frame_cnt, amp_sum, amp);
     }
 
     // determine if sound data should now be analyzed;
@@ -408,8 +401,7 @@ static int process_data(const float *frame, void *cx)
             integral = 0;
             trigger_integral = 0;
             if (debug & DEBUG_AMP) {
-                dbgpr("FC=%" PRId64 " T=%0.3f: START_FRAME_CNT=%" PRId64 "\n",
-                      frame_cnt, TIME_SECS, start_frame_cnt);
+                dbgpr("FC=%" PRId64 ": START_FRAME_CNT=%" PRId64 "\n", frame_cnt, start_frame_cnt);
             }
         }
     } else {
@@ -419,13 +411,13 @@ static int process_data(const float *frame, void *cx)
             if (integral < MIN_INTEGRAL) {
                 start_frame_cnt = 0;
                 if (debug & DEBUG_AMP) {
-                    dbgpr("FC=%" PRId64 " T=%0.3f: CANCELLING, integral=%0.3f MIN_INTEGRAL=%0.3f\n",
-                          frame_cnt, TIME_SECS, integral, MIN_INTEGRAL);
+                    dbgpr("FC=%" PRId64 ": CANCELLING, integral=%0.3f MIN_INTEGRAL=%0.3f\n",
+                          frame_cnt, integral, MIN_INTEGRAL);
                 }
             } else {
                 if (debug & DEBUG_AMP) {
-                    dbgpr("FC=%" PRId64 " T=%0.3f: ACCEPTING, integral=%0.3f MIN_INTEGRAL=%0.3f\n",
-                          frame_cnt, TIME_SECS, integral, MIN_INTEGRAL);
+                    dbgpr("FC=%" PRId64 ": ACCEPTING, integral=%0.3f MIN_INTEGRAL=%0.3f\n",
+                          frame_cnt, integral, MIN_INTEGRAL);
                 }
             }
         } else if (frame_cnt == start_frame_cnt + MS_TO_FRAMES(480)) {
@@ -489,8 +481,8 @@ static int process_data(const float *frame, void *cx)
     if ((max_cca_idx <= -N || max_cca_idx >= N) ||
         (max_ccb_idx <= -N || max_ccb_idx >= N))
     {
-        dbgpr("FC=%" PRId64 " T=%0.3f: ANALYZE SOUND - ERROR max_cca_idx=%d max_ccb_idx=%d\n", 
-              frame_cnt, TIME_SECS, max_cca_idx, max_ccb_idx);
+        dbgpr("FC=%" PRId64 ": ANALYZE SOUND - ERROR max_cca_idx=%d max_ccb_idx=%d\n", 
+              frame_cnt, max_cca_idx, max_ccb_idx);
         return 0;
     }
 
@@ -520,8 +512,10 @@ static int process_data(const float *frame, void *cx)
 
     // debug prints
     if (debug & DEBUG_ANALYZE_SOUND) {
-        dbgpr("FC=%" PRId64 " T=%0.3f: ANALYZE SOUND - trigger_integral=%0.3f %0.3f  integral=%0.3f  intvl=%0.3f ... %0.3f\n", 
-              frame_cnt, TIME_SECS, trigger_integral, MIN_INTEGRAL, integral, TIME_SECS-WINDOW_DURATION, TIME_SECS);
+        double time_now_secs = FRAMES_TO_MS(frame_cnt)/1000.;
+        dbgpr("FC=%" PRId64 ": ANALYZE SOUND - trigger_integral=%0.3f %0.3f  integral=%0.3f  intvl=%0.3f ... %0.3f\n", 
+              frame_cnt, trigger_integral, MIN_INTEGRAL, integral, 
+              time_now_secs-WINDOW_DURATION, time_now_secs);
         for (int i = -N; i <= N; i++) {
             char s1[100], s2[100];
             dbgpr("%3d: %5.1f %-30s - %5.1f %-30s\n",
