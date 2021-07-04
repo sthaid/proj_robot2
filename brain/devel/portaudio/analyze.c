@@ -1,4 +1,10 @@
 // xxx
+// - dbgpr to file
+// - use baseline to determine the beining of audio
+
+// ------------------------------------------
+
+// xxx
 // - comments
 // - adjustment knobs for tuning
 // - integrate with leds 
@@ -22,7 +28,6 @@
 // arecord -D sysdefault:CARD=seeed4micvoicec -r 48000 -c 4
 // aplay -D sysdefault:CARD=Device
 //
-
 #if 0
 sysdefault:CARD=seeed4micvoicec
     seeed-4mic-voicecard, bcm2835-i2s-ac10x-codec0 ac10x-codec.1-003b-0
@@ -127,6 +132,7 @@ static void *get_data_from_file_thread2(void *cx);
 
 static void process_frame(const float *frame);
 
+static int dbgpr_init(void);
 static void dbgpr(char *fmt, ...) __attribute__ ((format (printf, 1, 2)));
 static void *dbgpr_thread(void *cx);
 
@@ -190,10 +196,11 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    // create dbgpr_thread, this thread supports process_frame calls to dbgpr;
-    // this is needed because process_frame should avoid calls that may take a 
-    //  long time to complete
-    pthread_create(&tid_dbgpr_thread, NULL, dbgpr_thread, NULL);
+    // init debug print 
+    if (dbgpr_init() < 0) {
+        printf("ERROR: dbgpr_init failed\n");
+        return 1;
+    }
 
     // initialize get data from either a wav file or the 4 channel microphone;
     // this initialization starts periodic callbacks to process_frame()
@@ -209,7 +216,7 @@ int main(int argc, char **argv)
         }
     }
 
-    // command loop
+    // debug command loop
     char cmdline[200];
     while (printf("> "), fgets(cmdline, sizeof(cmdline), stdin) != NULL) {
         // remove trailing newline char, 
@@ -712,6 +719,26 @@ static void process_frame(const float *frame)
 static char dbgpr_buff[MAX_DBGPR][MAX_DBGPR_STR];
 static volatile uint64_t prints_produced;
 static volatile uint64_t prints_consumed;
+static FILE *fp_dbgpr;
+
+static int dbgpr_init(void)
+{
+    // open dbgpr logfile, and set linebuffered
+    fp_dbgpr = fopen("analyze.log", "w");
+    if (fp_dbgpr == NULL) {
+        printf("ERROR: open analyze.log, %s\n", strerror(errno));
+        return -1;
+    }
+    setlinebuf(fp_dbgpr);
+
+    // create dbgpr_thread, this thread supports process_frame calls to dbgpr;
+    // this is needed because process_frame should avoid calls that may take a 
+    //  long time to complete
+    pthread_create(&tid_dbgpr_thread, NULL, dbgpr_thread, NULL);
+
+    // success
+    return 0;
+}
 
 static void dbgpr(char *fmt, ...)
 {
@@ -748,21 +775,27 @@ static void *dbgpr_thread(void *cx)
 {
     int idx;
 
+    fprintf(fp_dbgpr, "dbgpr_thread starting\n");
+
     while (true) {
         while (prints_produced == prints_consumed) {
-            if (prog_terminating) return NULL;
+            if (prog_terminating) {
+                goto done;
+            }
             usleep(10000);
         }
 
         while (prints_produced > prints_consumed) {
             idx = (prints_consumed % MAX_DBGPR);
-            printf("%s", dbgpr_buff[idx]);
+            fprintf(fp_dbgpr, "%s", dbgpr_buff[idx]);
             __sync_synchronize();
 
             prints_consumed++;
         }
     }
 
+done:
+    fprintf(fp_dbgpr, "dbgpr_thread terminating\n");
     return NULL;
 }
 
