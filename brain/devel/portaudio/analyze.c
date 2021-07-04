@@ -80,11 +80,6 @@ usbstream:CARD=seeed4micvoicec
 #define SAMPLE_RATE  48000
 #define MAX_CHAN     4
 
-#define DEBUG_FRAME_RATE    1
-#define DEBUG_ANALYZE_SOUND 2
-#define DEBUG_AMP           4
-#define DEBUG_AMP_VERBOSE   8
-
 #define DATA_SRC_MIC  1
 #define DATA_SRC_FILE 2
 
@@ -101,7 +96,7 @@ typedef struct {
 // variables
 //
 
-static int       debug = DEBUG_ANALYZE_SOUND;
+static int       debug = 1;
 
 static bool      prog_terminating;
 
@@ -513,7 +508,7 @@ static void process_frame(const float *frame)
     frame_cnt++;
 
     // print the frame rate once per sec
-    if (debug & DEBUG_FRAME_RATE) {
+    if (0) {
         static double   time_last_frame_rate_print_us;
         static uint64_t frame_cnt_last_print;
         uint64_t time_now_us = microsec_timer();
@@ -550,9 +545,13 @@ static void process_frame(const float *frame)
     double amp;
     amp_sum += (squared(DATA(0,0)) - squared(DATA(0,-MS_TO_FRAMES(20))));
     amp = amp_sum / MS_TO_FRAMES(20);
-    if (debug & DEBUG_AMP_VERBOSE) {
+
+    // xxx comment
+    if (1) {
+        // xxx AAA
+        // xxx graph these, use stars()
         static int cnt;  // xxx check this
-        if (++cnt == 48) {
+        if (++cnt == SAMPLE_RATE/100) {
             dbgpr("FC=%" PRId64 ": amp_sum=%0.6f  amp=%10.6f\n", frame_cnt, amp_sum, amp);
             cnt = 0;
         }
@@ -578,9 +577,7 @@ static void process_frame(const float *frame)
             start_frame_cnt = frame_cnt;
             integral = 0;
             trigger_integral = 0;
-            if (debug & DEBUG_AMP) {
-                dbgpr("FC=%" PRId64 ": START_FRAME_CNT=%" PRId64 "\n", frame_cnt, start_frame_cnt);
-            }
+            dbgpr("FC=%" PRId64 ": START_FRAME_CNT=%" PRId64 "\n", frame_cnt, start_frame_cnt);
         }
     } else {
         integral += squared(DATA(0,0));
@@ -588,15 +585,11 @@ static void process_frame(const float *frame)
             trigger_integral = integral;
             if (integral < MIN_INTEGRAL) {
                 start_frame_cnt = 0;
-                if (debug & DEBUG_AMP) {
-                    dbgpr("FC=%" PRId64 ": CANCELLING, integral=%0.3f MIN_INTEGRAL=%0.3f\n",
-                          frame_cnt, integral, MIN_INTEGRAL);
-                }
+                dbgpr("FC=%" PRId64 ": CANCELLING, integral=%0.3f MIN_INTEGRAL=%0.3f\n",
+                      frame_cnt, integral, MIN_INTEGRAL);
             } else {
-                if (debug & DEBUG_AMP) {
-                    dbgpr("FC=%" PRId64 ": ACCEPTING, integral=%0.3f MIN_INTEGRAL=%0.3f\n",
-                          frame_cnt, integral, MIN_INTEGRAL);
-                }
+                dbgpr("FC=%" PRId64 ": ACCEPTING, integral=%0.3f MIN_INTEGRAL=%0.3f\n",
+                      frame_cnt, integral, MIN_INTEGRAL);
             }
         } else if (frame_cnt == start_frame_cnt + MS_TO_FRAMES(480)) {
             analyze = true;
@@ -688,8 +681,8 @@ static void process_frame(const float *frame)
     __sync_synchronize();
     leds.angle_frame_cnt = frame_cnt;
 
-    // debug prints
-    if (debug & DEBUG_ANALYZE_SOUND) {
+    // debug prints results of sound direction analysis
+    if (1) {
         double time_now_secs = FRAMES_TO_MS(frame_cnt)/1000.;
         dbgpr("FC=%" PRId64 ": ANALYZE SOUND - trigger_integral=%0.3f %0.3f  integral=%0.3f  intvl=%0.3f ... %0.3f\n", 
               frame_cnt, trigger_integral, MIN_INTEGRAL, integral, 
@@ -744,6 +737,11 @@ static void dbgpr(char *fmt, ...)
 {
     int idx, cnt;
     va_list ap;
+
+    // if debug not enabled then return
+    if (debug == 0) {
+        return;
+    }
 
     // if out of print buffers then return
     if (prints_produced - prints_consumed == MAX_DBGPR) {
