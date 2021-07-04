@@ -11,6 +11,41 @@
 // - try to rule out graphs that don't have a clear single peak
 // - increase sound sensitivity
 
+// NOTES
+//   arecord -r 48000 -c 4 t1.wav
+//haid@robot-brain:~/proj/proj_robot2/brain/devel/portaudio $ alias aplay
+//alias aplay='aplay -D sysdefault:CARD=Device'
+//haid@robot-brain:~/proj/proj_robot2/brain/devel/portaudio $ alias arecord
+//alias arecord='arecord -D sysdefault:CARD=seeed4micvoicec'
+//
+// arecord -L
+// arecord -D sysdefault:CARD=seeed4micvoicec -r 48000 -c 4
+// aplay -D sysdefault:CARD=Device
+//
+
+#if 0
+sysdefault:CARD=seeed4micvoicec
+    seeed-4mic-voicecard, bcm2835-i2s-ac10x-codec0 ac10x-codec.1-003b-0
+    Default Audio Device
+dmix:CARD=seeed4micvoicec,DEV=0
+    seeed-4mic-voicecard, bcm2835-i2s-ac10x-codec0 ac10x-codec.1-003b-0
+    Direct sample mixing device
+dsnoop:CARD=seeed4micvoicec,DEV=0
+    seeed-4mic-voicecard, bcm2835-i2s-ac10x-codec0 ac10x-codec.1-003b-0
+    Direct sample snooping device
+hw:CARD=seeed4micvoicec,DEV=0
+    seeed-4mic-voicecard, bcm2835-i2s-ac10x-codec0 ac10x-codec.1-003b-0
+    Direct hardware device without any conversions
+plughw:CARD=seeed4micvoicec,DEV=0
+    seeed-4mic-voicecard, bcm2835-i2s-ac10x-codec0 ac10x-codec.1-003b-0
+    Hardware device with all software conversions
+usbstream:CARD=seeed4micvoicec
+    seeed-4mic-voicecard
+    USB Stream Output
+#endif
+
+
+
 #include <stdio.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -74,6 +109,9 @@ static pthread_t tid_get_data_from_file_thread2;
 static uint64_t  frame_cnt;
 static leds_t    leds;
 
+static int       k1 = 1;
+static double    k2 = 0.75;
+
 //
 // prototpes
 //
@@ -115,7 +153,7 @@ int main(int argc, char **argv)
     setlinebuf(stdout);
 
    #define USAGE \
-    "usage: analyze [-d indev] [-f filename]\n" \
+    "usage: analyze [-d mic_dev_name] [-f file_name[,spkr_dev_name]]\n" \
     "       - use either -d or -f\n" \
     "       - default is -d seeed-4mic-voicecard"
 
@@ -144,6 +182,8 @@ int main(int argc, char **argv)
         };
     }
 
+    // xxx print args
+
     // init leds, which will be used to indicate the direction of the sound
     if (leds_init() < 0) {
         printf("ERROR: leds_int failed\n");
@@ -170,21 +210,45 @@ int main(int argc, char **argv)
     }
 
     // command loop
-    char cmd[200];
-    while (printf("> "), fgets(cmd, sizeof(cmd), stdin) != NULL) {
-        // remove trailing newline char
-        cmd[strcspn(cmd, "\n")] = '\0';
-
-        // if no cmd then continue
-        if (cmd[0] == '\0') {
+    char cmdline[200];
+    while (printf("> "), fgets(cmdline, sizeof(cmdline), stdin) != NULL) {
+        // remove trailing newline char, 
+        // get cmd, 
+        cmdline[strcspn(cmdline, "\n")] = '\0';
+        char *cmd = strtok(cmdline, " ");
+        if (cmd == NULL) {
             continue;
         }
 
         // process the cmd
-        printf("GOT CMD: %s\n", cmd);
         if (strcmp(cmd, "q") == 0) {
             break;
+        } else if (strcmp(cmd, "set") == 0) {
+            char *name = strtok(NULL, " ");
+            char *value_str = strtok(NULL, " ");
+            double value;
+            if ((name == NULL) || (value_str == NULL) ||
+                (sscanf(value_str, "%lf", &value) != 1)) 
+            {
+                printf("ERROR: 'set' invalid args\n");
+                continue;
+            }
+                
+            if (strcmp(name, "k1") == 0) {
+                k1 = value;
+            } else if (strcmp(name, "k2") == 0) {
+                k2 = value;
+            } else {
+                printf("ERROR: 'set' invalid name '%s'\n", name);
+            }
+        } else if (strcmp(cmd, "show") == 0) {
+            // xxx or always print these at prompt
+            printf("k1   = %d\n", k1);
+            printf("k2   = %0.3f\n", k2);
+        } else {
+            printf("ERROR: invalid cmd '%s'\n", cmd);
         }
+        // xxx quiet cmd  OR  off and on
     }
 
     // program terminating:
@@ -231,6 +295,7 @@ static void * get_data_from_mic_thread(void *cx)
         exit(1);
     }
  
+    // terminate thread
     return NULL;
 }
 
@@ -324,6 +389,7 @@ static void *get_data_from_file_thread(void *cx)
         exit(1);
     }
 
+    // terminate thread
     return NULL;
 }
 
@@ -375,6 +441,7 @@ static void *get_data_from_file_thread2(void *cx)
         sleep_until(time_next_us);
     }
 
+    // terminate thread
     return NULL;
 }
 
@@ -420,7 +487,7 @@ static void *get_data_from_file_thread2(void *cx)
 
 #define MAX_FRAME            (MS_TO_FRAMES(500))
 #define MIN_AMP              (0.0002)
-#define MIN_INTEGRAL         (1.0)
+#define MIN_INTEGRAL         (MIN_AMP * 0.7 * MS_TO_FRAMES(150))
 
 #define WINDOW_DURATION      ((double)MAX_FRAME / SAMPLE_RATE)
 #define MS_TO_FRAMES(ms)     (SAMPLE_RATE * (ms) / 1000)
@@ -457,8 +524,8 @@ static void process_frame(const float *frame)
     // apply high pass filter to the input frame and store in 'data' array
     // xxx use the ex filter
     for (int chan = 0; chan < MAX_CHAN; chan++) {
-        static double filter_cx[MAX_CHAN];
-        DATA(chan,0) = high_pass_filter(frame[chan], &filter_cx[chan], 0.75);
+        static double filter_cx[MAX_CHAN][10];
+        DATA(chan,0) = high_pass_filter_ex(frame[chan], filter_cx[chan], k1, k2);
     }
 
     // compute cross correlations for the 2 pairs of mic channels
@@ -477,7 +544,11 @@ static void process_frame(const float *frame)
     amp_sum += (squared(DATA(0,0)) - squared(DATA(0,-MS_TO_FRAMES(20))));
     amp = amp_sum / MS_TO_FRAMES(20);
     if (debug & DEBUG_AMP_VERBOSE) {
-        dbgpr("FC=%" PRId64 ": amp_sum=%0.6f  amp=%10.6f\n", frame_cnt, amp_sum, amp);
+        static int cnt;  // xxx check this
+        if (++cnt == 48) {
+            dbgpr("FC=%" PRId64 ": amp_sum=%0.6f  amp=%10.6f\n", frame_cnt, amp_sum, amp);
+            cnt = 0;
+        }
     }
 
     // determine if sound data should now be analyzed;
