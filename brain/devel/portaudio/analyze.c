@@ -69,6 +69,7 @@ static pthread_t tid_dbgpr_thread;
 static pthread_t tid_leds_thread;
 static pthread_t tid_get_data_from_mic_thread;
 static pthread_t tid_get_data_from_file_thread;
+static pthread_t tid_get_data_from_file_thread2;
 
 static uint64_t  frame_cnt;
 static leds_t    leds;
@@ -77,12 +78,16 @@ static leds_t    leds;
 // prototpes
 //
 
-static int init_get_data_from_mic(char *dev_name);
-static void * get_data_from_mic_thread(void *cx);
-static int init_get_data_from_file(char *file_name);
-static void *get_data_from_file_thread(void *cx);
+static int init_get_data_from_mic(char *mic_dev_name);
+static void *get_data_from_mic_thread(void *cx);
+static int process_mic_frame(const float *frame, void *cx);
 
-static int process_data(const float *frame, void *cx);
+static int init_get_data_from_file(char *file_name, char *spkr_dev_name);
+static void *get_data_from_file_thread(void *cx);
+static int play_get_frame(float *ret_spkr_data, void *cx);
+static void *get_data_from_file_thread2(void *cx);
+
+static void process_frame(const float *frame);
 
 static void dbgpr(char *fmt, ...) __attribute__ ((format (printf, 1, 2)));
 static void *dbgpr_thread(void *cx);
@@ -94,15 +99,17 @@ static char *stars(double v, double max_v, int max_stars, char *s);
 static uint64_t microsec_timer(void);
 
 static int leds_init(void);
-static void * leds_thread(void * cx);
+static void *leds_thread(void * cx);
 static void convert_angle_to_led_num(double angle, int *led_a, int *led_b);
 
 // -----------------  MAIN  ------------------------------------------------
 
 int main(int argc, char **argv)
 {
-    int       data_src      = DATA_SRC_MIC;
-    char     *data_src_name = "seeed-4mic-voicecard";
+    int   data_src      = DATA_SRC_MIC;
+    char *mic_dev_name  = "seeed-4mic-voicecard";
+    char *file_name     = NULL;
+    char *spkr_dev_name = NULL;
 
     // use line buffered stdout
     setlinebuf(stdout);
@@ -120,12 +127,13 @@ int main(int argc, char **argv)
         }
         switch (ch) {
         case 'f':
-            data_src_name = optarg;
             data_src = DATA_SRC_FILE;
+            file_name = strtok(optarg, ",");
+            spkr_dev_name = strtok(NULL, "R");
             break;
         case 'd':
-            data_src_name = optarg;
             data_src = DATA_SRC_MIC;
+            mic_dev_name = optarg;
             break;
         case 'h':
             printf("%s\n", USAGE);
@@ -142,20 +150,20 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    // create dbgpr_thread, this thread supports process_data calls to dbgpr;
-    // this is needed because process_data should avoid calls that may take a 
+    // create dbgpr_thread, this thread supports process_frame calls to dbgpr;
+    // this is needed because process_frame should avoid calls that may take a 
     //  long time to complete
     pthread_create(&tid_dbgpr_thread, NULL, dbgpr_thread, NULL);
 
     // initialize get data from either a wav file or the 4 channel microphone;
-    // this initialization starts periodic callbacks to process_data()
+    // this initialization starts periodic callbacks to process_frame()
     if (data_src == DATA_SRC_FILE) {
-        if (init_get_data_from_file(data_src_name) < 0) {
+        if (init_get_data_from_file(file_name, spkr_dev_name) < 0) {
             printf("ERROR: init_get_data_from_file failed\n");
             return 1;
         }
     } else {
-        if (init_get_data_from_mic(data_src_name) < 0) {
+        if (init_get_data_from_mic(mic_dev_name) < 0) {
             printf("ERROR: init_get_data_from_mic failed\n");
             return 1;
         }
@@ -164,7 +172,15 @@ int main(int argc, char **argv)
     // command loop
     char cmd[200];
     while (printf("> "), fgets(cmd, sizeof(cmd), stdin) != NULL) {
+        // remove trailing newline char
         cmd[strcspn(cmd, "\n")] = '\0';
+
+        // if no cmd then continue
+        if (cmd[0] == '\0') {
+            continue;
+        }
+
+        // process the cmd
         printf("GOT CMD: %s\n", cmd);
         if (strcmp(cmd, "q") == 0) {
             break;
@@ -178,6 +194,7 @@ int main(int argc, char **argv)
     prog_terminating = true;
     if (tid_leds_thread) pthread_join(tid_leds_thread, NULL);
     if (tid_get_data_from_file_thread) pthread_join(tid_get_data_from_file_thread, NULL);
+    if (tid_get_data_from_file_thread2) pthread_join(tid_get_data_from_file_thread2, NULL);
     if (tid_get_data_from_mic_thread) pthread_join(tid_get_data_from_mic_thread, NULL);
     if (tid_dbgpr_thread) pthread_join(tid_dbgpr_thread, NULL);
 
@@ -187,39 +204,62 @@ int main(int argc, char **argv)
 
 // -----------------  GET_DATA FROM MIC  -----------------------------------
 
-static int init_get_data_from_mic(char *dev_name)
+static int init_get_data_from_mic(char *mic_dev_name)
 {
+    // init portaudio
     if (pa_init() < 0) {
         printf("ERROR: pa_init failed\n");
         return 1;
     }
 
     // create get_data_from_mic_thread
-    pthread_create(&tid_get_data_from_mic_thread, NULL, get_data_from_mic_thread, dev_name);
+    pthread_create(&tid_get_data_from_mic_thread, NULL, get_data_from_mic_thread, mic_dev_name);
 
-    // xxx wait for up to 3 secs for process_data_cb to be called
-    //     or for pa_record2 to return an error
+    // return success; 
+    // if get_data_from_mic_thread it will exit()
     return 0;
 }
 
 static void * get_data_from_mic_thread(void *cx)
 {
-    char *dev_name = cx;
+    char *mic_dev_name = cx;
 
-    if (pa_record2(dev_name, MAX_CHAN, SAMPLE_RATE, process_data, NULL, 0) < 0) {
+    // call pa_record2 to initiate periodic callbacks to process_mic_frame, 
+    // with 4 channel frame data from the microphone
+    if (pa_record2(mic_dev_name, MAX_CHAN, SAMPLE_RATE, process_mic_frame, NULL, 0) < 0) {
         printf("ERROR: pa_record2 failed\n");
-        return NULL;
+        exit(1);
     }
+ 
     return NULL;
 }
 
+static int process_mic_frame(const float *frame, void *cx)
+{
+    // check if this program is terminating
+    if (prog_terminating) {
+        return -1;
+    }
+
+    // process the frame
+    process_frame(frame);
+
+    // return status to continue
+    return 0;
+}
+
 // -----------------  GET DATA FROM FILE  ----------------------------------
+
+// If spkr_dev_name is provided the data is both played to the spearker and 
+// analyzed to determine sound direction.
+//
+// Otherwise, just the sound direction is analyzed.
 
 static float *file_data;
 static int    file_max_chan;
 static int    file_max_frames;
 
-static int init_get_data_from_file(char *file_name)
+static int init_get_data_from_file(char *file_name, char *spkr_dev_name)
 {
     int file_max_data, file_sample_rate;
 
@@ -242,8 +282,29 @@ static int init_get_data_from_file(char *file_name)
     }
     file_max_frames = file_max_data / file_max_chan;
 
-    // create get_data_from_file_thread
-    pthread_create(&tid_get_data_from_file_thread, NULL, get_data_from_file_thread, NULL);
+    // if spkr_dev_name is provided then
+    //   both play the file to the speaker and analyze the sound direction
+    // else
+    //   just analyze the sound direction of file contents
+    // endif
+    if (spkr_dev_name) {
+        // init portaudio
+        if (pa_init() < 0) {
+            printf("ERROR: pa_init failed\n");
+            return -1;
+        }
+
+        // xxx set spkr volume
+
+        // create get_data_from_file_thread, this thread will:
+        // - play the file to the speaker, and
+        // - perform sound direction analysis
+        pthread_create(&tid_get_data_from_file_thread, NULL, get_data_from_file_thread, spkr_dev_name);
+    } else {
+        // create get_data_from_file_thread2, this thread will:
+        // - perform sound direction analysis
+        pthread_create(&tid_get_data_from_file_thread2, NULL, get_data_from_file_thread2, NULL);
+    }
 
     // return success
     return 0;
@@ -251,17 +312,61 @@ static int init_get_data_from_file(char *file_name)
 
 static void *get_data_from_file_thread(void *cx)
 {
+    char *spkr_dev_name = cx;
+
+    // call pa_play2 which will schedule the play_get_frame periodic callback, 
+    // the callback will:
+    // - return a 1 channel frame of file data, to be played on the speaker
+    // - call process_frame with a 4 channel frame of file data, for sound
+    //   direction analysis
+    if (pa_play2(spkr_dev_name, 1, SAMPLE_RATE, play_get_frame, NULL) < 0) {
+        printf("ERROR: pa_play2 failed\n");
+        exit(1);
+    }
+
+    return NULL;
+}
+
+static int play_get_frame(float *ret_spkr_data, void *cx)
+{
+    static int frame_idx;
+    float *frame;
+
+    // check if this program is terminating
+    if (prog_terminating) {
+        return -1;
+    }
+
+    // get ptr to the next frame of file_data
+    frame = &file_data[frame_idx*file_max_chan];
+    frame_idx = (frame_idx + 1) % file_max_frames;
+
+    // process the data through the sound localization process_frame routine
+    process_frame(frame);
+
+    // return the frame to caller, so it will be played on the speaker
+    *ret_spkr_data = frame[0];
+
+    // continue playing
+    return 0;
+}
+
+static void *get_data_from_file_thread2(void *cx)
+{
     int      frame_idx=0, i;
     uint64_t time_next_us;
 
     // loop, passing file data to routine for procesing
     time_next_us = microsec_timer();
     while (true) {
-        // provide 48 samples to the process_data routine
+        // check if this program is terminating
+        if (prog_terminating) {
+            break;
+        }
+        
+        // provide 48 samples to the process_frame routine
         for (i = 0; i < 48; i++) {
-            if (process_data(&file_data[frame_idx*file_max_chan], NULL) < 0) {
-                return NULL;
-            }
+            process_frame(&file_data[frame_idx*file_max_chan]);
             frame_idx = (frame_idx + 1) % file_max_frames;
         }
 
@@ -321,18 +426,13 @@ static void *get_data_from_file_thread(void *cx)
 #define MS_TO_FRAMES(ms)     (SAMPLE_RATE * (ms) / 1000)
 #define FRAMES_TO_MS(frames) (1000 * (frames) / SAMPLE_RATE)
 
-static int process_data(const float *frame, void *cx)
+static void process_frame(const float *frame)
 {
     #define DATA(_chan,_offset) \
         ( data [ _chan ] [ data_idx+(_offset) >= 0 ? data_idx+(_offset) : data_idx+(_offset)+MAX_FRAME ] )
 
     static double   data[MAX_CHAN][MAX_FRAME];
     static int      data_idx;
-
-    // if this program is returning, return -1, which causes the caller to stop recording
-    if (prog_terminating) {
-        return -1;
-    }
 
     // increment data_idx, and frame_cnt
     data_idx = (data_idx + 1) % MAX_FRAME;
@@ -428,7 +528,7 @@ static int process_data(const float *frame, void *cx)
 
     // if there is not sound data to analyze then return
     if (analyze == false) {
-        return 0;
+        return;
     }
 
     // -----------------------------------------------------
@@ -483,7 +583,7 @@ static int process_data(const float *frame, void *cx)
     {
         dbgpr("FC=%" PRId64 ": ANALYZE SOUND - ERROR max_cca_idx=%d max_ccb_idx=%d\n", 
               frame_cnt, max_cca_idx, max_ccb_idx);
-        return 0;
+        return;
     }
 
     // Instead of using the max_cca/b_idx that is obtained above; this code
@@ -527,15 +627,12 @@ static int process_data(const float *frame, void *cx)
         dbgpr("       SOUND ANGLE = %0.1f degs *****\n", angle);
         dbgpr("\n");
     }
-
-    // continue receiving sound data
-    return 0;
 }
 
 // -----------------  PROCESS DATA - DEBUG PRINT SUPPORT  ------------------
 
-// The process_data routine should not call printf directly, because that could
-// cause unpredicatable execution delays. Instead, process_data calls dbgpr(),
+// The process_frame routine should not call printf directly, because that could
+// cause unpredicatable execution delays. Instead, process_frame calls dbgpr(),
 // which prints to dbgpr_buff. And, the dbgpr_thread performes the printf.
 
 #define MAX_DBGPR     10000
@@ -690,7 +787,7 @@ static void * leds_thread(void * cx)
             desired[i].brightness = 25;
         }
 
-        if (leds.angle_frame_cnt != 0 && FRAMES_TO_MS(frame_cnt-leds.angle_frame_cnt) < 2000) {
+        if (leds.angle_frame_cnt != 0 && FRAMES_TO_MS(frame_cnt-leds.angle_frame_cnt) < 1000) {
             convert_angle_to_led_num(leds.angle, &led_a, &led_b);
             desired[led_a].rgb = LED_WHITE;
             desired[led_a].brightness = 100;
