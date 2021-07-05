@@ -551,8 +551,11 @@ static void process_frame(const float *frame)
         // xxx AAA
         // xxx graph these, use stars()
         static int cnt;  // xxx check this
+// xxx skip prints if no volume
         if (++cnt == SAMPLE_RATE/100) {
-            dbgpr("FC=%" PRId64 ": amp_sum=%0.6f  amp=%10.6f\n", frame_cnt, amp_sum, amp);
+            char s[200];
+            dbgpr("FC=%" PRId64 ": amp=%10.6f - %s\n", 
+                  frame_cnt, amp, stars(amp, .005, 80, s));
             cnt = 0;
         }
     }
@@ -684,6 +687,7 @@ static void process_frame(const float *frame)
     // debug prints results of sound direction analysis
     if (1) {
         double time_now_secs = FRAMES_TO_MS(frame_cnt)/1000.;
+        dbgpr("--------------------------------------------------------------\n");
         dbgpr("FC=%" PRId64 ": ANALYZE SOUND - trigger_integral=%0.3f %0.3f  integral=%0.3f  intvl=%0.3f ... %0.3f\n", 
               frame_cnt, trigger_integral, MIN_INTEGRAL, integral, 
               time_now_secs-WINDOW_DURATION, time_now_secs);
@@ -696,7 +700,7 @@ static void process_frame(const float *frame)
         }
         dbgpr("       LARGEST AT %-10.3f                 LARGEST AT %-10.3f\n", cca_x, ccb_x);
         dbgpr("       SOUND ANGLE = %0.1f degs *****\n", angle);
-        dbgpr("\n");
+        dbgpr("--------------------------------------------------------------\n");
     }
 }
 
