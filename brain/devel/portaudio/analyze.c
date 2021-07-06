@@ -575,7 +575,7 @@ static void process_frame(const float *frame)
 
         for (int i = -49; i <= 0; i++) {
             char s[200];
-            dbgpr("%8.3f: %-3.0f %c : %s\n",
+            dbgpr("%8.3f: %-4.0f %c : %s\n",
                 FRAME_CNT_TO_TIME(AH(i)->frame_cnt),
                 AH(i)->amp,
                 AH(i)->flag ? 'X' : ' ',
