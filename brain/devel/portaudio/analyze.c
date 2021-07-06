@@ -1,6 +1,14 @@
+// xxx try cross config
+// xxx set spkr volume  OR comment on how to do it
+
 // xxx
-// - dbgpr to file
-// - use baseline to determine the beining of audio
+// - discard outliers
+// - discard if sum squares of deviations too small
+// - discard if there is not a clear peak to cross corr
+// - do a larger poly_fit
+
+// xxx
+// - stop using baseline to determine the beining of audio
 
 // ------------------------------------------
 
@@ -47,6 +55,8 @@ plughw:CARD=seeed4micvoicec,DEV=0
 usbstream:CARD=seeed4micvoicec
     seeed-4mic-voicecard
     USB Stream Output
+
+//xxx clean up notes section
 #endif
 
 
@@ -77,11 +87,13 @@ usbstream:CARD=seeed4micvoicec
 // defines
 //
 
-#define SAMPLE_RATE  48000
-#define MAX_CHAN     4
+#define SAMPLE_RATE         48000
+#define MAX_CHAN            4
 
-#define DATA_SRC_MIC  1
-#define DATA_SRC_FILE 2
+#define DATA_SRC_MIC        1
+#define DATA_SRC_FILE       2
+
+#define DEFAULT_AMP_LIMIT   500.0
 
 //
 // typedefs
@@ -90,7 +102,7 @@ usbstream:CARD=seeed4micvoicec
 typedef struct {
     double   angle;
     uint64_t angle_frame_cnt;
-} leds_t;
+} doa_t;  // direction of arrival
 
 //
 // variables
@@ -107,10 +119,8 @@ static pthread_t tid_get_data_from_file_thread;
 static pthread_t tid_get_data_from_file_thread2;
 
 static uint64_t  frame_cnt;
-static leds_t    leds;
-
-static int       k1 = 1;
-static double    k2 = 0.75;
+static double    start_sound_block_amp_limit = DEFAULT_AMP_LIMIT;
+static doa_t     doa;
 
 //
 // prototpes
@@ -126,6 +136,7 @@ static int play_get_frame(float *ret_spkr_data, void *cx);
 static void *get_data_from_file_thread2(void *cx);
 
 static void process_frame(const float *frame);
+static void dbgpr_frame_rate(void);
 
 static int dbgpr_init(void);
 static void dbgpr(char *fmt, ...) __attribute__ ((format (printf, 1, 2)));
@@ -136,6 +147,8 @@ static double squared(double v);
 static double normalize_angle(double angle);
 static char *stars(double v, double max_v, int max_stars, char *s);
 static uint64_t microsec_timer(void);
+static double min_doubles(double *x, int n, int *min_idx_arg) __attribute__ ((unused));
+static double max_doubles(double *x, int n, int *max_idx_arg);
 
 static int leds_init(void);
 static void *leds_thread(void * cx);
@@ -168,7 +181,7 @@ int main(int argc, char **argv)
         case 'f':
             data_src = DATA_SRC_FILE;
             file_name = strtok(optarg, ",");
-            spkr_dev_name = strtok(NULL, "R");
+            spkr_dev_name = strtok(NULL, " ");
             break;
         case 'd':
             data_src = DATA_SRC_MIC;
@@ -183,7 +196,13 @@ int main(int argc, char **argv)
         };
     }
 
-    // xxx print args
+    // print args
+    if (data_src == DATA_SRC_FILE) {
+        printf("DATA_SRC_FILE: file_name=%s  spkr_dev_name=%s\n", 
+               file_name, spkr_dev_name);
+    } else {
+        printf("DATA_SRC_MIC:  mic_dev_name=%s\n", mic_dev_name);
+    }
 
     // init leds, which will be used to indicate the direction of the sound
     if (leds_init() < 0) {
@@ -212,10 +231,15 @@ int main(int argc, char **argv)
     }
 
     // debug command loop
+    // xxx - add off and on debug prints
+    //     - elim testv code
     char cmdline[200];
     while (printf("> "), fgets(cmdline, sizeof(cmdline), stdin) != NULL) {
+        static int tstv = 0;
+
         // remove trailing newline char, 
-        // get cmd, 
+        // use strtok to get the cmd field, and
+        // if no cmd then continue
         cmdline[strcspn(cmdline, "\n")] = '\0';
         char *cmd = strtok(cmdline, " ");
         if (cmd == NULL) {
@@ -229,6 +253,8 @@ int main(int argc, char **argv)
             char *name = strtok(NULL, " ");
             char *value_str = strtok(NULL, " ");
             double value;
+
+// xxx use a table
             if ((name == NULL) || (value_str == NULL) ||
                 (sscanf(value_str, "%lf", &value) != 1)) 
             {
@@ -236,21 +262,16 @@ int main(int argc, char **argv)
                 continue;
             }
                 
-            if (strcmp(name, "k1") == 0) {
-                k1 = value;
-            } else if (strcmp(name, "k2") == 0) {
-                k2 = value;
+            if (strcmp(name, "tstv") == 0) {
+                tstv = value;
             } else {
                 printf("ERROR: 'set' invalid name '%s'\n", name);
             }
         } else if (strcmp(cmd, "show") == 0) {
-            // xxx or always print these at prompt
-            printf("k1   = %d\n", k1);
-            printf("k2   = %0.3f\n", k2);
+            printf("tstv = %d\n", tstv);
         } else {
             printf("ERROR: invalid cmd '%s'\n", cmd);
         }
-        // xxx quiet cmd  OR  off and on
     }
 
     // program terminating:
@@ -360,8 +381,6 @@ static int init_get_data_from_file(char *file_name, char *spkr_dev_name)
             printf("ERROR: pa_init failed\n");
             return -1;
         }
-
-        // xxx set spkr volume
 
         // create get_data_from_file_thread, this thread will:
         // - play the file to the speaker, and
@@ -485,54 +504,53 @@ static void *get_data_from_file_thread2(void *cx)
 #define ANGLE_OFFSET 0
 #endif
 
-#define N (15)   // N is half the number of cross correlations 
+// N is half the number of cross correlations 
+#define N                       (15)   
 
-#define MAX_FRAME            (MS_TO_FRAMES(500))
-#define MIN_AMP              (0.0002)
-#define MIN_INTEGRAL         (MIN_AMP * 0.7 * MS_TO_FRAMES(150))
+// duration of a sound block analysis
+#define MAX_FRAME               (MS_TO_FRAMES(500))
 
-#define WINDOW_DURATION      ((double)MAX_FRAME / SAMPLE_RATE)
-#define MS_TO_FRAMES(ms)     (SAMPLE_RATE * (ms) / 1000)
-#define FRAMES_TO_MS(frames) (1000 * (frames) / SAMPLE_RATE)
+#define WINDOW_DURATION         ((double)MAX_FRAME / SAMPLE_RATE)
+#define MS_TO_FRAMES(ms)        (SAMPLE_RATE * (ms) / 1000)
+#define FRAMES_TO_MS(frames)    (1000 * (frames) / SAMPLE_RATE)
+#define FRAME_CNT_TO_TIME(fc)   ((double)(fc) / SAMPLE_RATE)
+
+#define DATA(_chan,_offset) \
+    ( data [ _chan ] [ data_idx+(_offset) >= 0 ? data_idx+(_offset) : data_idx+(_offset)+MAX_FRAME ] )
+#define AH(x) ( &amp_history[ ahidx+(x) >= 0 ? ahidx+(x) : ahidx+(x)+100 ] )
 
 static void process_frame(const float *frame)
 {
-    #define DATA(_chan,_offset) \
-        ( data [ _chan ] [ data_idx+(_offset) >= 0 ? data_idx+(_offset) : data_idx+(_offset)+MAX_FRAME ] )
+    static double data[MAX_CHAN][MAX_FRAME];
+    static int    data_idx;
 
-    static double   data[MAX_CHAN][MAX_FRAME];
-    static int      data_idx;
+    static double cca[2*N+1];  
+    static double ccb[2*N+1];
+
+    double amp;
+    static struct amp_history_s {
+        double   amp;
+        uint64_t frame_cnt;
+        bool     flag;
+    } amp_history[200];
+    static int ahidx;
+
+    static uint64_t start_sound_block_frame_cnt;
+    static double   start_sound_block_amp_sum;
 
     // increment data_idx, and frame_cnt
     data_idx = (data_idx + 1) % MAX_FRAME;
     frame_cnt++;
 
-    // print the frame rate once per sec
-    if (0) {
-        static double   time_last_frame_rate_print_us;
-        static uint64_t frame_cnt_last_print;
-        uint64_t time_now_us = microsec_timer();
-        if (time_last_frame_rate_print_us == 0) {
-            time_last_frame_rate_print_us = time_now_us;
-        }
-        if (time_now_us - time_last_frame_rate_print_us >= 1000000) {
-            dbgpr("FC=%" PRId64 ": FRAME RATE = %d\n", 
-                  frame_cnt, (int)(frame_cnt-frame_cnt_last_print));
-            frame_cnt_last_print = frame_cnt;
-            time_last_frame_rate_print_us = time_now_us;
-        }
-    }
+    // debug print the frame rate once per sec
+    if (0) dbgpr_frame_rate();
 
-    // apply high pass filter to the input frame and store in 'data' array
-    // xxx use the ex filter
+    // for each mic channel, copy the input frame to data arrays
     for (int chan = 0; chan < MAX_CHAN; chan++) {
-        static double filter_cx[MAX_CHAN][10];
-        DATA(chan,0) = high_pass_filter_ex(frame[chan], filter_cx[chan], k1, k2);
+        DATA(chan,0) = frame[chan];
     }
 
     // compute cross correlations for the 2 pairs of mic channels
-    static double cca[2*N+1];  
-    static double ccb[2*N+1];
     for (int i = -N; i <= N; i++) {
         cca[i+N] += DATA(CCA_MICX,-N) * DATA(CCA_MICY,-(N+i))  -
                     DATA(CCA_MICX,-((MAX_FRAME-1)-N)) * DATA(CCA_MICY,-((MAX_FRAME-1)-N+i));
@@ -540,73 +558,69 @@ static void process_frame(const float *frame)
                     DATA(CCB_MICX,-((MAX_FRAME-1)-N)) * DATA(CCB_MICY,-((MAX_FRAME-1)-N+i));
     }
 
-    // compute average amp over the past 20 ms, this is compted using mic chan 0
+    // compute average amp over the past 10 ms, this is compted using mic chan 0
     static double amp_sum;
-    double amp;
-    amp_sum += (squared(DATA(0,0)) - squared(DATA(0,-MS_TO_FRAMES(20))));
-    amp = amp_sum / MS_TO_FRAMES(20);
+    amp_sum += (squared(DATA(0,0)) - squared(DATA(0,-MS_TO_FRAMES(10))));
+    amp = amp_sum / MS_TO_FRAMES(10);
 
-    // xxx comment
-    if (1) {
-        // xxx AAA
-        // xxx graph these, use stars()
-        static int cnt;  // xxx check this
-// xxx skip prints if no volume
-        if (++cnt == SAMPLE_RATE/100) {
+    // the remaining code is executed every 10 ms;
+    // so, return here if frame_cnt is not a multiple of the number of frames in 10 ms
+    if ((frame_cnt % MS_TO_FRAMES(10)) != 0) {
+        return;
+    }
+
+    // save amp in the amp_history circular buffer;
+    // note - amp is scaled by 1e5 to make the values more convenient
+    amp *= 1e5;
+    ahidx = (ahidx + 1) % 100;
+    AH(0)->amp       = amp;
+    AH(0)->frame_cnt = frame_cnt;
+    AH(0)->flag      = false;
+
+    // if start of sound block is not set, and the 
+    // sum of the 3 most recent amp values exceeds minimum limit
+    // then the start of a sound block has been found
+    if ((start_sound_block_frame_cnt == 0) &&
+        (AH(0)->amp + AH(-1)->amp + AH(-2)->amp > start_sound_block_amp_limit))
+    {
+        start_sound_block_frame_cnt = frame_cnt;
+        start_sound_block_amp_sum = AH(0)->amp + AH(-1)->amp + AH(-2)->amp;
+        AH(0)->flag = true;
+        AH(-1)->flag = true;
+        AH(-2)->flag = true;
+    }
+            
+    // if the frame_cnt has reached the end of the sound block then
+    //   debug print the sound block amplitude values (these are in 10 ms intervals), and
+    //   set the analyze flag
+    bool analyze = false;
+    if (start_sound_block_frame_cnt != 0 && frame_cnt - start_sound_block_frame_cnt >= MS_TO_FRAMES(400)) {
+        dbgpr("\n");
+        dbgpr("============================================================================================\n");
+        dbgpr("AMP: LIMIT=%0.0f  SUM=%0.0f\n", start_sound_block_amp_limit, start_sound_block_amp_sum);
+
+        for (int i = -49; i <= 0; i++) {
             char s[200];
-            dbgpr("FC=%" PRId64 ": amp=%10.6f - %s\n", 
-                  frame_cnt, amp, stars(amp, .005, 80, s));
-            cnt = 0;
+            dbgpr("%8.3f: %-3.0f %c : %s\n",
+                FRAME_CNT_TO_TIME(AH(i)->frame_cnt),
+                AH(i)->amp,
+                AH(i)->flag ? 'X' : ' ',
+                stars(AH(i)->amp, 1000, 100, s));
         }
+
+        start_sound_block_frame_cnt = 0;
+        start_sound_block_amp_sum = 0;
+        analyze = true;
     }
 
-    // determine if sound data should now be analyzed;
-    // if so, then the 'analyze' flag is set;
-    // summary:
-    // - if amp is > MIN_AMP then start_frame_cnt is set, indicating that 
-    //   a block of frames is being considered to be analyzed
-    // - if after 150 ms after start_frame_cnt was set, there was not much
-    //   total amplitude over the past 150 ms; then cancel considering this data 
-    // - if not cancelled, then the data will be analyzed once the frame_cnt advances
-    //   to 480 ms beyond the start_frame_cnt
-    // - the analysis that is performed covers a 500 ms range; so the range that will
-    //   be analyzed extends from 20 ms before the start_frame_cnt to now
-    bool            analyze = false;
-    static uint64_t start_frame_cnt;
-    static double   integral, trigger_integral;
-
-    if (start_frame_cnt == 0) {
-        if (amp > MIN_AMP) {
-            start_frame_cnt = frame_cnt;
-            integral = 0;
-            trigger_integral = 0;
-            dbgpr("FC=%" PRId64 ": START_FRAME_CNT=%" PRId64 "\n", frame_cnt, start_frame_cnt);
-        }
-    } else {
-        integral += squared(DATA(0,0));
-        if (frame_cnt == start_frame_cnt + MS_TO_FRAMES(150)) {
-            trigger_integral = integral;
-            if (integral < MIN_INTEGRAL) {
-                start_frame_cnt = 0;
-                dbgpr("FC=%" PRId64 ": CANCELLING, integral=%0.3f MIN_INTEGRAL=%0.3f\n",
-                      frame_cnt, integral, MIN_INTEGRAL);
-            } else {
-                dbgpr("FC=%" PRId64 ": ACCEPTING, integral=%0.3f MIN_INTEGRAL=%0.3f\n",
-                      frame_cnt, integral, MIN_INTEGRAL);
-            }
-        } else if (frame_cnt == start_frame_cnt + MS_TO_FRAMES(480)) {
-            analyze = true;
-            start_frame_cnt = 0;
-        }
-    }
-
-    // if there is not sound data to analyze then return
+    // if there is not a sound block to analyze then return
     if (analyze == false) {
         return;
     }
 
     // -----------------------------------------------------
-    // the following code determines the angle to the sound
+    // the following code blocks determine the angle to the sound
+    // 
     //                         0
     //                         ^
     //              270 <- RESPEAKER -> 90
@@ -614,8 +628,8 @@ static void process_frame(const float *frame)
     //                        180
     // -----------------------------------------------------
 
-    int           max_cca_idx=-99, max_ccb_idx=-99;
-    double        max_cca=0, max_ccb=0, coeffs[3], cca_x, ccb_x, angle;
+    int           max_cca_idx, max_ccb_idx;
+    double        max_cca, max_ccb, coeffs[3], cca_x, ccb_x, angle;
     static double x[2*N+1];
     if (x[0] == 0) { // init on first call
         for (int i = -N; i <= N; i++) x[i+N] = i;
@@ -625,16 +639,10 @@ static void process_frame(const float *frame)
     // is computed by the code near the top of this routine.
     // Determine the max cross-corr value for the sets of cross correlations
     // performed for the 2 pairs of mics.
-    for (int i = -N; i <= N; i++) {
-        if (cca[i+N] > max_cca) {
-            max_cca = cca[i+N];
-            max_cca_idx = i;
-        }
-        if (ccb[i+N] > max_ccb) {
-            max_ccb = ccb[i+N];
-            max_ccb_idx = i;
-        }
-    }
+    max_cca = max_doubles(cca, 2*N+1, &max_cca_idx);
+    max_cca_idx -= N;
+    max_ccb = max_doubles(ccb, 2*N+1, &max_ccb_idx);
+    max_ccb_idx -= N;
 
     // The deviation of the max cross correlation from center is
     // limitted by the speed of sound, the distance between the mics, and
@@ -655,8 +663,8 @@ static void process_frame(const float *frame)
     if ((max_cca_idx <= -N || max_cca_idx >= N) ||
         (max_ccb_idx <= -N || max_ccb_idx >= N))
     {
-        dbgpr("FC=%" PRId64 ": ANALYZE SOUND - ERROR max_cca_idx=%d max_ccb_idx=%d\n", 
-              frame_cnt, max_cca_idx, max_ccb_idx);
+        dbgpr("%8.3f: ANALYZE SOUND - ERROR max_cca_idx=%d max_ccb_idx=%d\n", 
+              FRAME_CNT_TO_TIME(frame_cnt), max_cca_idx, max_ccb_idx);
         return;
     }
 
@@ -675,22 +683,20 @@ static void process_frame(const float *frame)
     poly_fit(3, &x[max_ccb_idx-1+N], &ccb[max_ccb_idx-1+N], 2, coeffs);
     ccb_x = -coeffs[1] / (2 * coeffs[2]);
 
-    // determine the angle to the sound source
+    // determine the direction of sound arrival angle
     angle = atan2(ccb_x, cca_x) * (180/M_PI);
     angle = normalize_angle(angle + ANGLE_OFFSET);
 
-    // make sound angle available to the led_thread
-    leds.angle = angle;
+    // make the direction of sound arrival angle available to the led_thread
+    doa.angle = angle;
     __sync_synchronize();
-    leds.angle_frame_cnt = frame_cnt;
+    doa.angle_frame_cnt = frame_cnt;
 
     // debug prints results of sound direction analysis
     if (1) {
-        double time_now_secs = FRAMES_TO_MS(frame_cnt)/1000.;
-        dbgpr("--------------------------------------------------------------\n");
-        dbgpr("FC=%" PRId64 ": ANALYZE SOUND - trigger_integral=%0.3f %0.3f  integral=%0.3f  intvl=%0.3f ... %0.3f\n", 
-              frame_cnt, trigger_integral, MIN_INTEGRAL, integral, 
-              time_now_secs-WINDOW_DURATION, time_now_secs);
+        double tnow = FRAME_CNT_TO_TIME(frame_cnt);
+        dbgpr("%8.3f: ANALYZE SOUND - intvl=%0.3f ... %0.3f\n", 
+              FRAME_CNT_TO_TIME(frame_cnt), tnow-WINDOW_DURATION, tnow);
         for (int i = -N; i <= N; i++) {
             char s1[100], s2[100];
             dbgpr("%3d: %5.1f %-30s - %5.1f %-30s\n",
@@ -700,7 +706,23 @@ static void process_frame(const float *frame)
         }
         dbgpr("       LARGEST AT %-10.3f                 LARGEST AT %-10.3f\n", cca_x, ccb_x);
         dbgpr("       SOUND ANGLE = %0.1f degs *****\n", angle);
-        dbgpr("--------------------------------------------------------------\n");
+    }
+}
+
+static void dbgpr_frame_rate(void)
+{
+    static double   time_last_frame_rate_print_us;
+    static uint64_t frame_cnt_last_print;
+    uint64_t time_now_us = microsec_timer();
+
+    if (time_last_frame_rate_print_us == 0) {
+        time_last_frame_rate_print_us = time_now_us;
+    }
+    if (time_now_us - time_last_frame_rate_print_us >= 1000000) {
+        dbgpr("%8.3f: FRAME RATE = %d\n", 
+              FRAME_CNT_TO_TIME(frame_cnt), (int)(frame_cnt-frame_cnt_last_print));
+        frame_cnt_last_print = frame_cnt;
+        time_last_frame_rate_print_us = time_now_us;
     }
 }
 
@@ -847,6 +869,44 @@ uint64_t microsec_timer(void)
     return  ((uint64_t)ts.tv_sec * 1000000) + ((uint64_t)ts.tv_nsec / 1000);
 }
 
+static double min_doubles(double *x, int n, int *min_idx_arg)
+{
+    double min = x[0];
+    int    min_idx = 0;
+
+    for (int i = 1; i < n; i++) {
+        if (x[i] < min) {
+            min = x[i];
+            min_idx = i;
+        }
+    }
+
+    if (min_idx_arg) {
+        *min_idx_arg = min_idx;
+    }
+
+    return min;
+}
+
+static double max_doubles(double *x, int n, int *max_idx_arg)
+{
+    double max = x[0];
+    int    max_idx = 0;
+
+    for (int i = 1; i < n; i++) {
+        if (x[i] > max) {
+            max = x[i];
+            max_idx = i;
+        }
+    }
+
+    if (max_idx_arg) {
+        *max_idx_arg = max_idx;
+    }
+
+    return max;
+}
+
 // -----------------  LEDS  ------------------------------------------------
 
 #define MAX_LEDS 12
@@ -893,8 +953,10 @@ static void * leds_thread(void * cx)
             desired[i].brightness = 25;
         }
 
-        if (leds.angle_frame_cnt != 0 && FRAMES_TO_MS(frame_cnt-leds.angle_frame_cnt) < 1000) {
-            convert_angle_to_led_num(leds.angle, &led_a, &led_b);
+        // if an direction of arrival has been published within 1000 ms 
+        // then convert the direction to led(s), and set the leds to white
+        if (doa.angle_frame_cnt != 0 && FRAMES_TO_MS(frame_cnt-doa.angle_frame_cnt) < 1000) {
+            convert_angle_to_led_num(doa.angle, &led_a, &led_b);
             desired[led_a].rgb = LED_WHITE;
             desired[led_a].brightness = 100;
             if (led_b != -1) {
@@ -924,7 +986,9 @@ static void * leds_thread(void * cx)
 
 static void convert_angle_to_led_num(double angle, int *led_a, int *led_b)
 {
-#if 1
+    // this ifdef selects between returning one or two led_nums to
+    // represent the angle
+#if 0
     *led_a = nearbyint( normalize_angle(angle) / (360/MAX_LEDS) );
     if (*led_a == 12) *led_a = 0;
     *led_b = -1;
