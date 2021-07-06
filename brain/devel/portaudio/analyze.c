@@ -1,64 +1,22 @@
-// xxx try cross config
-// xxx set spkr volume  OR comment on how to do it
+// xxx todo:
+// - try cross config
 
-// xxx
+// xxx ideas to improve relieability
 // - discard outliers
 // - discard if sum squares of deviations too small
 // - discard if there is not a clear peak to cross corr
 // - do a larger poly_fit
 
-// xxx
-// - stop using baseline to determine the beining of audio
-
-// ------------------------------------------
-
-// xxx
-// - comments
-// - adjustment knobs for tuning
-// - integrate with leds 
-// - test on rpi
-// - add Time option, and filter params options, so different filter params can be scripted  MAYBE
-// - make a stanalone demo pgm and put in new repo  LATER
-//
-// - identify a set of words to test with
-// - see how various adjustments, such as filter helps
-// - try to rule out graphs that don't have a clear single peak
-// - increase sound sensitivity
-
-// NOTES
-//   arecord -r 48000 -c 4 t1.wav
-//haid@robot-brain:~/proj/proj_robot2/brain/devel/portaudio $ alias aplay
-//alias aplay='aplay -D sysdefault:CARD=Device'
-//haid@robot-brain:~/proj/proj_robot2/brain/devel/portaudio $ alias arecord
-//alias arecord='arecord -D sysdefault:CARD=seeed4micvoicec'
-//
-// arecord -L
-// arecord -D sysdefault:CARD=seeed4micvoicec -r 48000 -c 4
-// aplay -D sysdefault:CARD=Device
-//
-#if 0
-sysdefault:CARD=seeed4micvoicec
-    seeed-4mic-voicecard, bcm2835-i2s-ac10x-codec0 ac10x-codec.1-003b-0
-    Default Audio Device
-dmix:CARD=seeed4micvoicec,DEV=0
-    seeed-4mic-voicecard, bcm2835-i2s-ac10x-codec0 ac10x-codec.1-003b-0
-    Direct sample mixing device
-dsnoop:CARD=seeed4micvoicec,DEV=0
-    seeed-4mic-voicecard, bcm2835-i2s-ac10x-codec0 ac10x-codec.1-003b-0
-    Direct sample snooping device
-hw:CARD=seeed4micvoicec,DEV=0
-    seeed-4mic-voicecard, bcm2835-i2s-ac10x-codec0 ac10x-codec.1-003b-0
-    Direct hardware device without any conversions
-plughw:CARD=seeed4micvoicec,DEV=0
-    seeed-4mic-voicecard, bcm2835-i2s-ac10x-codec0 ac10x-codec.1-003b-0
-    Hardware device with all software conversions
-usbstream:CARD=seeed4micvoicec
-    seeed-4mic-voicecard
-    USB Stream Output
-
-//xxx clean up notes section
-#endif
-
+// NOTES:
+// - to record a wav file that can be used with this programs -f option:
+//     arecord -D sysdefault:CARD=seeed4micvoicec -r 48000 -c 4 file.wav
+// - to play the wav file
+//     aplay -D sysdefault:CARD=Device file.wav
+// - to list the capture hardware devices, and PCMs
+//     arecord -l
+//     arecord -L
+// - to set speaker volume, run curses program
+//     alsamixer
 
 
 #include <stdio.h>
@@ -93,8 +51,6 @@ usbstream:CARD=seeed4micvoicec
 #define DATA_SRC_MIC        1
 #define DATA_SRC_FILE       2
 
-#define DEFAULT_AMP_LIMIT   500.0
-
 //
 // typedefs
 //
@@ -108,8 +64,6 @@ typedef struct {
 // variables
 //
 
-static int       debug = 1;
-
 static bool      prog_terminating;
 
 static pthread_t tid_dbgpr_thread;
@@ -119,8 +73,24 @@ static pthread_t tid_get_data_from_file_thread;
 static pthread_t tid_get_data_from_file_thread2;
 
 static uint64_t  frame_cnt;
-static double    start_sound_block_amp_limit = DEFAULT_AMP_LIMIT;
 static doa_t     doa;
+
+//
+// params
+//
+
+static int start_sound_block_amp_limit  = 500;
+static int debug = 1; 
+
+#define MAX_PARAMS (sizeof(params)/sizeof(params[0]))
+
+static struct {
+    char *name;
+    int  *value;
+} params[] = {
+    { "amp",   &start_sound_block_amp_limit },
+    { "debug", &debug },
+                };
 
 //
 // prototpes
@@ -231,12 +201,8 @@ int main(int argc, char **argv)
     }
 
     // debug command loop
-    // xxx - add off and on debug prints
-    //     - elim testv code
     char cmdline[200];
     while (printf("> "), fgets(cmdline, sizeof(cmdline), stdin) != NULL) {
-        static int tstv = 0;
-
         // remove trailing newline char, 
         // use strtok to get the cmd field, and
         // if no cmd then continue
@@ -253,22 +219,29 @@ int main(int argc, char **argv)
             char *name = strtok(NULL, " ");
             char *value_str = strtok(NULL, " ");
             double value;
+            int i;
 
-// xxx use a table
-            if ((name == NULL) || (value_str == NULL) ||
-                (sscanf(value_str, "%lf", &value) != 1)) 
-            {
-                printf("ERROR: 'set' invalid args\n");
+            if (name == NULL) {
+                for (int i = 0; i < MAX_PARAMS; i++) {
+                    printf("%-8s = %d\n", params[i].name, *params[i].value);
+                }
                 continue;
             }
-                
-            if (strcmp(name, "tstv") == 0) {
-                tstv = value;
-            } else {
-                printf("ERROR: 'set' invalid name '%s'\n", name);
+
+            if ((value_str == NULL) || (sscanf(value_str, "%lf", &value) != 1)) {
+                printf("ERROR: set - missing value\n");
+                continue;
             }
-        } else if (strcmp(cmd, "show") == 0) {
-            printf("tstv = %d\n", tstv);
+
+            for (i = 0; i < MAX_PARAMS; i++) {
+                if (strcmp(name, params[i].name) == 0) {
+                    *params[i].value = value;
+                    break;
+                }
+            }
+            if (i == MAX_PARAMS) {
+                printf("ERROR: set - '%s' not found\n", name);
+            }
         } else {
             printf("ERROR: invalid cmd '%s'\n", cmd);
         }
@@ -597,7 +570,8 @@ static void process_frame(const float *frame)
     if (start_sound_block_frame_cnt != 0 && frame_cnt - start_sound_block_frame_cnt >= MS_TO_FRAMES(400)) {
         dbgpr("\n");
         dbgpr("============================================================================================\n");
-        dbgpr("AMP: LIMIT=%0.0f  SUM=%0.0f\n", start_sound_block_amp_limit, start_sound_block_amp_sum);
+        dbgpr("AMP: LIMIT=%d  SUM=%0.0f\n", 
+              start_sound_block_amp_limit, start_sound_block_amp_sum);
 
         for (int i = -49; i <= 0; i++) {
             char s[200];
