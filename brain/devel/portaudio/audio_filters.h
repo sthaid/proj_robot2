@@ -1,6 +1,8 @@
 #ifndef __AUDIO_FILTERS_H__
 #define __AUDIO_FILTERS_H__
 
+// XXX notes on the cx arg
+
 // Low pass filter
 
 static inline double low_pass_filter(double v, double *cx, double k2)

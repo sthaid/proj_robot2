@@ -2,10 +2,14 @@
 -----------------------          TODO           -----------------------
 ----------------------- ----------------------- -----------------------
 
+google speech to text
+- microphone streaming
+- wake word
+- demo pgm
+
+text to intent
+
 brain:
-- respeaker microphone
-  - install rpi and respeaker hat
-  - study directions for respeaker
 - when voltage gets low:
   - beep and shutdown the body
 - power saving
@@ -1695,11 +1699,15 @@ My Test Programs   ~/proj/proj_robot2/brain/devel/portaudio
     Uses polynomial fit software, ported from here:
        https://www.bragitoff.com/2018/06/polynomial-fitting-c-program/
 
-===========================
+===============================================
 TITLE: SPEECH TO TEXT
-===========================
+===============================================
 
 Exploring alternatives to Picovoice.
+
+---------------------------------
+Web Search for Speech Recognition
+---------------------------------
 
 https://www.softwaretestinghelp.com/voice-recognition-software/
   Best Voice Recognition Software Reviews
@@ -1716,7 +1724,9 @@ https://www.softwaretestinghelp.com/voice-recognition-software/
   #9) Cortana
   #10) Voice Finger
 
-THe following is for "Google Cloud Speech-to-Text API"
+---------------------------------
+Try the "Google Cloud Speech-to-Text API", using curl
+---------------------------------
 
 Get Started - https://cloud.google.com/speech-to-text/
     Go to console -> Tutorials and Documentation / Learn More
@@ -1785,3 +1795,45 @@ Enable Speech-to-Text API, and create a service account
 
 Add environment variable , with pathname to the downloaded service account key.
   export GOOGLE_APPLICATION_CREDENTIALS=/home/haid/Downloads/square-root-2-1256570f4acc.json
+
+---------------------------------
+"Google Cloud Speech-to-Text API" - Streaming Input
+---------------------------------
+
+https://cloud.google.com/speech-to-text/docs/streaming-recognize
+- Performing streaming speech recognition on an audio stream
+- 'Go'
+- View on GitHub
+    https://github.com/GoogleCloudPlatform/golang-samples/tree/42a8597d5beb089c313eb618ac1363af5e404be0/speech/livecaption
+
+Install Go, and Install the Speech API Client
+  sudo apt install golang-go
+  go get -u cloud.google.com/go/speech/apiv1
+
+Build and test livecaption
+  cp ../../repos/golang-samples/speech/livecaption/livecaption.go .
+  go build livecaption.go
+  arecord -t raw -r 16000  t1.raw 
+  aplay -r 16000 t1.raw
+  cat t1.raw | livecaption 
+
+Create mic.c pgm that writes mic data to stdout in 16bit format
+  mic > t2.raw
+  aplay -r 16000 t2.raw
+
+  mic | livecaption 
+
+
+
+
+xxxxxxx  later  xxxxxxxxxxxx
+
+try SingleUtterance
+
+try downsampling to go cut file by 1/3rd
+
+https://medium.com/@alirezakenarsarianhari/yet-another-wake-word-detection-engine-a2486d36d8d4
+
+https://github.com/Picovoice/Porcupine
+
+

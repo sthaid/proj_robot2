@@ -98,7 +98,7 @@ int main(int argc, char **argv)
     pthread_t tid;
 
     #define USAGE \
-    "usage: filters [-f file_name.wav] [-d out_dev] -h"  // xxx better usage comment
+    "usage: filters [-f file_name.wav] [-d out_dev] -h"  // XXX better usage comment
 
     // parse options
     while (true) {

@@ -1,4 +1,7 @@
 // XXX screech when K set to 1 in HPF or LPF?
+// XXX use white background, for printing
+// XXX search all files for tab chars
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
