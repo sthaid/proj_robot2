@@ -31,7 +31,8 @@ static int (*pv_porcupine_frame_length_func)(void);
 
 static const char *keyword_paths[] = {
     "../../repos/Porcupine/resources/keyword_files/linux/porcupine_linux.ppn",
-    "../../repos/Porcupine/resources/keyword_files/linux/bumblebee_linux.ppn"
+    "../../repos/Porcupine/resources/keyword_files/linux/bumblebee_linux.ppn",
+    "../../repos/Porcupine/resources/keyword_files/linux/grasshopper_linux.ppn",
             };
 static float sensitivities[MAX_KEYWORD_PATHS];
 
@@ -60,7 +61,7 @@ int main(int argc, char **argv)
     init_lib_syms();
 
     for (int i = 0; i < MAX_KEYWORD_PATHS; i++) {
-        sensitivities[i] = 0.5;
+        sensitivities[i] = 0.8;
     }
 
     pvrc = pv_porcupine_init_func(MODEL_PATH, MAX_KEYWORD_PATHS, keyword_paths, sensitivities, &porcupine);
