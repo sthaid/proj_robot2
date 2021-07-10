@@ -19,7 +19,8 @@ run_demo:
 
 # xxx
 tst: tst.c ../../portaudio/pa_utils.c
-	gcc -O2 -I../../repos/Porcupine/include/ -I../../portaudio $^ -ldl -lportaudio -o $@
+	gcc -O2 -I../../repos/Porcupine/include/ -I../../portaudio $^ \
+            -ldl -lportaudio -lpthread -o $@
 
 run_tst:
 	tst  \
