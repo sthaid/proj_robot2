@@ -3,10 +3,12 @@
 #include <string.h>
 #include <stdarg.h>
 #include <unistd.h>
+#include <libgen.h>
 #include <errno.h>
 #include <dlfcn.h>
 #include <pthread.h>
 #include <fcntl.h>  
+#include <inttypes.h>  
 #include <sys/types.h>
 #include <sys/wait.h>
 
@@ -16,6 +18,9 @@
 //
 // defines
 //
+
+#define INPUT_DEVICE   DEFAULT_INPUT_DEVICE
+#define OUTPUT_DEVICE  DEFAULT_OUTPUT_DEVICE
 
 #define LIB_PATH    "../../repos/Porcupine/lib/linux/x86_64/libpv_porcupine.so"
 #define MODEL_PATH  "../../repos/Porcupine/lib/common/porcupine_params.pv"
@@ -49,10 +54,10 @@ static float sensitivities[] = {
 
 static pv_porcupine_t *porcupine;
 
-// xxx review var names
 static short    sound_data[MAX_SOUND_DATA];
-volatile uint64_t idx_sound_data;  // xxx can this be an int
+static uint64_t idx_sound_data;
 static uint64_t livecaption_thread_start_idx;
+static int      detected_keyword = -1;
 
 //
 // prototypes
@@ -62,6 +67,7 @@ static int recv_mic_data(const float *frame, void *cx);
 static void *livecaption_thread(void *cx);
 static void init_lib_syms(void);
 static void run_program(pid_t *prog_pid, int *fd_to_prog, int *fd_from_prog, char *prog, ...);
+static char *keyword_name(int idx);
 
 // -----------------  MAIN  ------------------------------------------------------
 
@@ -76,7 +82,6 @@ int main(int argc, char **argv)
     #define MAX_KEYWORD_PATHS (sizeof(keyword_paths) / sizeof(keyword_paths[0]))
 
     // use line buffered stdout
-    // xxx why
     setlinebuf(stdout);
 
     // open the porcupine library and get function addresses
@@ -117,7 +122,7 @@ int main(int argc, char **argv)
     // call portaudio util to start acquiring mic data;
     // the recv_mic_data callback is called repeatedly with the mic data;
     // the pa_record2 blocks until recv_mic_data returns non-zero (blocks forever in this pgm)
-    rc =  pa_record2(DEFAULT_INPUT_DEVICE,  // xxx  use topp define
+    rc =  pa_record2(INPUT_DEVICE,
                      1,              // max_chan
                      48000,          // sample_rate
                      recv_mic_data,  // callback
@@ -136,7 +141,7 @@ int main(int argc, char **argv)
 
 static int recv_mic_data(const float *frame, void *cx)
 {
-    // note - called at 48000
+    // note - this is called at sample rate 48000 Hz
 
     // direction of arrival (DOA) analysis 
     // TBD
@@ -152,13 +157,6 @@ static int recv_mic_data(const float *frame, void *cx)
     // - call to pv_porcupine_process_func
     // - the livecaption thread
     sound_data[idx_sound_data % MAX_SOUND_DATA] = frame[0] * 32767;
-#if 0  // xxx  OR use 513 in lcthread
-    if ((livecaption_thread_start_idx > 0) &&
-        (idx_sound_data % frame_length) == (frame_length - 1)) 
-    {
-        __sync_synchronize();
-    }
-#endif
     idx_sound_data++;
 
     // if livecaption thread is active then return
@@ -185,7 +183,8 @@ static int recv_mic_data(const float *frame, void *cx)
         }
 
         if (keyword != -1) {
-            printf("detected keyword %d\n", keyword);  // xxx print this in livecaption_thread
+            detected_keyword = keyword;
+            __sync_synchronize();
             livecaption_thread_start_idx = idx_sound_data;
         }
     }
@@ -197,7 +196,7 @@ static int recv_mic_data(const float *frame, void *cx)
 
 static void *livecaption_thread(void *cx)
 {
-    #define MAX_PLAYBACK_DATA  (5 * SAMPLE_RATE / 512 * 512)
+    #define MAX_PLAYBACK_DATA  (5 * SAMPLE_RATE / FRAME_LENGTH * FRAME_LENGTH)
 
     int      fd_to_lc, fd_from_lc, pb_idx, rc, flags;
     uint64_t sd_idx;
@@ -211,6 +210,10 @@ static void *livecaption_thread(void *cx)
             usleep(30000);
         }
 
+        // print the detected_keyword
+        printf("DETECTED KEYWORD: %s\n", keyword_name(detected_keyword));
+        detected_keyword = -1;
+
         // execute livecaption
         printf("LC RUN\n");
         run_program(&lc_pid, &fd_to_lc, &fd_from_lc, "../google/livecaption", NULL);
@@ -221,31 +224,35 @@ static void *livecaption_thread(void *cx)
         fcntl(fd_from_lc, F_SETFL, flags); 
 
         // int variables
-        // xxx must be multiple of 512
+        if ((livecaption_thread_start_idx % FRAME_LENGTH) != 0) {
+            printf("ERROR: livecaption_thread_start_idx=0x%" PRIx64 " is not a multiple of FRAME_LENGTH=%d\n",
+                   livecaption_thread_start_idx, FRAME_LENGTH);
+            exit(1);
+        }
         sd_idx = livecaption_thread_start_idx;
         pb_idx = 0;
         memset(lc_result, 0, sizeof(lc_result));
 
         while (true) {
-            // if 512 sound_data values are available then
+            // if FRAME_LENGTH sound_data values are available then
             //   write block of sound_data to livecaption, and 
             //   keep a copy of this sound_data to be used below to play it
             // endif
-            if (idx_sound_data >= sd_idx + 512) {
+            if (idx_sound_data >= sd_idx + (FRAME_LENGTH + 1)) {
                 short *sd = &sound_data[sd_idx % MAX_SOUND_DATA];
 
-                rc = write(fd_to_lc, sd, 512*sizeof(short));
-                if (rc != 512*sizeof(short)) {
+                rc = write(fd_to_lc, sd, FRAME_LENGTH*sizeof(short));
+                if (rc != FRAME_LENGTH*sizeof(short)) {
                     printf("ERROR: failed write to livecaption, rc=%d, %s\n", rc, strerror(errno));
                     exit(1);
                 }
 
-                for (int i = 0; i < 512; i++) {
+                for (int i = 0; i < FRAME_LENGTH; i++) {
                     pb_data[pb_idx+i] = sd[i] * (1./32767);
                 }
 
-                pb_idx += 512;
-                sd_idx += 512;
+                pb_idx += FRAME_LENGTH;
+                sd_idx += FRAME_LENGTH;
             }
 
             // perform non blocking read of livecaption stdout
@@ -277,14 +284,15 @@ static void *livecaption_thread(void *cx)
 
         // play the sound that was provided to livecaption
         if (pb_idx > 0) {
-            rc = pa_play(DEFAULT_OUTPUT_DEVICE, 1, pb_idx, SAMPLE_RATE, pb_data);
+            rc = pa_play(OUTPUT_DEVICE, 1, pb_idx, SAMPLE_RATE, pb_data);
             if (rc < 0) {
                 printf("ERROR: pa_play failed\n");
                 exit(1);
             }
         }
 
-        // done  xxx comment
+        // setting livecaption_thread_start_idx to 0 restarts the recv_mic_data
+        // callback routine monitoring for wake word
         printf("LC DONE\n");
         livecaption_thread_start_idx = 0;
     }
@@ -385,4 +393,23 @@ static void run_program(pid_t *prog_pid, int *fd_to_prog, int *fd_from_prog, cha
         *fd_from_prog = pipe_from_child[0];
         *prog_pid = pid;
     }
+}
+
+// -----------------  MISC  ------------------------------------------
+
+static char *keyword_name(int idx)
+{
+    static char str[200];
+    char *name, *p;
+
+    if (idx == -1) {
+        return "????";
+    }
+
+    strcpy(str, keyword_paths[idx]);
+    name = basename(str);
+    p = strchr(name, '_');
+    if (p) *p = '\0';
+
+    return name;
 }
