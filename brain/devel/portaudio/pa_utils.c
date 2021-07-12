@@ -110,7 +110,7 @@ int pa_play2(char *output_device, int max_chan, int sample_rate, play2_get_frame
         printf("ERROR: could not find %s\n", output_device);
         goto error;
     }
-    pa_print_device_info(devidx);
+    //pa_print_device_info(devidx);
 
     // init output_params and open the audio output stream
     output_params.device            = devidx;
@@ -277,7 +277,7 @@ int pa_record2(char *input_device, int max_chan, int sample_rate, record2_put_fr
         printf("ERROR: could not find %s\n", input_device);
         goto error;
     }
-    pa_print_device_info(devidx);
+    //pa_print_device_info(devidx);
 
     // init input_params and open the audio input stream
     input_params.device            = devidx;
