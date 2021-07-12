@@ -213,7 +213,7 @@ static void *livecaption_thread(void *cx)
 
         // execute livecaption
         printf("LC RUN\n");
-        run_program(&lc_pid, &fd_to_lc, &fd_from_lc, "./livecaption", NULL);
+        run_program(&lc_pid, &fd_to_lc, &fd_from_lc, "../google/livecaption", NULL);
 
         // set fd used to read livecaption stdout to non blocking
         flags = fcntl(fd_from_lc, F_GETFL, 0); 
