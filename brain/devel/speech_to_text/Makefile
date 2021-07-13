@@ -5,8 +5,8 @@ TARGETS = mic livecaption
 
 build: $(TARGETS)
 
-mic: mic.c ../../portaudio/pa_utils.c
-	gcc -g -Wall -O2 -I. -I../../portaudio $^ -lportaudio -o $@ 
+mic: mic.c ../portaudio/pa_utils.c
+	gcc -g -Wall -O2 -I. -I../portaudio $^ -lportaudio -o $@ 
 
 livecaption: livecaption.go
 	go build $^
