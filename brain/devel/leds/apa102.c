@@ -1,3 +1,5 @@
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 #include <errno.h>
@@ -9,11 +11,6 @@
 #include <linux/spi/spidev.h>   // not currently used
 
 #include <apa102.h>
-#include <misc.h>
-
-// XXX TODO
-// - move to common dir and tests dir
-// - try setting max spi speed, and see if continuous operation (without delays) works
 
 // developed using info from:
 //   brain/devel/repos/4mics_hat/apa102.py
@@ -52,14 +49,14 @@ int apa102_init(int max_led_arg)
     // open spi device
     fd = open("/dev/spidev0.1", O_RDWR);
     if (fd < 0) {
-        ERROR("open %s failed, %s\n", SPIDEV, strerror(errno));
-        exit(1);
+        printf("ERROR: open %s failed, %s\n", SPIDEV, strerror(errno));
+        return -1;
     }
 
     // the default speed does not work reliably, so reduce to 250 khz
     int max_spd_hz = 25000000;
     if (ioctl(fd, SPI_IOC_WR_MAX_SPEED_HZ, &max_spd_hz) < 0) {
-        ERROR("ioctl SPI_IOC_WR_MAX_SPEED_HZ failed, %s\n", strerror(errno));
+        printf("ERROR: ioctl SPI_IOC_WR_MAX_SPEED_HZ failed, %s\n", strerror(errno));
         return -1;
     }
 
@@ -91,12 +88,12 @@ void apa102_set_led(int num, unsigned int rgb, int led_brightness)
     double b;
 
     if (num < 0 || num >= max_led) {
-        ERROR("invalid arg num=%d\n", num);
+        printf("ERROR: invalid arg num=%d\n", num);
         return;
     }
 
     if (led_brightness < 0 || led_brightness > 100) {
-        ERROR("invalid arg led_brightnesss=%d\n", led_brightness);
+        printf("ERROR: invalid arg led_brightnesss=%d\n", led_brightness);
         return;
     }
 
@@ -107,7 +104,7 @@ void apa102_set_led(int num, unsigned int rgb, int led_brightness)
     } else {
         b = 0;
     }
-    //INFO("num=%d  led_brightness=%d  b=%0.3f\n", num, led_brightness, b);
+    //printf("num=%d  led_brightness=%d  b=%0.3f\n", num, led_brightness, b);
 
     x->red   = nearbyint(((rgb >>  0) & 0xff) * b);
     x->green = nearbyint(((rgb >>  8) & 0xff) * b);
@@ -142,15 +139,17 @@ void apa102_rotate_leds(int mode)
         tx->led[0] = x;
         break;
     default:
-        ERROR("invalid mode %d\n", mode);
+        printf("ERROR: invalid mode %d\n", mode);
         break;
     }
 }
 
 void apa102_show_leds(int all_brightness)
 {
+    int rc;
+
     if (all_brightness < 0 || all_brightness > 31) {
-        ERROR("invalid arg all_brightnesss=%d\n", all_brightness);
+        printf("ERROR: invalid arg all_brightnesss=%d\n", all_brightness);
         return;
     }
 
@@ -159,7 +158,11 @@ void apa102_show_leds(int all_brightness)
         x->start_and_brightness = 0xe0 | all_brightness;
     }
 
-    write(fd, tx, tx_buff_size);
+    rc = write(fd, tx, tx_buff_size);
+    if (rc != tx_buff_size) {
+        printf("ERROR: apa102_show_leds write rc=%d exp=%d, %s\n", rc, tx_buff_size, strerror(errno));
+        return;
+    }
 }
 
 // - - - - - - - - - - 

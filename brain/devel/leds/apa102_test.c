@@ -3,7 +3,8 @@
 #include <string.h>
 
 #include <apa102.h>
-#include <gpio.h>
+
+#include <wiringPi.h>
 
 #define MAX_LED 12
 
@@ -27,12 +28,13 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    // enable VCC of the leds, this is required on respeaker
-    if (gpio_init() < 0) {
-        return 1;
+    // this enables Vcc for the Respeaker LEDs
+    if (wiringPiSetupGpio() == -1) {
+        printf("ERROR: wiringPiSetupGpio failed\n");
+        return -1;
     }
-    set_gpio_func(5,FUNC_OUT);
-    gpio_write(5,1);
+    pinMode (5, OUTPUT);
+    digitalWrite(5, 1);
 
     // tests follow ...
     printf("Colors test ...\n");
