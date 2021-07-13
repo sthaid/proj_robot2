@@ -1830,11 +1830,11 @@ Wake Word Detection Engine
 https://medium.com/@alirezakenarsarianhari/yet-another-wake-word-detection-engine-a2486d36d8d4
 https://github.com/Picovoice/Porcupine
 
-cp ../../repos/Porcupine/demo/c/porcupine_demo_mic.c  .
-gcc -std=c99 -O3 -o porcupine_demo_mic -I ../../repos/Porcupine/include/ porcupine_demo_mic.c -ldl -lasound
+build porcupine demo
+  cp ../../repos/Porcupine/demo/c/porcupine_demo_mic.c  .
+  gcc -std=c99 -O3 -o porcupine_demo_mic -I ../../repos/Porcupine/include/ porcupine_demo_mic.c -ldl -lasound
 
-
-porcupine_demo_mic 
+porcupine_demo_mic args:
   library_path 
   model_path 
   keyword_path 
@@ -1848,23 +1848,56 @@ porcupine_demo_mic  \
   0.5 \
   sysdefault:CARD=Device
 
+---------------------------------
+Google Text to Speech
+---------------------------------
 
-note: sysdefault:CARD=Device  device okay to0
+https://cloud.google.com/text-to-speech
+https://cloud.google.com/text-to-speech/docs            <============
+https://cloud.google.com/text-to-speech/docs/quickstart-protocol
+https://cloud.google.com/text-to-speech/docs/quickstart-client-libraries
+https://cloud.google.com/text-to-speech/docs/libraries
+https://cloud.google.com/text-to-speech/docs/libraries#client-libraries-usage-go
 
-
-
-
-
-
-
-
-
-xxxxxxx  later  xxxxxxxxxxxx
-
-try SingleUtterance
-
-try downsampling to go cut file by 1/3rd
+https://github.com/GoogleCloudPlatform/golang-samples/blob/HEAD/texttospeech/quickstart/quickstart.go
 
 
+{
+  "input":{
+    "text":"Android is a mobile operating system developed by Google, based on the Linux kernel and designed primarily for touchscreen mobile devices such as smartphones and tablets."
+  },
+  "voice":{
+    "languageCode":"en-gb",
+    "name":"en-GB-Standard-A",
+    "ssmlGender":"FEMALE"
+  },
+  "audioConfig":{
+    "audioEncoding":"MP3"
+  }
+}
 
+curl -X POST \
+-H "Authorization: Bearer "$(gcloud auth application-default print-access-token) \
+-H "Content-Type: application/json; charset=utf-8" \
+-d @request.json \
+https://texttospeech.googleapis.com/v1/text:synthesize
+
+
+----------
+
+drwxrwxr-x 2 haid haid 4.0K Jul  3 19:34 leds
+drwxrwxr-x 4 haid haid 4.0K Jul  9 08:51 picovoice
+drwxrwxr-x 2 haid haid 4.0K Jul 13 06:48 porcupine
+drwxrwxr-x 7 haid haid 4.0K Jul 13 06:49 portaudio
+drwxrwxr-x 9 haid haid 4.0K Jul  9 07:35 repos
+drwxrwxr-x 2 haid haid 4.0K Jul 13 06:50 speech_to_text
+drwxrwxr-x 2 haid haid 4.0K Jul 12 21:24 text_to_speech
+
+
+
+drwxrwxr-x 4 haid haid 4.0K May 23 07:07 body
+drwxrwxr-x 2 haid haid 4.0K Jun 14 06:56 body_test
+drwxrwxr-x 3 haid haid 4.0K May 31 18:20 brain
+drwxrwxr-x 5 haid haid 4.0K Apr 13 16:32 common
+drwxrwxr-x 3 haid haid 4.0K Apr 22 15:08 devel
 
