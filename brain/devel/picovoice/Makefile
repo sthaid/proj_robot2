@@ -2,7 +2,7 @@ picovoice_demo_mic:
 	cc -std=c99 -O3 -o picovoice_demo_mic -I../repos/picovoice/sdk/c/include picovoice_demo_mic.c -ldl -lasound
 
 clean:
-	rm picovoice_demo_mic
+	rm -f picovoice_demo_mic
 
 # some of the files referenced below were copied from:
 #  /usr/local/lib/python3.7/dist-packages/pvporcupine/lib/common/porcupine_params.pv

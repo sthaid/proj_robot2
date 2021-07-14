@@ -19,16 +19,25 @@
 // defines
 //
 
-#define INPUT_DEVICE   DEFAULT_INPUT_DEVICE
-#define OUTPUT_DEVICE  DEFAULT_OUTPUT_DEVICE
+#ifdef RASPBERRY_PI
+    #define LIB_PATH      "../repos/Porcupine/lib/raspberry-pi/cortex-a72/libpv_porcupine.so"
+    #define MODEL_PATH    "../repos/Porcupine/lib/common/porcupine_params.pv"
+    #define INPUT_DEVICE  "seeed-4mic-voicecard"
+    #define OUTPUT_DEVICE "USB"
+#else
+    #define LIB_PATH      "../repos/Porcupine/lib/linux/x86_64/libpv_porcupine.so"
+    #define MODEL_PATH    "../repos/Porcupine/lib/common/porcupine_params.pv"
+    #define INPUT_DEVICE  DEFAULT_INPUT_DEVICE
+    #define OUTPUT_DEVICE DEFAULT_OUTPUT_DEVICE
+#endif
 
-#define LIB_PATH    "../../repos/Porcupine/lib/linux/x86_64/libpv_porcupine.so"
-#define MODEL_PATH  "../../repos/Porcupine/lib/common/porcupine_params.pv"
+#define PORC_AND_LC_SAMPLE_RATE 16000
+#define RECORD_SAMPLE_RATE      48000
+#define PLAYBACK_SAMPLE_RATE    48000
 
-#define SAMPLE_RATE 16000
 #define FRAME_LENGTH  512
 
-#define MAX_SOUND_DATA (10 * SAMPLE_RATE / FRAME_LENGTH * FRAME_LENGTH)
+#define MAX_SOUND_DATA (10 * PORC_AND_LC_SAMPLE_RATE / FRAME_LENGTH * FRAME_LENGTH)
 
 //
 // variables
@@ -42,9 +51,15 @@ static pv_status_t (*pv_porcupine_process_func)(pv_porcupine_t *, const int16_t 
 static int (*pv_porcupine_frame_length_func)(void);
 
 static const char *keyword_paths[] = {
-    "../../repos/Porcupine/resources/keyword_files/linux/porcupine_linux.ppn",
-    "../../repos/Porcupine/resources/keyword_files/linux/bumblebee_linux.ppn",
-    "../../repos/Porcupine/resources/keyword_files/linux/grasshopper_linux.ppn",
+#ifdef RASPBERRY_PI
+    "../repos/Porcupine/resources/keyword_files/raspberry-pi/porcupine_raspberry-pi.ppn",
+    "../repos/Porcupine/resources/keyword_files/raspberry-pi/bumblebee_raspberry-pi.ppn",
+    "../repos/Porcupine/resources/keyword_files/raspberry-pi/grasshopper_raspberry-pi.ppn",
+#else
+    "../repos/Porcupine/resources/keyword_files/linux/porcupine_linux.ppn",
+    "../repos/Porcupine/resources/keyword_files/linux/bumblebee_linux.ppn",
+    "../repos/Porcupine/resources/keyword_files/linux/grasshopper_linux.ppn",
+#endif
             };
 static float sensitivities[] = {
     0.8,
@@ -98,8 +113,8 @@ int main(int argc, char **argv)
     // verify sample_rate and frame_length exepected by porcupine agree
     // with defines used by this program
     sample_rate = pv_sample_rate_func();
-    if (sample_rate != SAMPLE_RATE) {
-        printf("ERROR: sample_rate=%d is not expected %d\n", sample_rate, SAMPLE_RATE);
+    if (sample_rate != PORC_AND_LC_SAMPLE_RATE) {
+        printf("ERROR: sample_rate=%d is not expected %d\n", sample_rate, PORC_AND_LC_SAMPLE_RATE);
         return 1;
     }
     frame_length = pv_porcupine_frame_length_func();
@@ -123,11 +138,11 @@ int main(int argc, char **argv)
     // the recv_mic_data callback is called repeatedly with the mic data;
     // the pa_record2 blocks until recv_mic_data returns non-zero (blocks forever in this pgm)
     rc =  pa_record2(INPUT_DEVICE,
-                     1,              // max_chan
-                     48000,          // sample_rate
-                     recv_mic_data,  // callback
-                     NULL,           // cx passed to recv_mic_data
-                     0);             // discard_samples count
+                     1,                   // max_chan
+                     RECORD_SAMPLE_RATE,  // sample_rate
+                     recv_mic_data,       // callback
+                     NULL,                // cx passed to recv_mic_data
+                     0);                  // discard_samples count
     if (rc < 0) {
         printf("ERROR: pa_record2\n");
         return 1;
@@ -196,7 +211,7 @@ static int recv_mic_data(const float *frame, void *cx)
 
 static void *livecaption_thread(void *cx)
 {
-    #define MAX_PLAYBACK_DATA  (5 * SAMPLE_RATE / FRAME_LENGTH * FRAME_LENGTH)
+    #define MAX_PLAYBACK_DATA  (5 * PLAYBACK_SAMPLE_RATE / FRAME_LENGTH * FRAME_LENGTH)
 
     int      fd_to_lc, fd_from_lc, pb_idx, rc, flags;
     uint64_t sd_idx;
@@ -216,7 +231,7 @@ static void *livecaption_thread(void *cx)
 
         // execute livecaption
         printf("LC RUN\n");
-        run_program(&lc_pid, &fd_to_lc, &fd_from_lc, "../google/livecaption", NULL);
+        run_program(&lc_pid, &fd_to_lc, &fd_from_lc, "../speech_to_text/livecaption", NULL);
 
         // set fd used to read livecaption stdout to non blocking
         flags = fcntl(fd_from_lc, F_GETFL, 0); 
@@ -248,10 +263,13 @@ static void *livecaption_thread(void *cx)
                 }
 
                 for (int i = 0; i < FRAME_LENGTH; i++) {
-                    pb_data[pb_idx+i] = sd[i] * (1./32767);
+                    float v =  sd[i] * (1./32767);
+                    // the playback sample rate is 3x the rate of sound_data array rate
+                    pb_data[pb_idx++] = v;
+                    pb_data[pb_idx++] = v;
+                    pb_data[pb_idx++] = v;
                 }
 
-                pb_idx += FRAME_LENGTH;
                 sd_idx += FRAME_LENGTH;
             }
 
@@ -284,7 +302,7 @@ static void *livecaption_thread(void *cx)
 
         // play the sound that was provided to livecaption
         if (pb_idx > 0) {
-            rc = pa_play(OUTPUT_DEVICE, 1, pb_idx, SAMPLE_RATE, pb_data);
+            rc = pa_play(OUTPUT_DEVICE, 1, pb_idx, PLAYBACK_SAMPLE_RATE, pb_data);
             if (rc < 0) {
                 printf("ERROR: pa_play failed\n");
                 exit(1);

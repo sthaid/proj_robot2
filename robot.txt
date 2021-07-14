@@ -1257,10 +1257,8 @@ Build and Install Driver
 Steps:
   sudo apt-get update
   sudo apt-get upgrade
-  cd ~/proj/proj_robot2/brain/respeaker
-  git clone https://github.com/respeaker/seeed-voicecard.git
-  cd seeed-voicecard
-  sudo ./install.sh    # I needed to use --compat-kernel option
+  cd ~/proj/proj_robot2/brain/devel/repos/seeed-voicecard
+  sudo ./install.sh    # may need to use --compat-kernel option, but first don't try that
   reboot
 
 Notes
@@ -1806,21 +1804,40 @@ https://cloud.google.com/speech-to-text/docs/streaming-recognize
 - View on GitHub
     https://github.com/GoogleCloudPlatform/golang-samples/tree/42a8597d5beb089c313eb618ac1363af5e404be0/speech/livecaption
 
-Install Go, and Install the Speech API Client
+Install Go, and Install the Speech API Client  (On Ubuntu)
   sudo apt install golang-go
   go get -u cloud.google.com/go/speech/apiv1
 
+Install Go, and Install the Speech API Client  (On Raspberry Pi 4)
+- The version installed on Raspberry Pi, using 
+     sudo apt install golang-go
+  did not support cloud.google.com/go/speech/apiv1;  there was an error about TLS3?
+- Some research:
+     https://www.e-tinkers.com/2019/06/better-way-to-install-golang-go-on-raspberry-pi/
+     https://blog.francium.tech/go-modules-go-project-set-up-without-gopath-1ae601a4e868
+- Procedure for Rasperry Pi
+   - https://golang.org/dl/  and download, for example:   go1.16.6.linux-armv6l.tar.gz
+   - sudo tar -C /usr/local -xzf go1.16.6.linux-armv6l.tar.gz
+   - update PATH - PATH=$PATH:/usr/local/go/bin
+   - cd to dir that you want to build prog.go;  for example ...
+       cd speech_to_text
+       go mod init speech_to_text
+       go build livecaption.go
+       go get cloud.google.com/go/speech/apiv1
+       go build livecaption.go
+
 Build and test livecaption
-  cp ../../repos/golang-samples/speech/livecaption/livecaption.go .
+  cd ~proj/proj_robot2/brain/devel/speech_to_text
+  cp ../repos/golang-samples/speech/livecaption/livecaption.go .
   go build livecaption.go
-  arecord -t raw -r 16000  t1.raw 
-  aplay -r 16000 t1.raw
-  cat t1.raw | livecaption 
+  /usr/bin/arecord -D sysdefault:CARD=seeed4micvoicec -t raw -r 16000 -c 1 -f S16_LE t1.raw
+  /usr/bin/aplay   -D sysdefault:CARD=Device          -t raw -r 16000 -c 1 -f S16_LE t1.raw
+  cat t1.raw | livecaption
 
 Create mic.c pgm that writes mic data to stdout in 16bit format
   mic > t2.raw
-  aplay -r 16000 t2.raw
-
+  /usr/bin/aplay   -D sysdefault:CARD=Device -t raw -r 16000 -c 1 -f S16_LE t2.raw
+  cat t2.raw | livecaption
   mic | livecaption 
 
 ---------------------------------
@@ -1847,6 +1864,9 @@ porcupine_demo_mic  \
   ../../repos/Porcupine/resources/keyword_files/linux/porcupine_linux.ppn \
   0.5 \
   sysdefault:CARD=Device
+
+xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+xxxxxxxxxxxxxxxxxxxxx left off vvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
 
 ---------------------------------
 Google Text to Speech
@@ -1882,17 +1902,23 @@ curl -X POST \
 -d @request.json \
 https://texttospeech.googleapis.com/v1/text:synthesize
 
+xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
 ----------
 
-drwxrwxr-x 2 haid haid 4.0K Jul  3 19:34 leds
-drwxrwxr-x 4 haid haid 4.0K Jul  9 08:51 picovoice
-drwxrwxr-x 2 haid haid 4.0K Jul 13 06:48 porcupine
-drwxrwxr-x 7 haid haid 4.0K Jul 13 06:49 portaudio
-drwxrwxr-x 9 haid haid 4.0K Jul  9 07:35 repos
-drwxrwxr-x 2 haid haid 4.0K Jul 13 06:50 speech_to_text
-drwxrwxr-x 2 haid haid 4.0K Jul 12 21:24 text_to_speech
+drwxrwxr-x 2 haid haid 4.0K Jul  3 19:34 leds                   okay
+drwxrwxr-x 4 haid haid 4.0K Jul  9 08:51 picovoice              okay
+drwxrwxr-x 7 haid haid 4.0K Jul 13 06:49 portaudio              okay
+drwxrwxr-x 2 haid haid 4.0K Jul 13 06:50 speech_to_text         okay
 
+drwxrwxr-x 2 haid haid 4.0K Jul 13 06:48 porcupine              doesnt open wake words OR library
+
+ALSO make and make clean and gitignore
+
+xxxxxxxxxxxxxxxxxxxxxxxxxx
 
 
 drwxrwxr-x 4 haid haid 4.0K May 23 07:07 body
@@ -1901,3 +1927,11 @@ drwxrwxr-x 3 haid haid 4.0K May 31 18:20 brain
 drwxrwxr-x 5 haid haid 4.0K Apr 13 16:32 common
 drwxrwxr-x 3 haid haid 4.0K Apr 22 15:08 devel
 
+
+--------------
+
+top level Makefile
+
+
+
+XXXXXXXXXXXXXXX retest porcupine on linux

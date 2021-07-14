@@ -1,0 +1,11 @@
+#!/bin/bash
+
+rm -rf seeed-voicecard
+rm -rf 4mics_hat
+rm -rf odas
+rm -rf odas_web
+rm -rf picovoice
+rm -rf portaudio
+rm -rf libsndfile 
+rm -rf golang-samples
+rm -rf Porcupine

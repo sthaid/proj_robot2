@@ -13,14 +13,24 @@
 // defines
 //
 
-#define SAMPLE_RATE 16000
+#define PORCUPINE_SAMPLE_RATE      16000
+#define OUTPUT_DEVICE_SAMPLE_RATE  48000
 
-#define LIB_PATH    "../../repos/Porcupine/lib/linux/x86_64/libpv_porcupine.so"
-#define MODEL_PATH  "../../repos/Porcupine/lib/common/porcupine_params.pv"
+#ifdef RASPBERRY_PI
+    #define LIB_PATH      "../repos/Porcupine/lib/raspberry-pi/cortex-a72/libpv_porcupine.so"
+    #define MODEL_PATH    "../repos/Porcupine/lib/common/porcupine_params.pv"
+    #define INPUT_DEVICE  "seeed-4mic-voicecard"
+    #define OUTPUT_DEVICE "USB"
+#else
+    #define LIB_PATH      "../repos/Porcupine/lib/linux/x86_64/libpv_porcupine.so"
+    #define MODEL_PATH    "../repos/Porcupine/lib/common/porcupine_params.pv"
+    #define INPUT_DEVICE  DEFAULT_INPUT_DEVICE
+    #define OUTPUT_DEVICE DEFAULT_OUTPUT_DEVICE
+#endif
 
 #define MAX_KEYWORD_PATHS (sizeof(keyword_paths) / sizeof(keyword_paths[0]))
 
-#define MAX_PLAYBACK_DATA (3*SAMPLE_RATE)  // 3 seconds
+#define MAX_PLAYBACK_DATA (3*OUTPUT_DEVICE_SAMPLE_RATE)  // 3 seconds
 
 //
 // variables
@@ -34,9 +44,15 @@ static pv_status_t (*pv_porcupine_process_func)(pv_porcupine_t *, const int16_t 
 static int (*pv_porcupine_frame_length_func)(void);
 
 static const char *keyword_paths[] = {
-    "../../repos/Porcupine/resources/keyword_files/linux/porcupine_linux.ppn",
-    "../../repos/Porcupine/resources/keyword_files/linux/bumblebee_linux.ppn",
-    "../../repos/Porcupine/resources/keyword_files/linux/grasshopper_linux.ppn",
+#ifdef RASPBERRY_PI
+    "../repos/Porcupine/resources/keyword_files/raspberry-pi/porcupine_raspberry-pi.ppn",
+    "../repos/Porcupine/resources/keyword_files/raspberry-pi/bumblebee_raspberry-pi.ppn",
+    "../repos/Porcupine/resources/keyword_files/raspberry-pi/grasshopper_raspberry-pi.ppn",
+#else
+    "../repos/Porcupine/resources/keyword_files/linux/porcupine_linux.ppn",
+    "../repos/Porcupine/resources/keyword_files/linux/bumblebee_linux.ppn",
+    "../repos/Porcupine/resources/keyword_files/linux/grasshopper_linux.ppn",
+#endif
             };
 static float sensitivities[MAX_KEYWORD_PATHS];
 
@@ -84,11 +100,11 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    // verify the sample rate required by porcupine matches the SAMPLE_RATE value
+    // verify the sample rate required by porcupine matches the PORCUPINE_SAMPLE_RATE value
     // that this program s built with
     sample_rate = pv_sample_rate_func();
-    if (sample_rate != SAMPLE_RATE) {
-        printf("ERROR: sample_rate=%d is not expected %d\n", sample_rate, SAMPLE_RATE);
+    if (sample_rate != PORCUPINE_SAMPLE_RATE) {
+        printf("ERROR: sample_rate=%d is not expected %d\n", sample_rate, PORCUPINE_SAMPLE_RATE);
         return 1;
     }
 
@@ -113,12 +129,12 @@ int main(int argc, char **argv)
     // call portaudio util to start acquiring mic data;
     // the recv_mic_data callback is called repeatedly with the mic data;
     // the pa_record2 blocks until recv_mic_data returns non-zero (blocks forever in this pgm)
-    rc =  pa_record2(DEFAULT_INPUT_DEVICE,  // xxx  use topp define
-                     1,              // max_chan
-                     SAMPLE_RATE,    // sample_rate
-                     recv_mic_data,  // callback
-                     NULL,           // cx passed to recv_mic_data
-                     0);             // discard_samples count
+    rc =  pa_record2(INPUT_DEVICE,
+                     1,                          // max_chan
+                     OUTPUT_DEVICE_SAMPLE_RATE,  // sample_rate
+                     recv_mic_data,              // callback
+                     NULL,                       // cx passed to recv_mic_data
+                     0);                         // discard_samples count
     if (rc < 0) {
         printf("ERROR: pa_record2\n");
         return 1;
@@ -140,7 +156,7 @@ static void *playback_thread(void *cx)
         //   reset playback_cnt to -1, indicating that we're done with this playback_data
         // endif
         if (playback_cnt == MAX_PLAYBACK_DATA) {
-            rc = pa_play(DEFAULT_OUTPUT_DEVICE, 1, MAX_PLAYBACK_DATA, SAMPLE_RATE, playback_data);
+            rc = pa_play(OUTPUT_DEVICE, 1, MAX_PLAYBACK_DATA, OUTPUT_DEVICE_SAMPLE_RATE, playback_data);
             if (rc < 0) {
                 printf("ERROR: pa_play failed\n");
                 exit(1);
@@ -160,10 +176,10 @@ static void *playback_thread(void *cx)
 
 static int recv_mic_data(const float *frame, void *cx)
 {
-    int         keyword;
-    pv_status_t pvrc;
-
-    static int  psd_cnt;
+    // note 
+    // - this is called at sample rate 48000 Hz
+    // - the playback device supports only 48000 Hz
+    // - porcupine requires 16000 Hz
 
     // if a keyword has been detected then
     //   Save 3 secs of playback_data.
@@ -181,8 +197,20 @@ static int recv_mic_data(const float *frame, void *cx)
             playback_data[playback_cnt++] = frame[0];
         }
     } else {
-        porcupine_sound_data[psd_cnt++] = frame[0] * 32767;
+        static int  psd_cnt;
+        static int call_cnt;
+        int         keyword;
+        pv_status_t pvrc;
 
+        // discard 2 out of 3 frames, so the sample rate for the code below is 16000
+        if (++call_cnt < 3) {
+            return 0;
+        }
+        call_cnt = 0;
+
+        // accumulate sound data for porcupine, and 
+        // when the required number of samples is available call pv_porcupine_process_func
+        porcupine_sound_data[psd_cnt++] = frame[0] * 32767;
         if (psd_cnt == porcupine_frame_length) {
             psd_cnt = 0;
 
