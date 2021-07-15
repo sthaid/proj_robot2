@@ -1913,25 +1913,38 @@ drwxrwxr-x 2 haid haid 4.0K Jul  3 19:34 leds                   okay
 drwxrwxr-x 4 haid haid 4.0K Jul  9 08:51 picovoice              okay
 drwxrwxr-x 7 haid haid 4.0K Jul 13 06:49 portaudio              okay
 drwxrwxr-x 2 haid haid 4.0K Jul 13 06:50 speech_to_text         okay
-
-drwxrwxr-x 2 haid haid 4.0K Jul 13 06:48 porcupine              doesnt open wake words OR library
-
-ALSO make and make clean and gitignore
+drwxrwxr-x 2 haid haid 4.0K Jul 13 06:48 porcupine              okay
 
 xxxxxxxxxxxxxxxxxxxxxxxxxx
 
 
-drwxrwxr-x 4 haid haid 4.0K May 23 07:07 body
-drwxrwxr-x 2 haid haid 4.0K Jun 14 06:56 body_test
-drwxrwxr-x 3 haid haid 4.0K May 31 18:20 brain
+drwxrwxr-x 4 haid haid 4.0K May 23 07:07 body             okay
+drwxrwxr-x 2 haid haid 4.0K Jun 14 06:56 body_test        okay
+drwxrwxr-x 3 haid haid 4.0K May 31 18:20 brain            okay
 drwxrwxr-x 5 haid haid 4.0K Apr 13 16:32 common
 drwxrwxr-x 3 haid haid 4.0K Apr 22 15:08 devel
 
 
---------------
-
-top level Makefile
-
-
+--- LATER ---
 
 XXXXXXXXXXXXXXX retest porcupine on linux
+
+
+./common/devices/i2c/i2c/i2c.h
+
+
+
+
+button          ok
+current
+encoder
+env
+gpio              oka
+i2c              oka
+imu               oka
+mc               oka
+oled
+proximity        okay
+realtime         dont build module
+relay            oka
+

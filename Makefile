@@ -1,5 +1,6 @@
 SUBDIRS = body \
           body_test \
+          body/devel \
           brain/devel
   
 .PHONY: build clean
