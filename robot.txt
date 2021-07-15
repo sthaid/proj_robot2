@@ -2,6 +2,8 @@
 -----------------------          TODO           -----------------------
 ----------------------- ----------------------- -----------------------
 
+XXXXXXXXXXXXXXX retest porcupine on linux
+
 google speech to text
 - microphone streaming
 - wake word
@@ -75,7 +77,9 @@ TITLE: RESPEAKER - GETTING STARTED
 TITLE: RESPEAKER - NOTES
 TITLE: RESPEAKER - APA102 LEDS C LANGUAGE DEMO PGM
 TITLE: RESPEAKER - SOUND DIRECTION OF ARRIVAL DEVEL
+
 TITLE: SPEECH TO TEXT
+TITLE: TEXT TO SPEECH
 
 ===========================
 TITLE: INTRO - ROBOT CAPABILITY IDEAS
@@ -1701,7 +1705,7 @@ My Test Programs   ~/proj/proj_robot2/brain/devel/portaudio
 TITLE: SPEECH TO TEXT
 ===============================================
 
-Exploring alternatives to Picovoice.
+Investigating alternatives to Picovoice ...
 
 ---------------------------------
 Web Search for Speech Recognition
@@ -1865,12 +1869,15 @@ porcupine_demo_mic  \
   0.5 \
   sysdefault:CARD=Device
 
-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-xxxxxxxxxxxxxxxxxxxxx left off vvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
+===============================================
+TITLE: TEXT TO SPEECH
+===============================================
 
----------------------------------
-Google Text to Speech
----------------------------------
+---------------------
+google documentation
+---------------------
+
+XXX review this section
 
 https://cloud.google.com/text-to-speech
 https://cloud.google.com/text-to-speech/docs            <============
@@ -1881,6 +1888,11 @@ https://cloud.google.com/text-to-speech/docs/libraries#client-libraries-usage-go
 
 https://github.com/GoogleCloudPlatform/golang-samples/blob/HEAD/texttospeech/quickstart/quickstart.go
 
+---------------------
+curl / json on Ubuntu x86_64
+---------------------
+
+XXX Setup: Try the "Google Cloud Speech-to-Text API", using curl
 
 {
   "input":{
@@ -1902,49 +1914,31 @@ curl -X POST \
 -d @request.json \
 https://texttospeech.googleapis.com/v1/text:synthesize
 
-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+---------------------------------------------------------
+Raspberry Pi - using synthesize_file.go, from git repo
+https://github.com/GoogleCloudPlatform/golang-samples.git
+---------------------------------------------------------
 
-----------
+gcloud is not available for Raspberry Pi, so the curl command above won't work,
+but this does ...
 
-drwxrwxr-x 2 haid haid 4.0K Jul  3 19:34 leds                   okay
-drwxrwxr-x 4 haid haid 4.0K Jul  9 08:51 picovoice              okay
-drwxrwxr-x 7 haid haid 4.0K Jul 13 06:49 portaudio              okay
-drwxrwxr-x 2 haid haid 4.0K Jul 13 06:50 speech_to_text         okay
-drwxrwxr-x 2 haid haid 4.0K Jul 13 06:48 porcupine              okay
+install go on Raspberry Pi, described earlier
 
-xxxxxxxxxxxxxxxxxxxxxxxxxx
+Add environment variable , with pathname to the downloaded service account key.
+  export GOOGLE_APPLICATION_CREDENTIALS=/home/haid/Downloads/square-root-2-1256570f4acc.json
 
+mkdir text_to_speech
+cd text_to_speech
+cp ../repos/golang-samples/texttospeech/synthesize_file/synthesize_file.go .
+  if raw sound file format is desired:
+    chagne 'MP3' to 'LINEAR16'
+    change 'output.mp3' to 'output.raw'
+go mod init text_to_speech
+go get cloud.google.com/go/texttospeech/apiv1
 
-drwxrwxr-x 4 haid haid 4.0K May 23 07:07 body             okay
-drwxrwxr-x 2 haid haid 4.0K Jun 14 06:56 body_test        okay
-drwxrwxr-x 3 haid haid 4.0K May 31 18:20 brain            okay
-drwxrwxr-x 5 haid haid 4.0K Apr 13 16:32 common
-drwxrwxr-x 3 haid haid 4.0K Apr 22 15:08 devel
+go build synthesize_file.go
 
-
---- LATER ---
-
-XXXXXXXXXXXXXXX retest porcupine on linux
-
-
-./common/devices/i2c/i2c/i2c.h
-
-
-
-
-button          ok
-current
-encoder
-env
-gpio              oka
-i2c              oka
-imu               oka
-mc               oka
-oled
-proximity        okay
-realtime         dont build module
-relay            oka
+echo Open the pod bay door, please Hal. > hello.txt
+./synthesize_file --text hello.txt
+/usr/bin/aplay   -D sysdefault:CARD=Device -t raw -r 24000 -c 1 -f S16_LE output.raw
 

@@ -17,7 +17,7 @@ clean:
 clobber: clean
 	rm -f go.mod go.sum
 
-test:
+rpi_test:
 	echo "Open the pod bay door, please Hal." > hello.txt
 	./synthesize_file --text hello.txt
 	/usr/bin/aplay   -D sysdefault:CARD=Device -t raw -r 24000 -c 1 -f S16_LE output.raw
