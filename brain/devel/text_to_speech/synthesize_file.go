@@ -54,7 +54,8 @@ func SynthesizeTextFile(w io.Writer, textFile, outputFile string) error {
 		// Names of voices can be retrieved with client.ListVoices().
 		Voice: &texttospeechpb.VoiceSelectionParams{
 			LanguageCode: "en-US",
-			SsmlGender:   texttospeechpb.SsmlVoiceGender_FEMALE,
+			//SsmlGender:   texttospeechpb.SsmlVoiceGender_FEMALE,
+                        Name: "en-US-Standard-C",
 		},
 		AudioConfig: &texttospeechpb.AudioConfig{
 			AudioEncoding: texttospeechpb.AudioEncoding_LINEAR16,
