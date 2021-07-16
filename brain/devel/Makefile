@@ -1,8 +1,14 @@
-SUBDIRS = leds \
-          picovoice \
+SUBDIRS = picovoice \
           porcupine \
           portaudio \
-          speech_to_text
+          speech_to_text \
+          text_to_speech
+
+ARCH := $(shell arch)
+
+ifeq ($(ARCH),armv7l)
+SUBDIRS += leds
+endif
   
 .PHONY: build clean
 

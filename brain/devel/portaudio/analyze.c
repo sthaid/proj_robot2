@@ -33,7 +33,9 @@
 #include <pthread.h>
 #include <math.h>
 
+#ifdef RASPBERRY_PI
 #include <wiringPi.h>
+#endif
 
 #include <pa_utils.h>
 #include <sf_utils.h>
@@ -174,11 +176,13 @@ int main(int argc, char **argv)
         printf("DATA_SRC_MIC:  mic_dev_name=%s\n", mic_dev_name);
     }
 
+#ifdef RASPBERRY_PI
     // init leds, which will be used to indicate the direction of the sound
     if (leds_init() < 0) {
         printf("ERROR: leds_int failed\n");
         return 1;
     }
+#endif
 
     // init debug print 
     if (dbgpr_init() < 0) {
@@ -881,6 +885,7 @@ static double max_doubles(double *x, int n, int *max_idx_arg)
     return max;
 }
 
+#ifdef RASPBERRY_PI
 // -----------------  LEDS  ------------------------------------------------
 
 #define MAX_LEDS 12
@@ -981,3 +986,4 @@ static void convert_angle_to_led_num(double angle, int *led_a, int *led_b)
     if (*led_b == MAX_LEDS) *led_b = 0;
 #endif
 }
+#endif

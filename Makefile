@@ -1,7 +1,11 @@
-SUBDIRS = body \
-          body_test \
-          body/devel \
+ARCH := $(shell arch)
+
+SUBDIRS = body_test \
           brain/devel
+
+ifeq ($(ARCH),armv7l)
+SUBDIRS += body body/devel
+endif
   
 .PHONY: build clean
 

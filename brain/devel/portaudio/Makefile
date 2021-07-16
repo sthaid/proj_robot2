@@ -3,6 +3,8 @@
 
 TARGETS = gen devs record plot filters analyze
 
+ARCH := $(shell arch)
+
 build: $(TARGETS)
 
 gen: gen.c pa_utils.c sf_utils.c
@@ -24,8 +26,13 @@ filters: filters.c pa_utils.c sf_utils.c util/util_sdl.c util/util_misc.c util/u
             -lSDL2 -lSDL2_ttf -ljpeg -lpng -lfftw3 -lsndfile -lportaudio -lpthread -lm \
             -o $@ 
 
+ifeq ($(ARCH),armv7l)
 analyze: analyze.c sf_utils.c pa_utils.c poly_fit.c apa102.c 
-	gcc -g -Wall -O2 -I. $^ -lsndfile -lportaudio -lwiringPi -lpthread -lm -o $@ 
+	gcc -g -Wall -O2 -I. -DRASPBERRY_PI $^ -lsndfile -lportaudio -lwiringPi -lpthread -lm -o $@ 
+else
+analyze: analyze.c sf_utils.c pa_utils.c poly_fit.c
+	gcc -g -Wall -Wno-unused-function -O2 -I. -DLINUX $^ -lsndfile -lportaudio -lpthread -lm -o $@ 
+endif
 
 clean:
 	rm -f $(TARGETS)
