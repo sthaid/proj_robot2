@@ -2,14 +2,7 @@
 -----------------------          TODO           -----------------------
 ----------------------- ----------------------- -----------------------
 
-XXXXXXXXXXXXXXX retest porcupine on linux
-
-google speech to text
-- microphone streaming
-- wake word
-- demo pgm
-
-text to intent
+text to speech, try different voices
 
 brain:
 - when voltage gets low:
@@ -1877,16 +1870,12 @@ TITLE: TEXT TO SPEECH
 google documentation
 ---------------------
 
-XXX review this section
-
 https://cloud.google.com/text-to-speech
-https://cloud.google.com/text-to-speech/docs            <============
-https://cloud.google.com/text-to-speech/docs/quickstart-protocol
-https://cloud.google.com/text-to-speech/docs/quickstart-client-libraries
+https://cloud.google.com/text-to-speech/docs
 https://cloud.google.com/text-to-speech/docs/libraries
-https://cloud.google.com/text-to-speech/docs/libraries#client-libraries-usage-go
 
-https://github.com/GoogleCloudPlatform/golang-samples/blob/HEAD/texttospeech/quickstart/quickstart.go
+https://github.com/GoogleCloudPlatform/golang-samples/blob/HEAD/texttospeech
+https://pkg.go.dev/google.golang.org/genproto/googleapis/cloud/texttospeech/v1#SynthesizeSpeechRequest.Descriptor
 
 ---------------------
 curl / json on Ubuntu x86_64
