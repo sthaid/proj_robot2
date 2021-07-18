@@ -9,3 +9,4 @@ rm -rf portaudio
 rm -rf libsndfile 
 rm -rf golang-samples
 rm -rf Porcupine
+rm -rf jsmn

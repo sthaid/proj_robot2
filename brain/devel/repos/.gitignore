@@ -2,6 +2,7 @@
 do_clean
 do_clone
 golang-samples
+jsmn
 libsndfile
 odas
 odas_web
