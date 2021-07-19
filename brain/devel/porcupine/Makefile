@@ -1,7 +1,7 @@
 # reference:
 # https://stackoverflow.com/questions/3220277/what-do-the-makefile-symbols-and-mean
 
-TARGETS = livecaption porcupine_demo_mic tst1 tst2 tst3
+TARGETS = livecaption synthesize_text porcupine_demo_mic tst1 tst2 tst3
 
 ARCH := $(shell arch)
 	
@@ -46,6 +46,9 @@ tst3: tst3.c ../portaudio/pa_utils.c
 	gcc -g  -O2 -Wno-unused-result $(CDEFS) \
             -I../repos/Porcupine/include/ -I../portaudio $^ \
             -ldl -lportaudio -lpthread -o $@
+
+synthesize_text: synthesize_text.go go.mod
+	go build synthesize_text.go
 
 livecaption: livecaption.go go.mod
 	go build livecaption.go
