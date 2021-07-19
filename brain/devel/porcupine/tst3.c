@@ -33,7 +33,6 @@
 
 #define PORC_AND_LC_SAMPLE_RATE 16000
 #define RECORD_SAMPLE_RATE      48000
-#define PLAYBACK_SAMPLE_RATE    48000
 
 #define FRAME_LENGTH  512
 
@@ -80,9 +79,11 @@ static int      detected_keyword = -1;
 
 static int recv_mic_data(const float *frame, void *cx);
 static void *livecaption_thread(void *cx);
+static void process_transcript(char *transcript);
 static void init_lib_syms(void);
 static void run_program(pid_t *prog_pid, int *fd_to_prog, int *fd_from_prog, char *prog, ...);
 static char *keyword_name(int idx);
+static uint64_t microsec_timer(void);
 
 // -----------------  MAIN  ------------------------------------------------------
 
@@ -211,13 +212,11 @@ static int recv_mic_data(const float *frame, void *cx)
 
 static void *livecaption_thread(void *cx)
 {
-    #define MAX_PLAYBACK_DATA  (5 * PLAYBACK_SAMPLE_RATE / FRAME_LENGTH * FRAME_LENGTH)
-
-    int      fd_to_lc, fd_from_lc, pb_idx, rc, flags;
+    int      fd_to_lc, fd_from_lc, rc, flags;
     uint64_t sd_idx;
     pid_t    lc_pid;
-    float    pb_data[MAX_PLAYBACK_DATA];
-    char     lc_result[2000];
+    char     transcript[2000];
+    uint64_t start_time;
 
     while (true) {
         // wait for indication to start livecaption
@@ -230,7 +229,6 @@ static void *livecaption_thread(void *cx)
         detected_keyword = -1;
 
         // execute livecaption
-        printf("LC RUN\n");
         run_program(&lc_pid, &fd_to_lc, &fd_from_lc, "./livecaption", NULL);
 
         // set fd used to read livecaption stdout to non blocking
@@ -245,36 +243,26 @@ static void *livecaption_thread(void *cx)
             exit(1);
         }
         sd_idx = livecaption_thread_start_idx;
-        pb_idx = 0;
-        memset(lc_result, 0, sizeof(lc_result));
+        memset(transcript, 0, sizeof(transcript));
+        start_time = microsec_timer();
 
         while (true) {
             // if FRAME_LENGTH sound_data values are available then
-            //   write block of sound_data to livecaption, and 
-            //   keep a copy of this sound_data to be used below to play it
+            //   write block of sound_data to livecaption
             // endif
             if (idx_sound_data >= sd_idx + (FRAME_LENGTH + 1)) {
                 short *sd = &sound_data[sd_idx % MAX_SOUND_DATA];
 
                 rc = write(fd_to_lc, sd, FRAME_LENGTH*sizeof(short));
-                if (rc != FRAME_LENGTH*sizeof(short)) {
+                if ((rc != FRAME_LENGTH*sizeof(short)) && (rc != -1 || errno != EPIPE)) {
                     printf("ERROR: failed write to livecaption, rc=%d, %s\n", rc, strerror(errno));
                     exit(1);
                 }
-
-                for (int i = 0; i < FRAME_LENGTH; i++) {
-                    float v =  sd[i] * (1./32767);
-                    // the playback sample rate is 3x the rate of sound_data array rate
-                    pb_data[pb_idx++] = v;
-                    pb_data[pb_idx++] = v;
-                    pb_data[pb_idx++] = v;
-                }
-
                 sd_idx += FRAME_LENGTH;
             }
 
             // perform non blocking read of livecaption stdout
-            rc = read(fd_from_lc, lc_result, sizeof(lc_result)-1);
+            rc = read(fd_from_lc, transcript, sizeof(transcript)-1);
             if (rc < 0 && errno != EWOULDBLOCK) {
                 printf("ERROR: failed read from livecaption, %s\n", strerror(errno));
                 exit(1);
@@ -282,12 +270,12 @@ static void *livecaption_thread(void *cx)
 
             // if we have a result from livecaption then print it and break
             if (rc > 0) {
-                printf("LIVECAPTION: %s\n", lc_result);
                 break;
             }
 
-            // if the playback sound buffer is full then break
-            if (pb_idx == MAX_PLAYBACK_DATA) {
+            // timeout if there is not a result from livecaption in 5 secs
+            if (microsec_timer() - start_time > 5000000) {
+                printf("TIMEDOUT WAITING FOR TRANSCRIPT\n");
                 break;
             }
 
@@ -300,25 +288,30 @@ static void *livecaption_thread(void *cx)
         close(fd_from_lc);
         waitpid(lc_pid, NULL, 0);
 
-        // play the sound that was provided to livecaption
-        if (pb_idx > 0) {
-            rc = pa_play(OUTPUT_DEVICE, 1, pb_idx, PLAYBACK_SAMPLE_RATE, pb_data);
-            if (rc < 0) {
-                printf("ERROR: pa_play failed\n");
-                exit(1);
-            }
+        // if transcript is available then process it
+        if (transcript[0] != '\0') {
+            process_transcript(transcript);
         }
 
         // setting livecaption_thread_start_idx to 0 restarts the recv_mic_data
         // callback routine monitoring for wake word
-        printf("LC DONE\n");
         livecaption_thread_start_idx = 0;
     }
 
     return NULL;
 }
 
+// -----------------  PROCESS TRANSCRIPT  -----------------------------
+
+static void process_transcript(char *transcript)
+{
+    transcript[strcspn(transcript, "\n")] = 0;
+
+    printf("PROCESS: %s\n", transcript);
+}
+
 // -----------------  INIT ACCESS TO PORCUPINE LIBRARY  ---------------
+// XXX reorg below
 
 static void init_lib_syms(void)
 {
@@ -431,3 +424,12 @@ static char *keyword_name(int idx)
 
     return name;
 }
+
+static uint64_t microsec_timer(void)
+{
+    struct timespec ts;
+
+    clock_gettime(CLOCK_MONOTONIC,&ts);
+    return  ((uint64_t)ts.tv_sec * 1000000) + ((uint64_t)ts.tv_nsec / 1000);
+}
+
