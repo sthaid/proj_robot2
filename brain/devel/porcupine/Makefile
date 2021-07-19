@@ -1,7 +1,7 @@
 # reference:
 # https://stackoverflow.com/questions/3220277/what-do-the-makefile-symbols-and-mean
 
-TARGETS = porcupine_demo_mic tst1 tst2
+TARGETS = livecaption porcupine_demo_mic tst1 tst2 tst3
 
 ARCH := $(shell arch)
 	
@@ -41,6 +41,18 @@ tst2: tst2.c ../portaudio/pa_utils.c
 	gcc -g  -O2 -Wno-unused-result $(CDEFS) \
             -I../repos/Porcupine/include/ -I../portaudio $^ \
             -ldl -lportaudio -lpthread -o $@
+
+tst3: tst3.c ../portaudio/pa_utils.c
+	gcc -g  -O2 -Wno-unused-result $(CDEFS) \
+            -I../repos/Porcupine/include/ -I../portaudio $^ \
+            -ldl -lportaudio -lpthread -o $@
+
+livecaption: livecaption.go go.mod
+	go build livecaption.go
+
+go.mod:
+	go mod init `basename ${PWD}`
+	go get cloud.google.com/go/speech/apiv1
 
 clean:
 	rm -f $(TARGETS)
