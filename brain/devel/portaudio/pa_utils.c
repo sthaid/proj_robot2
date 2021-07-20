@@ -6,16 +6,14 @@
 #include <portaudio.h>
 #include <pa_utils.h>
 
-// xxx error check
-// xxx names
 #define SIZEOF_SAMPLE_FORMAT(sf) \
-    ((sf) == paFloat32  ? 4 : \
-     (sf) == paInt32    ? 4 : \
-     (sf) == paInt24    ? 3 : \
-     (sf) == paInt16    ? 2 : \
-     (sf) == paInt8     ? 1 : \
-     (sf) == paUInt8    ? 1 : \
-                          4)
+    ((sf) == PA_FLOAT32  ? 4 : \
+     (sf) == PA_INT32    ? 4 : \
+     (sf) == PA_INT24    ? 3 : \
+     (sf) == PA_INT16    ? 2 : \
+     (sf) == PA_INT8     ? 1 : \
+     (sf) == PA_UINT8    ? 1 : \
+                           -1)
 
 // -----------------  INIT  ------------------------------------------------------
 
@@ -41,7 +39,6 @@ static void exit_hndlr(void)
 typedef struct {
     int max_chan;
     int max_frames;
-    //int sample_format;
     int sizeof_sample_format;
     int frame_idx;
     void *data;
@@ -60,10 +57,14 @@ int pa_play(char *output_device, int max_chan, int max_data, int sample_rate, in
 
     cx.max_chan             = max_chan;
     cx.max_frames           = max_data / max_chan;
-    //cx.sample_format        = sample_format;
     cx.sizeof_sample_format = SIZEOF_SAMPLE_FORMAT(sample_format);
     cx.frame_idx            = 0;
     cx.data                 = data;
+
+    if (cx.sizeof_sample_format == -1) {
+        printf("ERROR: invalid sample_format 0x%x\n", sample_format);
+        return -1;
+    }
 
     return pa_play2(output_device, max_chan, sample_rate, sample_format, play_cb, &cx);
 }
@@ -121,6 +122,12 @@ int pa_play2(char *output_device, int max_chan, int sample_rate, int sample_form
     ud.max_chan             = max_chan;
     ud.sizeof_sample_format = SIZEOF_SAMPLE_FORMAT(sample_format);
     ud.done                 = false;
+
+    // check sizeof_sample_format for error
+    if (ud.sizeof_sample_format == -1) {
+        printf("ERROR: invalid sample_format 0x%x\n", sample_format);
+        goto error;
+    }
 
     // get the output device idx
     devidx = pa_find_device(output_device);
@@ -212,7 +219,6 @@ static void play_stream_finished_cb2(void *user_data)
 typedef struct {
     int max_chan;
     int max_frames;
-    int sample_format;
     int sizeof_sample_format;
     int frame_idx;
     void *data;
@@ -231,10 +237,14 @@ int pa_record(char *input_device, int max_chan, int max_data, int sample_rate, i
 
     cx.max_chan             = max_chan;
     cx.max_frames           = max_data / max_chan;
-    cx.sample_format        = sample_format;
     cx.sizeof_sample_format = SIZEOF_SAMPLE_FORMAT(sample_format);
     cx.frame_idx            = 0;
     cx.data                 = data;
+
+    if (cx.sizeof_sample_format == -1) {
+        printf("ERROR: invalid sample_format 0x%x\n", sample_format);
+        return -1;
+    }
 
     return pa_record2(input_device, max_chan, sample_rate, sample_format, record_cb, &cx, discard_samples);
 }
@@ -294,6 +304,12 @@ int pa_record2(char *input_device, int max_chan, int sample_rate, int sample_for
     ud.sizeof_sample_format = SIZEOF_SAMPLE_FORMAT(sample_format);
     ud.discard_samples      = discard_samples;
     ud.done                 = false;
+
+    // check sizeof_sample_format for error
+    if (ud.sizeof_sample_format == -1) {
+        printf("ERROR: invalid sample_format 0x%x\n", sample_format);
+        goto error;
+    }
 
     // get the input device idx
     devidx = pa_find_device(input_device);
