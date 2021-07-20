@@ -6,6 +6,17 @@
 #include <portaudio.h>
 #include <pa_utils.h>
 
+// xxx error check
+// xxx names
+#define SIZEOF_SAMPLE_FORMAT(sf) \
+    ((sf) == paFloat32  ? 4 : \
+     (sf) == paInt32    ? 4 : \
+     (sf) == paInt24    ? 3 : \
+     (sf) == paInt16    ? 2 : \
+     (sf) == paInt8     ? 1 : \
+     (sf) == paUInt8    ? 1 : \
+                          4)
+
 // -----------------  INIT  ------------------------------------------------------
 
 static void exit_hndlr(void);
@@ -26,16 +37,19 @@ static void exit_hndlr(void)
 
 // -----------------  PLAY - DATA SUPPLIED IN CALLER SUPPLIED ARRAY  -------------
 
+
 typedef struct {
     int max_chan;
     int max_frames;
+    //int sample_format;
+    int sizeof_sample_format;
     int frame_idx;
-    float *data;
+    void *data;
 } play_cx_t;
 
-static int play_cb(float *data, void *cx);
+static int play_cb(void *data, void *cx);
 
-int pa_play(char *output_device, int max_chan, int max_data, int sample_rate, float *data)
+int pa_play(char *output_device, int max_chan, int max_data, int sample_rate, int sample_format, void *data)
 {
     play_cx_t cx;
 
@@ -44,15 +58,17 @@ int pa_play(char *output_device, int max_chan, int max_data, int sample_rate, fl
         return -1;
     }
 
-    cx.max_chan   = max_chan;
-    cx.max_frames = max_data / max_chan;
-    cx.frame_idx  = 0;
-    cx.data       = data;
+    cx.max_chan             = max_chan;
+    cx.max_frames           = max_data / max_chan;
+    //cx.sample_format        = sample_format;
+    cx.sizeof_sample_format = SIZEOF_SAMPLE_FORMAT(sample_format);
+    cx.frame_idx            = 0;
+    cx.data                 = data;
 
-    return pa_play2(output_device, max_chan, sample_rate, play_cb, &cx);
+    return pa_play2(output_device, max_chan, sample_rate, sample_format, play_cb, &cx);
 }
 
-static int play_cb(float *data, void *cx_arg)
+static int play_cb(void *data, void *cx_arg)
 {
     play_cx_t *cx = cx_arg;
 
@@ -63,8 +79,8 @@ static int play_cb(float *data, void *cx_arg)
 
     // copy a frame to portaudio buffer
     memcpy(data, 
-           &cx->data[cx->frame_idx * cx->max_chan], 
-           cx->max_chan * sizeof(float));
+           cx->data + (cx->frame_idx * cx->max_chan * cx->sizeof_sample_format),
+           cx->max_chan * cx->sizeof_sample_format);
     cx->frame_idx++;
 
     // return 0, meaning continue
@@ -77,6 +93,7 @@ typedef struct {
     play2_get_frame_t  get_frame;
     void              *get_frame_cx;
     int                max_chan;
+    int                sizeof_sample_format;
     bool               done;
 } play2_user_data_t;
 
@@ -89,7 +106,7 @@ static int play_stream_cb2(const void *input,
 
 static void play_stream_finished_cb2(void *user_data);
 
-int pa_play2(char *output_device, int max_chan, int sample_rate, play2_get_frame_t get_frame, void *get_frame_cx)
+int pa_play2(char *output_device, int max_chan, int sample_rate, int sample_format, play2_get_frame_t get_frame, void *get_frame_cx)
 {
     PaError             rc;
     PaStream           *stream = NULL;
@@ -99,10 +116,11 @@ int pa_play2(char *output_device, int max_chan, int sample_rate, play2_get_frame
 
     // init user_data
     memset(&ud, 0, sizeof(ud));
-    ud.get_frame     = get_frame;
-    ud.get_frame_cx  = get_frame_cx;
-    ud.max_chan      = max_chan;
-    ud.done          = false;
+    ud.get_frame            = get_frame;
+    ud.get_frame_cx         = get_frame_cx;
+    ud.max_chan             = max_chan;
+    ud.sizeof_sample_format = SIZEOF_SAMPLE_FORMAT(sample_format);
+    ud.done                 = false;
 
     // get the output device idx
     devidx = pa_find_device(output_device);
@@ -115,7 +133,7 @@ int pa_play2(char *output_device, int max_chan, int sample_rate, play2_get_frame
     // init output_params and open the audio output stream
     output_params.device            = devidx;
     output_params.channelCount      = max_chan;
-    output_params.sampleFormat      = paFloat32;
+    output_params.sampleFormat      = sample_format;
     output_params.suggestedLatency  = Pa_GetDeviceInfo(output_params.device)->defaultLowOutputLatency;
     output_params.hostApiSpecificStreamInfo = NULL;
 
@@ -177,7 +195,7 @@ static int play_stream_cb2(const void *input,
 
     for (i = 0; i < frame_count; i++) {
         rc = ud->get_frame(output, ud->get_frame_cx);
-        output += (ud->max_chan * sizeof(float));
+        output += (ud->max_chan * ud->sizeof_sample_format);
         if (rc != 0) return paComplete;
     }
     return paContinue;
@@ -194,13 +212,15 @@ static void play_stream_finished_cb2(void *user_data)
 typedef struct {
     int max_chan;
     int max_frames;
+    int sample_format;
+    int sizeof_sample_format;
     int frame_idx;
-    float *data;
+    void *data;
 } record_cx_t;
 
-static int record_cb(const float *data, void *cx);
+static int record_cb(const void *data, void *cx);
 
-int pa_record(char *input_device, int max_chan, int max_data, int sample_rate, float *data, int discard_samples)
+int pa_record(char *input_device, int max_chan, int max_data, int sample_rate, int sample_format, void *data, int discard_samples)
 {
     record_cx_t cx;
 
@@ -209,15 +229,17 @@ int pa_record(char *input_device, int max_chan, int max_data, int sample_rate, f
         return -1;
     }
 
-    cx.max_chan   = max_chan;
-    cx.max_frames = max_data / max_chan;
-    cx.frame_idx  = 0;
-    cx.data       = data;
+    cx.max_chan             = max_chan;
+    cx.max_frames           = max_data / max_chan;
+    cx.sample_format        = sample_format;
+    cx.sizeof_sample_format = SIZEOF_SAMPLE_FORMAT(sample_format);
+    cx.frame_idx            = 0;
+    cx.data                 = data;
 
-    return pa_record2(input_device, max_chan, sample_rate, record_cb, &cx, discard_samples);
+    return pa_record2(input_device, max_chan, sample_rate, sample_format, record_cb, &cx, discard_samples);
 }
 
-static int record_cb(const float *data, void *cx_arg)
+static int record_cb(const void *data, void *cx_arg)
 {
     record_cx_t *cx = cx_arg;
 
@@ -227,9 +249,9 @@ static int record_cb(const float *data, void *cx_arg)
     }
 
     // copy a frame from portaudio buffer
-    memcpy(&cx->data[cx->frame_idx * cx->max_chan], 
+    memcpy(cx->data + (cx->frame_idx * cx->max_chan * cx->sizeof_sample_format),
            data,
-           cx->max_chan * sizeof(float));
+           cx->max_chan * cx->sizeof_sample_format);
     cx->frame_idx++;
 
     // return 0, meaning continue
@@ -242,6 +264,7 @@ typedef struct {
     record2_put_frame_t put_frame;
     void               *put_frame_cx;
     int                 max_chan;
+    int                 sizeof_sample_format;
     int                 discard_samples;
     bool                done;
 } record2_user_data_t;
@@ -255,7 +278,7 @@ static int record_stream_cb2(const void *input,
 
 static void record_stream_finished_cb2(void *user_data);
 
-int pa_record2(char *input_device, int max_chan, int sample_rate, record2_put_frame_t put_frame, void *put_frame_cx, int discard_samples)
+int pa_record2(char *input_device, int max_chan, int sample_rate, int sample_format, record2_put_frame_t put_frame, void *put_frame_cx, int discard_samples)
 {
     PaError             rc;
     PaStream           *stream = NULL;
@@ -265,11 +288,12 @@ int pa_record2(char *input_device, int max_chan, int sample_rate, record2_put_fr
 
     // init user_data
     memset(&ud, 0, sizeof(ud));
-    ud.put_frame       = put_frame;
-    ud.put_frame_cx    = put_frame_cx;
-    ud.max_chan        = max_chan;
-    ud.discard_samples = discard_samples;
-    ud.done            = false;
+    ud.put_frame            = put_frame;
+    ud.put_frame_cx         = put_frame_cx;
+    ud.max_chan             = max_chan;
+    ud.sizeof_sample_format = SIZEOF_SAMPLE_FORMAT(sample_format);
+    ud.discard_samples      = discard_samples;
+    ud.done                 = false;
 
     // get the input device idx
     devidx = pa_find_device(input_device);
@@ -282,7 +306,7 @@ int pa_record2(char *input_device, int max_chan, int sample_rate, record2_put_fr
     // init input_params and open the audio input stream
     input_params.device            = devidx;
     input_params.channelCount      = max_chan;
-    input_params.sampleFormat      = paFloat32;
+    input_params.sampleFormat      = sample_format;
     input_params.suggestedLatency  = Pa_GetDeviceInfo(input_params.device)->defaultLowInputLatency;
     input_params.hostApiSpecificStreamInfo = NULL;
 
@@ -349,7 +373,7 @@ static int record_stream_cb2(const void *input,
         }
 
         rc = ud->put_frame(input, ud->put_frame_cx);
-        input += (ud->max_chan * sizeof(float));
+        input += (ud->max_chan * ud->sizeof_sample_format);
         if (rc != 0) return paComplete;
     }
     return paContinue;

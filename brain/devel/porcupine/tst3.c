@@ -77,7 +77,7 @@ static int      detected_keyword = -1;
 // prototypes
 //
 
-static int recv_mic_data(const float *frame, void *cx);
+static int recv_mic_data(const void *frame, void *cx);
 static void *livecaption_thread(void *cx);
 static void process_transcript(char *transcript);
 static void init_lib_syms(void);
@@ -141,6 +141,7 @@ int main(int argc, char **argv)
     rc =  pa_record2(INPUT_DEVICE,
                      1,                   // max_chan
                      RECORD_SAMPLE_RATE,  // sample_rate
+                     PA_INT16,            // 16 bit signed data
                      recv_mic_data,       // callback
                      NULL,                // cx passed to recv_mic_data
                      0);                  // discard_samples count
@@ -155,8 +156,10 @@ int main(int argc, char **argv)
 
 // -----------------  RECV MIC DATA  ---------------------------------
 
-static int recv_mic_data(const float *frame, void *cx)
+static int recv_mic_data(const void *frame_arg, void *cx)
 {
+    const short *frame = frame_arg;
+
     // note - this is called at sample rate 48000 Hz
 
     // direction of arrival (DOA) analysis 
@@ -172,7 +175,7 @@ static int recv_mic_data(const float *frame, void *cx)
     // save single channel sound_data, which is used by 
     // - call to pv_porcupine_process_func
     // - the livecaption thread
-    sound_data[idx_sound_data % MAX_SOUND_DATA] = frame[0] * 32767;
+    sound_data[idx_sound_data % MAX_SOUND_DATA] = frame[0];
     idx_sound_data++;
 
     // if livecaption thread is active then return
@@ -237,6 +240,7 @@ static void *livecaption_thread(void *cx)
         fcntl(fd_from_lc, F_SETFL, flags); 
 
         // int variables
+        // XXX check earlier
         if ((livecaption_thread_start_idx % FRAME_LENGTH) != 0) {
             printf("ERROR: livecaption_thread_start_idx=0x%" PRIx64 " is not a multiple of FRAME_LENGTH=%d\n",
                    livecaption_thread_start_idx, FRAME_LENGTH);
@@ -305,9 +309,42 @@ static void *livecaption_thread(void *cx)
 
 static void process_transcript(char *transcript)
 {
+    pid_t st_pid;
+    int fd_to_st, fd_from_st;
+    short data[1000000];
+    int len, fd, rc;
+
+    // remove newline char at the end of transcript
     transcript[strcspn(transcript, "\n")] = 0;
 
-    printf("PROCESS: %s\n", transcript);
+    // run synthesize_text to convert transcript text to raw audio file
+    // xxx this could be a routine
+    printf("RUN_PROG synthesize_text, '%s'\n", transcript);
+    run_program(&st_pid, &fd_to_st, &fd_from_st, "./synthesize_text", "--text", transcript, NULL);
+    close(fd_to_st);
+    close(fd_from_st);
+    waitpid(st_pid, NULL, 0);
+    printf("RUN_PROG done\n");
+
+    // read the raw audio file, output.raw
+    // xxx this could be a routine
+    fd = open("output.raw", O_RDONLY);
+    if (fd < 0) {
+        printf("ERROR: open output.raw, %s\n", strerror(errno));
+        return;
+    }
+    len = read(fd, data, sizeof(data));
+    if (len <= 0) {
+        printf("ERROR: read, len=%d, %s\n", len, strerror(errno));
+        close(fd);
+        return;
+    }
+    close(fd);
+
+    // play the transcript
+    printf("PA_PLAY len %d\n", len);
+    rc = pa_play(OUTPUT_DEVICE, 1, len/2-1000, 24000, PA_INT16, data+1000);
+    printf("PA_PLAY done, rc=%d\n", rc);
 }
 
 // -----------------  INIT ACCESS TO PORCUPINE LIBRARY  ---------------

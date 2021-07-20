@@ -78,7 +78,7 @@ static int      detected_keyword = -1;
 // prototypes
 //
 
-static int recv_mic_data(const float *frame, void *cx);
+static int recv_mic_data(const void *frame, void *cx);
 static void *livecaption_thread(void *cx);
 static void init_lib_syms(void);
 static void run_program(pid_t *prog_pid, int *fd_to_prog, int *fd_from_prog, char *prog, ...);
@@ -140,6 +140,7 @@ int main(int argc, char **argv)
     rc =  pa_record2(INPUT_DEVICE,
                      1,                   // max_chan
                      RECORD_SAMPLE_RATE,  // sample_rate
+                     PA_INT16,            // 16 bit signed data
                      recv_mic_data,       // callback
                      NULL,                // cx passed to recv_mic_data
                      0);                  // discard_samples count
@@ -154,8 +155,10 @@ int main(int argc, char **argv)
 
 // -----------------  RECV MIC DATA  ---------------------------------
 
-static int recv_mic_data(const float *frame, void *cx)
+static int recv_mic_data(const void *frame_arg, void *cx)
 {
+    const short *frame = frame_arg;
+
     // note - this is called at sample rate 48000 Hz
 
     // direction of arrival (DOA) analysis 
@@ -171,7 +174,7 @@ static int recv_mic_data(const float *frame, void *cx)
     // save single channel sound_data, which is used by 
     // - call to pv_porcupine_process_func
     // - the livecaption thread
-    sound_data[idx_sound_data % MAX_SOUND_DATA] = frame[0] * 32767;
+    sound_data[idx_sound_data % MAX_SOUND_DATA] = frame[0];
     idx_sound_data++;
 
     // if livecaption thread is active then return
@@ -216,7 +219,7 @@ static void *livecaption_thread(void *cx)
     int      fd_to_lc, fd_from_lc, pb_idx, rc, flags;
     uint64_t sd_idx;
     pid_t    lc_pid;
-    float    pb_data[MAX_PLAYBACK_DATA];
+    short    pb_data[MAX_PLAYBACK_DATA];
     char     lc_result[2000];
 
     while (true) {
@@ -257,17 +260,16 @@ static void *livecaption_thread(void *cx)
                 short *sd = &sound_data[sd_idx % MAX_SOUND_DATA];
 
                 rc = write(fd_to_lc, sd, FRAME_LENGTH*sizeof(short));
-                if (rc != FRAME_LENGTH*sizeof(short)) {
+                if ((rc != FRAME_LENGTH*sizeof(short)) && (rc != -1 || errno != EPIPE)) {
                     printf("ERROR: failed write to livecaption, rc=%d, %s\n", rc, strerror(errno));
                     exit(1);
                 }
 
                 for (int i = 0; i < FRAME_LENGTH; i++) {
-                    float v =  sd[i] * (1./32767);
                     // the playback sample rate is 3x the rate of sound_data array rate
-                    pb_data[pb_idx++] = v;
-                    pb_data[pb_idx++] = v;
-                    pb_data[pb_idx++] = v;
+                    pb_data[pb_idx++] = sd[i];
+                    pb_data[pb_idx++] = sd[i];
+                    pb_data[pb_idx++] = sd[i];
                 }
 
                 sd_idx += FRAME_LENGTH;
@@ -302,7 +304,7 @@ static void *livecaption_thread(void *cx)
 
         // play the sound that was provided to livecaption
         if (pb_idx > 0) {
-            rc = pa_play(OUTPUT_DEVICE, 1, pb_idx, PLAYBACK_SAMPLE_RATE, pb_data);
+            rc = pa_play(OUTPUT_DEVICE, 1, pb_idx, PLAYBACK_SAMPLE_RATE, PA_INT16, pb_data);
             if (rc < 0) {
                 printf("ERROR: pa_play failed\n");
                 exit(1);

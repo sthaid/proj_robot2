@@ -58,5 +58,5 @@ go.mod:
 	go get cloud.google.com/go/speech/apiv1
 
 clean:
-	rm -f $(TARGETS)
+	rm -f $(TARGETS) output.raw
 

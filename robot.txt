@@ -2,6 +2,31 @@
 -----------------------          TODO           -----------------------
 ----------------------- ----------------------- -----------------------
 
+pa_util.c
+44 3 215 ...
+
+cleanup and checkins
+continue tst3,  demo in tst3,  retun the time
+
+lawn mower
+tides
+
+add process_speech routine
+
+
+// https://github.com/googleapis/go-genproto/blob/ce7ef5c701ea/googleapis/cloud/speech/v1/cloud_speech.pb.go#L1769
+                for _, result := range resp.Results {
+                        if (result.IsFinal) {
+                                //fmt.Printf("ORIG %+v\n", result)
+                                fmt.Printf("TRANSCRIPT: %s\n", result.Alternatives[0].Transcript)
+                                os.Exit(0)
+                                //fmt.Printf("CONFIDENCE %f\n", result.Alternatives[0].Confidence)
+                                //fmt.Printf("WORDS %v\n", result.Alternatives[0].Words)
+                        }
+                }
+
+xxxxxxxxxxxxxxxxxxx
+
 text to speech, try different voices
 
 brain:

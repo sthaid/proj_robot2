@@ -81,7 +81,7 @@ static int         plot_scale[4];
 static void reset_params(void);
 static void init_in_data(int type);
 static void *audio_out_thread(void *cx);
-static int audio_out_get_frame(float *data, void *cx);
+static int audio_out_get_frame(void *data, void *cx);
 static int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_event_t * event);
 static int plot(rect_t *pane, int idx, complex *data, int n);
 static void apply_low_pass_filter(complex *data, int n);
@@ -276,16 +276,17 @@ static void init_in_data(int type)
 
 static void *audio_out_thread(void *cx)
 {
-    if (pa_play2(audio_out_dev, 1, SAMPLE_RATE, audio_out_get_frame, NULL) < 0) {
+    if (pa_play2(audio_out_dev, 1, SAMPLE_RATE, PA_FLOAT32, audio_out_get_frame, NULL) < 0) {
         printf("FATAL: pa_play2 failed\n");
         exit(1); 
     }
     return NULL;
 }
 
-static int audio_out_get_frame(float *out_data, void *cx_arg)
+static int audio_out_get_frame(void *out_data_arg, void *cx_arg)
 {
     double vd, vo;
+    float *out_data = out_data_arg;
 
     static double cx[200];
     static int idx;

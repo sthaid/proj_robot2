@@ -144,7 +144,7 @@ int main(int argc, char **argv)
         }
 
         // play sound data
-        if (pa_play(output_device, MAX_CHAN, max_data, SAMPLE_RATE, data) < 0) {
+        if (pa_play(output_device, MAX_CHAN, max_data, SAMPLE_RATE, PA_FLOAT32, data) < 0) {
             printf("ERROR: pa_play failed\n");
             return 1;
         }

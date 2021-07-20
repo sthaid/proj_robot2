@@ -61,7 +61,7 @@ static pv_porcupine_t *porcupine;
 static short *porcupine_sound_data;
 static int    porcupine_frame_length;
 
-static float  playback_data[MAX_PLAYBACK_DATA];
+static short  playback_data[MAX_PLAYBACK_DATA];
 static int    playback_cnt = -1;
 
 //
@@ -69,7 +69,7 @@ static int    playback_cnt = -1;
 //
 
 static void *playback_thread(void *cx);
-static int recv_mic_data(const float *frame, void *cx);
+static int recv_mic_data(const void *frame, void *cx);
 static void init_lib_syms(void);
 
 // -----------------  MAIN  ------------------------------------------------------
@@ -132,6 +132,7 @@ int main(int argc, char **argv)
     rc =  pa_record2(INPUT_DEVICE,
                      1,                          // max_chan
                      OUTPUT_DEVICE_SAMPLE_RATE,  // sample_rate
+                     PA_INT16,                   // signed 16bit data
                      recv_mic_data,              // callback
                      NULL,                       // cx passed to recv_mic_data
                      0);                         // discard_samples count
@@ -156,7 +157,7 @@ static void *playback_thread(void *cx)
         //   reset playback_cnt to -1, indicating that we're done with this playback_data
         // endif
         if (playback_cnt == MAX_PLAYBACK_DATA) {
-            rc = pa_play(OUTPUT_DEVICE, 1, MAX_PLAYBACK_DATA, OUTPUT_DEVICE_SAMPLE_RATE, playback_data);
+            rc = pa_play(OUTPUT_DEVICE, 1, MAX_PLAYBACK_DATA, OUTPUT_DEVICE_SAMPLE_RATE, PA_INT16, playback_data);
             if (rc < 0) {
                 printf("ERROR: pa_play failed\n");
                 exit(1);
@@ -174,8 +175,10 @@ static void *playback_thread(void *cx)
 
 // -----------------  RECV MIC DATA  ---------------------------------
 
-static int recv_mic_data(const float *frame, void *cx)
+static int recv_mic_data(const void *frame_arg, void *cx)
 {
+    const short *frame = frame_arg;
+
     // note 
     // - this is called at sample rate 48000 Hz
     // - the playback device supports only 48000 Hz
@@ -210,7 +213,7 @@ static int recv_mic_data(const float *frame, void *cx)
 
         // accumulate sound data for porcupine, and 
         // when the required number of samples is available call pv_porcupine_process_func
-        porcupine_sound_data[psd_cnt++] = frame[0] * 32767;
+        porcupine_sound_data[psd_cnt++] = frame[0];
         if (psd_cnt == porcupine_frame_length) {
             psd_cnt = 0;
 

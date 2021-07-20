@@ -100,11 +100,11 @@ static struct {
 
 static int init_get_data_from_mic(char *mic_dev_name);
 static void *get_data_from_mic_thread(void *cx);
-static int process_mic_frame(const float *frame, void *cx);
+static int process_mic_frame(const void *frame, void *cx);
 
 static int init_get_data_from_file(char *file_name, char *spkr_dev_name);
 static void *get_data_from_file_thread(void *cx);
-static int play_get_frame(float *ret_spkr_data, void *cx);
+static int play_get_frame(void *ret_spkr_data, void *cx);
 static void *get_data_from_file_thread2(void *cx);
 
 static void process_frame(const float *frame);
@@ -290,7 +290,7 @@ static void * get_data_from_mic_thread(void *cx)
 
     // call pa_record2 to initiate periodic callbacks to process_mic_frame, 
     // with 4 channel frame data from the microphone
-    if (pa_record2(mic_dev_name, MAX_CHAN, SAMPLE_RATE, process_mic_frame, NULL, 0) < 0) {
+    if (pa_record2(mic_dev_name, MAX_CHAN, SAMPLE_RATE, PA_FLOAT32, process_mic_frame, NULL, 0) < 0) {
         printf("ERROR: pa_record2 failed\n");
         exit(1);
     }
@@ -299,8 +299,10 @@ static void * get_data_from_mic_thread(void *cx)
     return NULL;
 }
 
-static int process_mic_frame(const float *frame, void *cx)
+static int process_mic_frame(const void *frame_arg, void *cx)
 {
+    const float *frame = frame_arg;
+
     // check if this program is terminating
     if (prog_terminating) {
         return -1;
@@ -382,7 +384,7 @@ static void *get_data_from_file_thread(void *cx)
     // - return a 1 channel frame of file data, to be played on the speaker
     // - call process_frame with a 4 channel frame of file data, for sound
     //   direction analysis
-    if (pa_play2(spkr_dev_name, 1, SAMPLE_RATE, play_get_frame, NULL) < 0) {
+    if (pa_play2(spkr_dev_name, 1, SAMPLE_RATE, PA_FLOAT32, play_get_frame, NULL) < 0) {
         printf("ERROR: pa_play2 failed\n");
         exit(1);
     }
@@ -391,10 +393,11 @@ static void *get_data_from_file_thread(void *cx)
     return NULL;
 }
 
-static int play_get_frame(float *ret_spkr_data, void *cx)
+static int play_get_frame(void *ret_spkr_data_arg, void *cx)
 {
     static int frame_idx;
     float *frame;
+    float *ret_spkr_data = ret_spkr_data_arg;
 
     // check if this program is terminating
     if (prog_terminating) {

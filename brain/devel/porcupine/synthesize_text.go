@@ -48,10 +48,11 @@ func SynthesizeText(w io.Writer, text, outputFile string) error {
 		// Names of voices can be retrieved with client.ListVoices().
 		Voice: &texttospeechpb.VoiceSelectionParams{
 			LanguageCode: "en-US",
-			SsmlGender:   texttospeechpb.SsmlVoiceGender_FEMALE,
+			//SsmlGender:   texttospeechpb.SsmlVoiceGender_FEMALE,
+                        Name: "en-US-Standard-C",
 		},
 		AudioConfig: &texttospeechpb.AudioConfig{
-			AudioEncoding: texttospeechpb.AudioEncoding_MP3,
+			AudioEncoding: texttospeechpb.AudioEncoding_LINEAR16,
 		},
 	}
 
@@ -70,58 +71,10 @@ func SynthesizeText(w io.Writer, text, outputFile string) error {
 
 // [END tts_synthesize_text]
 
-// [START tts_synthesize_ssml]
-
-// SynthesizeSSML synthesizes ssml and saves the output to outputFile.
-//
-// ssml must be well-formed according to:
-//   https://www.w3.org/TR/speech-synthesis/
-// Example: <speak>Hello there.</speak>
-func SynthesizeSSML(w io.Writer, ssml, outputFile string) error {
-	ctx := context.Background()
-
-	client, err := texttospeech.NewClient(ctx)
-	if err != nil {
-		return err
-	}
-	defer client.Close()
-
-	req := texttospeechpb.SynthesizeSpeechRequest{
-		Input: &texttospeechpb.SynthesisInput{
-			InputSource: &texttospeechpb.SynthesisInput_Ssml{Ssml: ssml},
-		},
-		// Note: the voice can also be specified by name.
-		// Names of voices can be retrieved with client.ListVoices().
-		Voice: &texttospeechpb.VoiceSelectionParams{
-			LanguageCode: "en-US",
-			SsmlGender:   texttospeechpb.SsmlVoiceGender_FEMALE,
-		},
-		AudioConfig: &texttospeechpb.AudioConfig{
-			AudioEncoding: texttospeechpb.AudioEncoding_MP3,
-		},
-	}
-
-	resp, err := client.SynthesizeSpeech(ctx, &req)
-	if err != nil {
-		return err
-	}
-
-	err = ioutil.WriteFile(outputFile, resp.AudioContent, 0644)
-	if err != nil {
-		return err
-	}
-	fmt.Fprintf(w, "Audio content written to file: %v\n", outputFile)
-	return nil
-}
-
-// [END tts_synthesize_ssml]
-
 func main() {
 	text := flag.String("text", "",
 		"The text from which to synthesize speech.")
-	ssml := flag.String("ssml", "",
-		"The ssml string from which to synthesize speech.")
-	outputFile := flag.String("output-file", "output.txt",
+	outputFile := flag.String("output-file", "output.raw",
 		"The name of the output file.")
 	flag.Parse()
 
@@ -130,16 +83,9 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
-	} else if *ssml != "" {
-		err := SynthesizeSSML(os.Stdout, *ssml, *outputFile)
-		if err != nil {
-			log.Fatal(err)
-		}
 	} else {
-		log.Fatal(`Error: please supply a --text or --ssml content.
-
+		log.Fatal(`Error: please supply a --text.
 Examples:
-  go run synthesize_text.go --text "hello"
-  go run synthesize_text.go --ssml "<speak>Hello there.</speak>"`)
+  go run synthesize_text.go --text "hello"`)
 	}
 }

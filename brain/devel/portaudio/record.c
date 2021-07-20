@@ -83,7 +83,7 @@ int main(int argc, char **argv)
 
     // record sound data
     // XXX comment 48000
-    if (pa_record(input_device, max_chan, max_data, SAMPLE_RATE, data, 48000) < 0) {
+    if (pa_record(input_device, max_chan, max_data, SAMPLE_RATE, PA_FLOAT32, data, 48000) < 0) {
         printf("ERROR: pa_record failed\n");
         return 1;
     }

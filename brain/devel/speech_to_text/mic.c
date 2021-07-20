@@ -3,7 +3,7 @@
 
 #include <pa_utils.h>
 
-static int put_frame(const float *frame, void *cx);
+static int put_frame(const void *frame, void *cx);
 
 int main(int argc, char **argv)
 {
@@ -18,6 +18,7 @@ int main(int argc, char **argv)
     rc =  pa_record2(DEFAULT_INPUT_DEVICE, 
                      1,         // max_chan
                      16000,     // sample_rate
+                     PA_INT16,  // 16 bit signed data
                      put_frame, // callback
                      NULL,      // put_frame cx
                      0);        // discard_samples count
@@ -27,14 +28,16 @@ int main(int argc, char **argv)
     }
 }
 
-static int put_frame(const float *frame, void *cx)
+static int put_frame(const void *frame_arg, void *cx)
 {
     #define MAX 160
     static int cnt;
     static short buffer[MAX];
 
+    const short *frame = frame_arg;
+
     // collect 160 values, in 16 bit format, and write them to stdout
-    buffer[cnt++] = frame[0] * 32767;
+    buffer[cnt++] = frame[0];
     if (cnt == MAX) {
         if (write(1, buffer, sizeof(buffer)) < 0) {
             printf("ERROR: write failed\n");
