@@ -2,8 +2,10 @@
 -----------------------          TODO           -----------------------
 ----------------------- ----------------------- -----------------------
 
-lawn mower
-tides
+review and cleanup this file
+is my speaker mono
+run the s2t and t2s test pgms on the rpi
+run the s2t and t2s test pgms on linux
 
 continue tst3,  demo in tst3,  example, respond to "What time is it?"
 - add process_speech routine
