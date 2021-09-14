@@ -35,7 +35,6 @@ static void exit_hndlr(void)
 
 // -----------------  PLAY - DATA SUPPLIED IN CALLER SUPPLIED ARRAY  -------------
 
-
 typedef struct {
     int max_chan;
     int max_frames;

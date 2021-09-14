@@ -80,7 +80,8 @@ static int      detected_keyword = -1;
 static int recv_mic_data(const void *frame, void *cx);
 static void *livecaption_thread(void *cx);
 static void process_transcript(char *transcript);
-static void init_lib_syms(void);
+static void play_text(char *text_arg);;
+static void init_porcupine_lib(void);
 static void run_program(pid_t *prog_pid, int *fd_to_prog, int *fd_from_prog, char *prog, ...);
 static char *keyword_name(int idx);
 static uint64_t microsec_timer(void);
@@ -101,7 +102,7 @@ int main(int argc, char **argv)
     setlinebuf(stdout);
 
     // open the porcupine library and get function addresses
-    init_lib_syms();
+    init_porcupine_lib();
 
     // initialize the porcupine wake word detection engine, to monitor for
     // the keyword(s) contained in keyword_paths
@@ -152,6 +153,33 @@ int main(int argc, char **argv)
 
     // done
     return 0;
+}
+
+static void init_porcupine_lib(void)
+{
+    void *lib;
+
+    #define GET_LIB_SYM(symname) \
+        do { \
+            symname##_func = dlsym(lib, #symname); \
+            if (symname##_func == NULL) { \
+                printf("ERROR: dlsym %s, %s\n", #symname, dlerror()); \
+                exit(1); \
+            } \
+        } while (0)
+
+    lib = dlopen(LIB_PATH, RTLD_NOW);
+    if (lib == NULL) {
+        printf("ERROR: filed to open %s, %s\n", LIB_PATH, strerror(errno));
+        exit(1);
+    }
+
+    GET_LIB_SYM(pv_status_to_string);
+    GET_LIB_SYM(pv_sample_rate);
+    GET_LIB_SYM(pv_porcupine_init);
+    GET_LIB_SYM(pv_porcupine_delete);
+    GET_LIB_SYM(pv_porcupine_process);
+    GET_LIB_SYM(pv_porcupine_frame_length);
 }
 
 // -----------------  RECV MIC DATA  ---------------------------------
@@ -309,76 +337,68 @@ static void *livecaption_thread(void *cx)
 
 static void process_transcript(char *transcript)
 {
-    pid_t st_pid;
-    int fd_to_st, fd_from_st;
-    short data[1000000];
-    int len, fd, rc;
+    play_text(transcript);
+}
 
-    // remove newline char at the end of transcript
-    transcript[strcspn(transcript, "\n")] = 0;
+static void play_text(char *text_arg)
+{
+    int rc;
+    char cmd[10000];
+    char text[10000];
 
-    // run synthesize_text to convert transcript text to raw audio file
-    // xxx this could be a routine
-    printf("RUN_PROG synthesize_text, '%s'\n", transcript);
-    run_program(&st_pid, &fd_to_st, &fd_from_st, "./synthesize_text", "--text", transcript, NULL);
-    close(fd_to_st);
-    close(fd_from_st);
-    waitpid(st_pid, NULL, 0);
+    // xxx add extra 'the'
+
+    // remove newline char in text_arg
+    strcpy(text, text_arg);
+    text[strcspn(text,"\n")] = '\0';
+
+    // run synthesize_text to convert text to wav file;
+    printf("RUN_PROG synthesize_text, '%s'\n", text);
+    sprintf(cmd, "./synthesize_text --text \"%s\"", text);
+    rc = system(cmd);
+    if (rc < 0) {
+        printf("ERROR: system(synthesize_text)) failed, rc=%d, %s\n", rc, strerror(errno));
+        return;
+    }
     printf("RUN_PROG done\n");
 
-    // read the raw audio file, output.raw
-    // xxx this could be a routine
-    fd = open("output.raw", O_RDONLY);
-    if (fd < 0) {
-        printf("ERROR: open output.raw, %s\n", strerror(errno));
+    // use aplay to play the output from synthesize_text
+    rc = system("aplay -D sysdefault:CARD=Device output.raw");
+    if (rc < 0) {
+        printf("ERROR: system(aplay) failed, rc=%d, %s\n", rc, strerror(errno));
         return;
     }
-    len = read(fd, data, sizeof(data));
-    if (len <= 0) {
-        printf("ERROR: read, len=%d, %s\n", len, strerror(errno));
-        close(fd);
-        return;
-    }
-    close(fd);
-
-    // play the transcript
-    printf("PA_PLAY len %d\n", len);
-    rc = pa_play(OUTPUT_DEVICE, 1, len/2-1000, 24000, PA_INT16, data+1000);
-    printf("PA_PLAY done, rc=%d\n", rc);
+    printf("APLAY DONE\n");
 }
 
-// -----------------  INIT ACCESS TO PORCUPINE LIBRARY  ---------------
-// XXX reorg below
+// -----------------  MISC  ------------------------------------------
 
-static void init_lib_syms(void)
+static char *keyword_name(int idx)
 {
-    void *lib;
+    static char str[200];
+    char *name, *p;
 
-    #define GET_LIB_SYM(symname) \
-        do { \
-            symname##_func = dlsym(lib, #symname); \
-            if (symname##_func == NULL) { \
-                printf("ERROR: dlsym %s, %s\n", #symname, dlerror()); \
-                exit(1); \
-            } \
-        } while (0)
-
-    lib = dlopen(LIB_PATH, RTLD_NOW);
-    if (lib == NULL) {
-        printf("ERROR: filed to open %s, %s\n", LIB_PATH, strerror(errno));
-        exit(1);
+    if (idx == -1) {
+        return "????";
     }
 
-    GET_LIB_SYM(pv_status_to_string);
-    GET_LIB_SYM(pv_sample_rate);
-    GET_LIB_SYM(pv_porcupine_init);
-    GET_LIB_SYM(pv_porcupine_delete);
-    GET_LIB_SYM(pv_porcupine_process);
-    GET_LIB_SYM(pv_porcupine_frame_length);
+    strcpy(str, keyword_paths[idx]);
+    name = basename(str);
+    p = strchr(name, '_');
+    if (p) *p = '\0';
+
+    return name;
 }
 
-// -----------------  RUN PROGRAM USING FORK AND EXEC  ---------------
+static uint64_t microsec_timer(void)
+{
+    struct timespec ts;
 
+    clock_gettime(CLOCK_MONOTONIC,&ts);
+    return  ((uint64_t)ts.tv_sec * 1000000) + ((uint64_t)ts.tv_nsec / 1000);
+}
+
+// run program using fork and exec
 static void run_program(pid_t *prog_pid, int *fd_to_prog, int *fd_from_prog, char *prog, ...)
 {
     char *args[100];
@@ -442,31 +462,3 @@ static void run_program(pid_t *prog_pid, int *fd_to_prog, int *fd_from_prog, cha
         *prog_pid = pid;
     }
 }
-
-// -----------------  MISC  ------------------------------------------
-
-static char *keyword_name(int idx)
-{
-    static char str[200];
-    char *name, *p;
-
-    if (idx == -1) {
-        return "????";
-    }
-
-    strcpy(str, keyword_paths[idx]);
-    name = basename(str);
-    p = strchr(name, '_');
-    if (p) *p = '\0';
-
-    return name;
-}
-
-static uint64_t microsec_timer(void)
-{
-    struct timespec ts;
-
-    clock_gettime(CLOCK_MONOTONIC,&ts);
-    return  ((uint64_t)ts.tv_sec * 1000000) + ((uint64_t)ts.tv_nsec / 1000);
-}
-
