@@ -1,0 +1,142 @@
+convert prints to logging macros
+
+all of these need init routines, they shoudl exit themselves
+
+UTILS
+wwd          okay
+t2s          okay
+s2t
+doa
+leds         okay but will need a thread
+pa           okay
+misc         okay so far
+utils.h
+
+TODO
+- makefile  with the 2 go pgms
+- main.c
+- wwd.c
+- leds.c
+
+--------------------------
+
+recv_mic_data
+{
+    feed_data to doa
+
+    downsample to 1 channel at 16000
+
+    switch state
+    case waiting for wake word
+        ww_feed
+        if word detected then
+            state = receiving cmd audio
+            get doa
+            set leds to white + doa
+        endif
+
+    case receiving cmd audio
+        feed data 
+
+    case executing cmd
+        do nothing with mic data
+
+    case cmd complete
+        set leds to blue
+    }
+}
+        
+
+// ---- leds ----
+
+leds_set
+
+leds_thread
+
+// ---- wwd ----
+
+wwd_xxxxxxxxxxx
+
+// ---- s2t ----
+
+s2t_feed_data
+
+s2t_thread
+{
+    wait for start
+
+    while true
+        sends data to google
+        if transcript ready {
+            break
+        }
+    }
+  
+    process cmd
+
+    set completed
+}
+
+
+
+// ---- doa ----
+
+doa_feed_data
+
+doa_query
+
+
+
+// ---- t2s ----
+
+t2s_play
+
+// ---- cmd ---- 
+
+proc_cmd
+
+// ---- cmd_xxxx ----
+
+proc_cmd_date(arg1
+    arg: time, day, date
+
+    what time is it
+    what is the date
+    what day is it    .. etc
+
+    play the data
+
+// ---- database ----
+
+
+robot cmds
+- face me, or away from me
+- face north, south, ... 45 degrees magnetic|true
+- rotate|turn xxx degrees clockwise or counterclockwise
+- drive forward|backward 5 feet
+- drive circle
+- drive square
+- drive figure eight
+- status
+- body on OR off
+
+date time
+
+database
+
+lights on/off
+
+
+--- maybe later ---
+tv 
+- on/off
+- play youtube video xxx
+
+
+
+
+
+IDEAS
+- modulate led intensity to audio output
+
+- make my own wake word detector
