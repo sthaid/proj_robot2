@@ -64,9 +64,24 @@ void leds_show(int all_brightness);
 
 // -------- t2s.c --------
 
-static void t2s_play_text(char *text);
+void t2s_init(void);
+
+void t2s_play_text(char *text);
 
 // -------- wwd.c --------
 
+#define WW_PORCUPINE  0  // xxx others, and keyword vs wakeword
+
 void wwd_init(void);
-int wwd_feed(short *sd_arg, int max_sd_arg);
+
+int wwd_feed(short sound_val);
+
+// -------- doa.c --------
+
+void doa_init(void);
+
+void doa_feed(const float * frame);
+
+// -------- s2t.c --------
+
+void s2t_init(void);

@@ -1,9 +1,16 @@
 #include <common.h>
 
+static bool prog_terminating;
+
+static int recv_mic_data(const void *frame_arg, void *cx);
+
 // -----------------  MAIN  ------------------------------------------------------
 
 int main(int argc, char **argv)
 {
+    int rc;
+
+#if 0
     // open logfile in append mode
     fp_log = fopen("brain.log", "a");
     if (fp_log == NULL) {
@@ -11,22 +18,36 @@ int main(int argc, char **argv)
         exit(1);
     }
     setlinebuf(fp_log);
+#else
+    // use stdout for logfile
+    fp_log = stdout;
+    setlinebuf(fp_log);
+#endif
 
     // initialize
     INFO("INITIALIZING\n")
-#if 0
+    pa_init();
     wwd_init();
     t2s_init();
     s2t_init();
-    leds_init();
     doa_init();
-    pa_init();
-#endif
+    leds_init();
 
-    // runtime
+    // call portaudio util to start acquiring mic data;
+    // - recv_mic_data callback will be called repeatedly with the mic data;
+    // - pa_record2 blocks until recv_mic_data returns non-zero
     INFO("RUNNING\n");
-    while (true) {
-        pause();
+    rc =  pa_record2("seeed-4mic-voicecard",
+                     4,                   // max_chan
+                     48000,               // sample_rate
+                     PA_FLOAT32,          // 32 bit floating point data
+                     recv_mic_data,       // callback
+                     NULL,                // cx passed to recv_mic_data
+                     0);                  // discard_samples count
+    if (rc < 0) {
+        // xxx look at how pgm termination works
+        ERROR("pa_record2\n");
+        return 1;
     }
 
     // terminate
@@ -36,8 +57,77 @@ int main(int argc, char **argv)
 
 // -----------------  XXXXXXXXXXXX  ----------------------------------------------
 
+// called at sample rate 48000
+
 static int recv_mic_data(const void *frame_arg, void *cx)
 {
+    const float *frame = frame_arg;
+    static int discard_cnt;
+    short sound_val;
+
+    #define STATE_WAITING_FOR_WAKE_WORD  0
+    #define STATE_RECEIVING_CMD          1
+    #define STATE_PROCESSING_CMD         2
+    #define STATE_DONE_WITH_CMD          3
+
+    static int state = STATE_WAITING_FOR_WAKE_WORD;
+    static bool first_call = true;
+
+    // check if this program is terminating
+    if (prog_terminating) {
+        return -1;
+    }
+
+    if (first_call) {
+        first_call = false;
+        leds_set_all(LED_BLUE, 50);
+        leds_show(31);
+    }
+    // xxx at exit leds should clear
+
+
+    // supply the frame for doa analysis, frame is 4 float values
+    doa_feed(frame);
+
+    // discard 2 out of 3 frames, so the sample rate for the code following is 16000
+    if (++discard_cnt < 3) {
+        return 0;
+    }
+    discard_cnt = 0;
+
+
+    sound_val = frame[0] * 32767;
+    //INFO("frame = %f  -  %d\n", frame[0], sound_val);
+
+    // xxx
+    switch (state) {
+    case STATE_WAITING_FOR_WAKE_WORD: {
+        int ww = wwd_feed(sound_val);
+        if (ww == WW_PORCUPINE) {
+            state = STATE_RECEIVING_CMD;
+            // get doa
+            leds_set_all(LED_WHITE,100);  // xxx tbd, how long does this take, and incorporate doa
+            leds_show(31);
+        }
+        break; }
+    case STATE_RECEIVING_CMD: {
+        static int xxx;
+        if (xxx++ > 16000) {
+            xxx = 0;
+            state = STATE_DONE_WITH_CMD;
+        }
+        break; }
+    case STATE_PROCESSING_CMD: {
+        break; }
+    case STATE_DONE_WITH_CMD: {
+        leds_set_all(LED_BLUE, 50);
+        leds_show(31);
+        state = STATE_WAITING_FOR_WAKE_WORD;
+        break; }
+    }
+        
+    // return status to continue
+    return 0;
 }
 
 #if 0

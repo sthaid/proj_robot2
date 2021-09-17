@@ -14,10 +14,11 @@
 #define MODEL_PATH    "./devel/repos/Porcupine/lib/common/porcupine_params.pv"
 #define INPUT_DEVICE  "seeed-4mic-voicecard"
 
+// xxx check this list
 static const char *keyword_paths[] = {
-    "../repos/Porcupine/resources/keyword_files/raspberry-pi/porcupine_raspberry-pi.ppn",
-    "../repos/Porcupine/resources/keyword_files/raspberry-pi/bumblebee_raspberry-pi.ppn",
-    "../repos/Porcupine/resources/keyword_files/raspberry-pi/grasshopper_raspberry-pi.ppn",
+    "./devel/repos/Porcupine/resources/keyword_files/raspberry-pi/porcupine_raspberry-pi.ppn",
+    "./devel/repos/Porcupine/resources/keyword_files/raspberry-pi/bumblebee_raspberry-pi.ppn",
+    "./devel/repos/Porcupine/resources/keyword_files/raspberry-pi/grasshopper_raspberry-pi.ppn",
             };
 static const float sensitivities[] = {
     0.8,
@@ -46,7 +47,7 @@ static int (*pv_porcupine_frame_length_func)(void);
 
 static void porcupine_lib_init(void);
 
-// ------------------------------------------------------------
+// -----------------  WAKE WORD DETECTOR INITIALIZE  --------------------
 
 void wwd_init(void)
 {
@@ -61,21 +62,18 @@ void wwd_init(void)
     // the keyword(s) contained in keyword_paths
     pvrc = pv_porcupine_init_func(MODEL_PATH, MAX_KEYWORD_PATHS, keyword_paths, sensitivities, &porcupine);
     if (pvrc != PV_STATUS_SUCCESS) {
-        printf("ERROR: pv_porcupine_init, %s\n", pv_status_to_string_func(pvrc));
-        exit(1);  
+        FATAL("pv_porcupine_init, %s\n", pv_status_to_string_func(pvrc));
     }
 
     // verify sample_rate and frame_length exepected by porcupine agree
     // with defines used by this program
     sample_rate = pv_sample_rate_func();
     if (sample_rate != SAMPLE_RATE) {
-        printf("ERROR: sample_rate=%d is not expected %d\n", sample_rate, SAMPLE_RATE);
-        exit(1);  
+        FATAL("sample_rate=%d is not expected %d\n", sample_rate, SAMPLE_RATE);
     }
     frame_length = pv_porcupine_frame_length_func();
     if (frame_length != FRAME_LENGTH) {
-        printf("ERROR: frame_length=%d is not expected %d\n", frame_length, FRAME_LENGTH);
-        exit(1);  
+        FATAL("frame_length=%d is not expected %d\n", frame_length, FRAME_LENGTH);
     }
 }
 
@@ -87,15 +85,13 @@ static void porcupine_lib_init(void)
         do { \
             symname##_func = dlsym(lib, #symname); \
             if (symname##_func == NULL) { \
-                printf("ERROR: dlsym %s, %s\n", #symname, dlerror()); \
-                exit(1); \
+                FATAL("dlsym %s, %s\n", #symname, dlerror()); \
             } \
         } while (0)
 
     lib = dlopen(LIB_PATH, RTLD_NOW);
     if (lib == NULL) {
-        printf("ERROR: filed to open %s, %s\n", LIB_PATH, strerror(errno));
-        exit(1);
+        FATAL("filed to open %s, %s\n", LIB_PATH, strerror(errno));
     }
 
     GET_LIB_SYM(pv_status_to_string);
@@ -106,32 +102,32 @@ static void porcupine_lib_init(void)
     GET_LIB_SYM(pv_porcupine_frame_length);
 }
 
-// ------------------------------------------------------------
+// -----------------  FEED DATA TO WWD  ---------------------------------
 
-int wwd_feed(short *sd_arg, int max_sd_arg)
+// returns -1:      no wake word detected
+//         keyword: which wake word was detected
+int wwd_feed(short sound_val)
 {
-    pv_status_t pvrc;
-    int         i, keyword;
+    pv_status_t  pvrc;
+    int          keyword;
 
     static short sd[FRAME_LENGTH];
     static int   max_sd;
 
-    for (i = 0; i < max_sd_arg; i++) {
-        sd[max_sd++] = sd_arg[i];
-        if (max_sd == FRAME_LENGTH) {
-            max_sd = 0;
-
-            pvrc = pv_porcupine_process_func(porcupine, sd, &keyword);
-            if (pvrc != PV_STATUS_SUCCESS) {
-                printf("ERROR: pv_porcupine_process, %s\n", pv_status_to_string_func(pvrc));
-                exit(1);
-            }
-
-            if (keyword != -1) {
-                return keyword;
-            }
-        }
+    // xxx name sd and max_sd
+    sd[max_sd++] = sound_val;
+    if (max_sd < FRAME_LENGTH) {
+        return -1;
     }
 
-    return -1;
+    max_sd = 0;
+
+    //INFO("feed %d\n", sound_val);
+    pvrc = pv_porcupine_process_func(porcupine, sd, &keyword);
+    if (pvrc != PV_STATUS_SUCCESS) {
+        FATAL("pv_porcupine_process, %s\n", pv_status_to_string_func(pvrc));
+    }
+    if (keyword != -1) INFO("XXX GOT KEYWORD %d\n", keyword);
+
+    return keyword;
 }

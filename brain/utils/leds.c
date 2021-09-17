@@ -32,22 +32,20 @@ static struct {
 
 static int tx_buff_size;
 
-// ---------------------------------------------------------------------------------------
+// -----------------  LEDS_INIT  ---------------------------------------------------------
 
 void leds_init(void)
 {
     // open spi device
     fd = open("/dev/spidev0.1", O_RDWR);
     if (fd < 0) {
-        printf("ERROR: open %s failed, %s\n", SPIDEV, strerror(errno));
-        exit(1);   
+        FATAL("open %s failed, %s\n", SPIDEV, strerror(errno));
     }
 
     // the default speed does not work reliably, so reduce to 250 khz
     int max_spd_hz = 25000000;
     if (ioctl(fd, SPI_IOC_WR_MAX_SPEED_HZ, &max_spd_hz) < 0) {
-        printf("ERROR: ioctl SPI_IOC_WR_MAX_SPEED_HZ failed, %s\n", strerror(errno));
-        exit(1);   
+        FATAL("ioctl SPI_IOC_WR_MAX_SPEED_HZ failed, %s\n", strerror(errno));
     }
 
     // allocate tx buff, including space for:
@@ -64,7 +62,7 @@ void leds_init(void)
     leds_show(0);
 }
 
-// - - - - - - - - - - 
+// -----------------  XXX  ---------------------------------------------------------------
 
 void leds_set(int num, unsigned int rgb, int led_brightness)
 {
@@ -72,12 +70,12 @@ void leds_set(int num, unsigned int rgb, int led_brightness)
     double b;
 
     if (num < 0 || num >= MAX_LED) {
-        printf("ERROR: invalid arg num=%d\n", num);
+        ERROR("invalid arg num=%d\n", num);
         return;
     }
 
     if (led_brightness < 0 || led_brightness > 100) {
-        printf("ERROR: invalid arg led_brightnesss=%d\n", led_brightness);
+        ERROR("invalid arg led_brightnesss=%d\n", led_brightness);
         return;
     }
 
@@ -88,7 +86,7 @@ void leds_set(int num, unsigned int rgb, int led_brightness)
     } else {
         b = 0;
     }
-    //printf("num=%d  led_brightness=%d  b=%0.3f\n", num, led_brightness, b);
+    //INFO("num=%d  led_brightness=%d  b=%0.3f\n", num, led_brightness, b);
 
     x->red   = nearbyint(((rgb >>  0) & 0xff) * b);
     x->green = nearbyint(((rgb >>  8) & 0xff) * b);
@@ -123,7 +121,7 @@ void leds_rotate(int mode)
         tx->led[0] = x;
         break;
     default:
-        printf("ERROR: invalid mode %d\n", mode);
+        ERROR("invalid mode %d\n", mode);
         break;
     }
 }
@@ -133,7 +131,7 @@ void leds_show(int all_brightness)
     int rc;
 
     if (all_brightness < 0 || all_brightness > 31) {
-        printf("ERROR: invalid arg all_brightnesss=%d\n", all_brightness);
+        ERROR("invalid arg all_brightnesss=%d\n", all_brightness);
         return;
     }
 
@@ -144,7 +142,7 @@ void leds_show(int all_brightness)
 
     rc = write(fd, tx, tx_buff_size);
     if (rc != tx_buff_size) {
-        printf("ERROR: leds_show_leds write rc=%d exp=%d, %s\n", rc, tx_buff_size, strerror(errno));
+        ERROR("leds_show_leds write rc=%d exp=%d, %s\n", rc, tx_buff_size, strerror(errno));
         return;
     }
 }

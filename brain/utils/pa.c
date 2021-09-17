@@ -17,8 +17,12 @@ static void exit_hndlr(void);
 
 void pa_init(void)
 {
-    Pa_Initialize();
-    // xxx check for error and fatal
+    PaError parc;
+
+    parc = Pa_Initialize();
+    if (parc != paNoError) {
+        FATAL("Pa_Initialize failed, %s\n", Pa_GetErrorText(parc));
+    }
 
     atexit(exit_hndlr);
 }
@@ -45,7 +49,7 @@ int pa_play(char *output_device, int max_chan, int max_data, int sample_rate, in
     play_cx_t cx;
 
     if ((max_data % max_chan) != 0) {
-        printf("ERROR: max_data=%d must be a multiple of max_chan=%d\n", max_data, max_chan);
+        ERROR("max_data=%d must be a multiple of max_chan=%d\n", max_data, max_chan);
         return -1;
     }
 
@@ -56,7 +60,7 @@ int pa_play(char *output_device, int max_chan, int max_data, int sample_rate, in
     cx.data                 = data;
 
     if (cx.sizeof_sample_format == -1) {
-        printf("ERROR: invalid sample_format 0x%x\n", sample_format);
+        ERROR("invalid sample_format 0x%x\n", sample_format);
         return -1;
     }
 
@@ -119,14 +123,14 @@ int pa_play2(char *output_device, int max_chan, int sample_rate, int sample_form
 
     // check sizeof_sample_format for error
     if (ud.sizeof_sample_format == -1) {
-        printf("ERROR: invalid sample_format 0x%x\n", sample_format);
+        ERROR("invalid sample_format 0x%x\n", sample_format);
         goto error;
     }
 
     // get the output device idx
     devidx = pa_find_device(output_device);
     if (devidx == paNoDevice) {
-        printf("ERROR: could not find %s\n", output_device);
+        ERROR("could not find %s\n", output_device);
         goto error;
     }
     //pa_print_device_info(devidx);
@@ -147,21 +151,21 @@ int pa_play2(char *output_device, int max_chan, int sample_rate, int sample_form
                        play_stream_cb2,
                        &ud);   // user_data
     if (rc != paNoError) {
-        printf("ERROR: Pa_OpenStream rc=%d, %s\n", rc, Pa_GetErrorText(rc));
+        ERROR("Pa_OpenStream rc=%d, %s\n", rc, Pa_GetErrorText(rc));
         goto error;
     }
 
     // register callback for when the the audio output compltes
     rc = Pa_SetStreamFinishedCallback(stream, play_stream_finished_cb2);
     if (rc != paNoError) {
-        printf("ERROR: Pa_SetStreamFinishedCallback rc=%d, %s\n", rc, Pa_GetErrorText(rc));
+        ERROR("Pa_SetStreamFinishedCallback rc=%d, %s\n", rc, Pa_GetErrorText(rc));
         goto error;
     }
 
     // start the audio output
     rc = Pa_StartStream(stream);
     if (rc != paNoError) {
-        printf("ERROR: Pa_StartStream rc=%d, %s\n", rc, Pa_GetErrorText(rc));
+        ERROR("Pa_StartStream rc=%d, %s\n", rc, Pa_GetErrorText(rc));
         goto error;
     }
 
@@ -225,7 +229,7 @@ int pa_record(char *input_device, int max_chan, int max_data, int sample_rate, i
     record_cx_t cx;
 
     if ((max_data % max_chan) != 0) {
-        printf("ERROR: max_data=%d must be a multiple of max_chan=%d\n", max_data, max_chan);
+        ERROR("max_data=%d must be a multiple of max_chan=%d\n", max_data, max_chan);
         return -1;
     }
 
@@ -236,7 +240,7 @@ int pa_record(char *input_device, int max_chan, int max_data, int sample_rate, i
     cx.data                 = data;
 
     if (cx.sizeof_sample_format == -1) {
-        printf("ERROR: invalid sample_format 0x%x\n", sample_format);
+        ERROR("invalid sample_format 0x%x\n", sample_format);
         return -1;
     }
 
@@ -301,14 +305,14 @@ int pa_record2(char *input_device, int max_chan, int sample_rate, int sample_for
 
     // check sizeof_sample_format for error
     if (ud.sizeof_sample_format == -1) {
-        printf("ERROR: invalid sample_format 0x%x\n", sample_format);
+        ERROR("invalid sample_format 0x%x\n", sample_format);
         goto error;
     }
 
     // get the input device idx
     devidx = pa_find_device(input_device);
     if (devidx == paNoDevice) {
-        printf("ERROR: could not find %s\n", input_device);
+        ERROR("could not find %s\n", input_device);
         goto error;
     }
     //pa_print_device_info(devidx);
@@ -329,21 +333,21 @@ int pa_record2(char *input_device, int max_chan, int sample_rate, int sample_for
                        record_stream_cb2,
                        &ud);   // user_data
     if (rc != paNoError) {
-        printf("ERROR: Pa_OpenStream rc=%d, %s\n", rc, Pa_GetErrorText(rc));
+        ERROR("Pa_OpenStream rc=%d, %s\n", rc, Pa_GetErrorText(rc));
         goto error;
     }
 
     // register callback for when the the audio input completes
     rc = Pa_SetStreamFinishedCallback(stream, record_stream_finished_cb2);
     if (rc != paNoError) {
-        printf("ERROR: Pa_SetStreamFinishedCallback rc=%d, %s\n", rc, Pa_GetErrorText(rc));
+        ERROR("Pa_SetStreamFinishedCallback rc=%d, %s\n", rc, Pa_GetErrorText(rc));
         goto error;
     }
 
     // start the audio input
     rc = Pa_StartStream(stream);
     if (rc != paNoError) {
-        printf("ERROR: Pa_StartStream rc=%d, %s\n", rc, Pa_GetErrorText(rc));
+        ERROR("Pa_StartStream rc=%d, %s\n", rc, Pa_GetErrorText(rc));
         goto error;
     }
 
@@ -436,17 +440,17 @@ void pa_print_device_info(PaDeviceIndex idx)
             hai->defaultInputDevice == idx ? " DEFAULT_INPUT" : "",
             hai->defaultOutputDevice == idx ? " DEFAULT_OUTPUT" : "");
 
-    printf("PaDeviceIndex = %d\n", idx);
-    printf("  name                       = %s\n",    di->name);
-    printf("  hostApi                    = %s\n",    host_api_info_str);
-    printf("  maxInputChannels           = %d\n",    di->maxInputChannels);
-    printf("  maxOutputChannels          = %d\n",    di->maxOutputChannels);
-    printf("  defaultLowInputLatency     = %0.3f\n", di->defaultLowInputLatency);
-    printf("  defaultLowOutputLatency    = %0.3f\n", di->defaultLowOutputLatency);
-    printf("  defaultHighInputLatency    = %0.3f\n", di->defaultHighInputLatency);
-    printf("  defaultHighOutputLatency   = %0.3f\n", di->defaultHighOutputLatency);
-    printf("  defaultSampleRate          = %0.0f\n", di->defaultSampleRate);  // XXX get all rates
-    printf("\n");
+    INFO("PaDeviceIndex = %d\n", idx);
+    INFO("  name                       = %s\n",    di->name);
+    INFO("  hostApi                    = %s\n",    host_api_info_str);
+    INFO("  maxInputChannels           = %d\n",    di->maxInputChannels);
+    INFO("  maxOutputChannels          = %d\n",    di->maxOutputChannels);
+    INFO("  defaultLowInputLatency     = %0.3f\n", di->defaultLowInputLatency);
+    INFO("  defaultLowOutputLatency    = %0.3f\n", di->defaultLowOutputLatency);
+    INFO("  defaultHighInputLatency    = %0.3f\n", di->defaultHighInputLatency);
+    INFO("  defaultHighOutputLatency   = %0.3f\n", di->defaultHighOutputLatency);
+    INFO("  defaultSampleRate          = %0.0f\n", di->defaultSampleRate);  // XXX get all rates
+    INFO("\n");
 }
 
 void pa_print_device_info_all(void)
@@ -456,16 +460,16 @@ void pa_print_device_info_all(void)
     const PaHostApiInfo *hai = Pa_GetHostApiInfo(0);
 
     if (dev_cnt != hai->deviceCount) {
-        printf("ERROR: BUG dev_cnt=%d hai->deviceCount=%d\n", dev_cnt, hai->deviceCount);
+        ERROR("BUG dev_cnt=%d hai->deviceCount=%d\n", dev_cnt, hai->deviceCount);
         return; 
     }
 
-    printf("hostApi = %s  device_count = %d  default_input = %d  default_output = %d\n",
+    INFO("hostApi = %s  device_count = %d  default_input = %d  default_output = %d\n",
            hai->name,
            hai->deviceCount,
            hai->defaultInputDevice,
            hai->defaultOutputDevice);
-    printf("\n");
+    INFO("\n");
 
     for (i = 0; i < dev_cnt; i++) {
         pa_print_device_info(i);
