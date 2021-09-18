@@ -9,7 +9,10 @@
 #include <time.h>
 #include <math.h>
 #include <fcntl.h>
+#include <pthread.h>
+#include <signal.h>
 #include <sys/types.h>
+#include <sys/wait.h>
 #include <sys/stat.h>
 #include <sys/ioctl.h>
 

@@ -67,3 +67,68 @@ unsigned int wavelen_to_rgb(double wavelength)
            ((int)nearbyint(G*255) <<  8) |
            ((int)nearbyint(B*255) << 16);
 }
+
+// run program using fork and exec
+void run_program(pid_t *prog_pid, int *fd_to_prog, int *fd_from_prog, char *prog, ...)
+{
+    char *args[100];
+    int argc=0;
+    int pipe_to_child[2], pipe_from_child[2];
+    pid_t pid;
+    va_list ap;
+    sigset_t set;
+
+    // block SIGPIPE
+    sigemptyset(&set);
+    sigaddset(&set,SIGPIPE);
+    sigprocmask(SIG_BLOCK, &set, NULL);
+
+    // construct args array
+    args[argc++] = prog;
+    va_start(ap, prog);
+    while (true) {
+        args[argc] = va_arg(ap, char*);
+        if (args[argc] == NULL) break;
+        argc++;
+    }
+    va_end(ap);
+
+    // create pipes for prog input and output
+    // - pipefd[0] is read end, pipefd[1] is write end
+    pipe(pipe_to_child);
+    pipe(pipe_from_child);
+
+    // fork
+    pid = fork();
+    if (pid == -1) {
+        printf("ERROR: fork failed, %s\n", strerror(errno));
+        exit(1);
+    }
+
+    // if pid == 0, child is running, else parent
+    if (pid == 0) {
+        // child ..
+        // close unused ends of the pipes
+        close(pipe_to_child[1]);
+        close(pipe_from_child[0]);
+
+        // attach the 2 pipes to stdin and stdout for the child
+        dup2(pipe_to_child[0], 0);
+        dup2(pipe_from_child[1], 1);
+
+        // execute the program
+        execvp(prog, args);
+        printf("ERROR: execvp %s, %s\n", prog, strerror(errno));
+        exit(1);        
+    } else {
+        // parent ... 
+        // close unused ends of the pipes
+        close(pipe_to_child[0]);
+        close(pipe_from_child[1]);
+
+        // return values to caller
+        *fd_to_prog = pipe_to_child[1];;
+        *fd_from_prog = pipe_from_child[0];
+        *prog_pid = pid;
+    }
+}

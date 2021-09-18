@@ -19,7 +19,7 @@ void t2s_play_text(char *text_arg)
 
     // run synthesize_text to convert text to wav file;
     INFO("RUN_PROG synthesize_text, '%s'\n", text);
-    sprintf(cmd, "./synthesize_text --text \"%s\"", text);
+    sprintf(cmd, "./go/synthesize_text --text \"%s\"", text);
     rc = system(cmd);
     if (rc < 0) {
         ERROR("system(synthesize_text)) failed, rc=%d, %s\n", rc, strerror(errno));

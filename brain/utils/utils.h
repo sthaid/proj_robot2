@@ -6,6 +6,7 @@
 uint64_t microsec_timer(void);
 char *time2str(time_t t, char *s);
 unsigned int wavelen_to_rgb(double wavelength);
+void run_program(pid_t *prog_pid, int *fd_to_prog, int *fd_from_prog, char *prog, ...);
 
 // -------- pa.c --------
 
@@ -85,3 +86,4 @@ void doa_feed(const float * frame);
 // -------- s2t.c --------
 
 void s2t_init(void);
+char * s2t_feed(short sound_val);

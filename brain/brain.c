@@ -1,7 +1,10 @@
 #include <common.h>
 
+// variables
 static bool prog_terminating;
 
+// prototypes
+static void sig_hndlr(int sig);
 static int recv_mic_data(const void *frame_arg, void *cx);
 
 // -----------------  MAIN  ------------------------------------------------------
@@ -24,8 +27,15 @@ int main(int argc, char **argv)
     setlinebuf(fp_log);
 #endif
 
-    // initialize
     INFO("INITIALIZING\n")
+
+    // register for SIGINT and SIGTERM
+    static struct sigaction act;
+    act.sa_handler = sig_hndlr;
+    sigaction(SIGINT, &act, NULL);
+    sigaction(SIGTERM, &act, NULL);
+
+    // initialize utils
     pa_init();
     wwd_init();
     t2s_init();
@@ -45,14 +55,21 @@ int main(int argc, char **argv)
                      NULL,                // cx passed to recv_mic_data
                      0);                  // discard_samples count
     if (rc < 0) {
-        // xxx look at how pgm termination works
         ERROR("pa_record2\n");
-        return 1;
     }
+
+    // turn off leds
+    leds_set_all_off();
+    leds_show(0);
 
     // terminate
     INFO("TERMINATING\n")
     return 0;
+}
+
+static void sig_hndlr(int sig)
+{
+    prog_terminating = true;
 }
 
 // -----------------  XXXXXXXXXXXX  ----------------------------------------------
@@ -94,14 +111,12 @@ static int recv_mic_data(const void *frame_arg, void *cx)
         return 0;
     }
     discard_cnt = 0;
-
-
     sound_val = frame[0] * 32767;
     //INFO("frame = %f  -  %d\n", frame[0], sound_val);
 
     // xxx
     switch (state) {
-    case STATE_WAITING_FOR_WAKE_WORD: {
+    case STATE_WAITING_FOR_WAKE_WORD: {  // XXX always do this
         int ww = wwd_feed(sound_val);
         if (ww == WW_PORCUPINE) {
             state = STATE_RECEIVING_CMD;
@@ -111,13 +126,31 @@ static int recv_mic_data(const void *frame_arg, void *cx)
         }
         break; }
     case STATE_RECEIVING_CMD: {
-        static int xxx;
-        if (xxx++ > 16000) {
-            xxx = 0;
-            state = STATE_DONE_WITH_CMD;
+        char *transcript;
+
+        transcript = s2t_feed(sound_val);
+        if (transcript) {
+            //proc_cmd(transcript);  // xxx need free
+            INFO("transcript = '%s'\n", transcript);
+            if (strcmp(transcript, "what time is it") == 0) {
+                t2s_play_text("the time is 11:30");
+            } else {
+                t2s_play_text("sorry, I can't do that");
+            }
+            free(transcript);
+            state = STATE_PROCESSING_CMD;
         }
         break; }
     case STATE_PROCESSING_CMD: {
+#if 0
+        static int xxx;
+        if (xxx++ > 16000) {
+            xxx = 0;
+            state = STATE_DONE_WITH_CMD;  // xxx may not need this state
+        }
+#else
+        state = STATE_DONE_WITH_CMD;  // xxx may not need this state
+#endif
         break; }
     case STATE_DONE_WITH_CMD: {
         leds_set_all(LED_BLUE, 50);
