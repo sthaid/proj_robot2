@@ -17,11 +17,9 @@
 // xxx check this list
 static const char *keyword_paths[] = {
     "./devel/repos/Porcupine/resources/keyword_files/raspberry-pi/porcupine_raspberry-pi.ppn",
-    "./devel/repos/Porcupine/resources/keyword_files/raspberry-pi/bumblebee_raspberry-pi.ppn",
-    "./devel/repos/Porcupine/resources/keyword_files/raspberry-pi/grasshopper_raspberry-pi.ppn",
+    "./devel/repos/Porcupine/resources/keyword_files/raspberry-pi/terminator_raspberry-pi.ppn",
             };
 static const float sensitivities[] = {
-    0.8,
     0.8,
     0.8,
             };

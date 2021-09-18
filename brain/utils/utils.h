@@ -71,7 +71,8 @@ void t2s_play_text(char *text);
 
 // -------- wwd.c --------
 
-#define WW_PORCUPINE  0  // xxx others, and keyword vs wakeword
+#define WW_PORCUPINE  0
+#define WW_TERMINATOR 1
 
 void wwd_init(void);
 
