@@ -1,0 +1,22 @@
+DEF COLOR  red|orange|yellow|green|blue|purple
+DEF WORD   (*)
+DEF NUMBER (-99999999:+99999999)
+
+HNDLR rotate 360 clockwise
+DEF AMOUNT    NUMBER-degrees|half-way-around|all-of-the-way-around|all-the-way-around
+DEF DIRECTION clockwise|counterclockwise
+[robot] rotate|turn [1=AMOUNT] [2=DIRECTION]
+END
+
+HNDLR db_set
+DEF AGE (1-99)
+my 1=favorite-color is 2=COLOR
+my 1=age            is 2=AGE
+my 1=name           is 2=WORD
+END
+
+
+
+tbl
+
+proc   default-args   phrase
