@@ -25,6 +25,7 @@ void s2t_init(void)
     atexit(s2t_exit);
 }
 
+// XXX add exit routines for all and don't use atexit
 static void s2t_exit(void)
 {
     // set terminating flag, so that the s2t_thread will terminate

@@ -7,11 +7,6 @@ static bool prog_terminating;
 static void sig_hndlr(int sig);
 static int recv_mic_data(const void *frame_arg, void *cx);
 
-static void proc_cmd_init(void);
-static void proc_cmd_execute(char *transcript);
-static bool proc_cmd_in_progress(void);
-static bool proc_cmd_cancel(void);
-
 // -----------------  MAIN  ------------------------------------------------------
 
 int main(int argc, char **argv)
@@ -71,6 +66,10 @@ int main(int argc, char **argv)
     // turn off leds
     leds_set_all_off();
     leds_show(0);
+
+    // xxx
+    proc_cmd_exit();
+    // xxx others too
 
     // terminate
     //t2s_play_text("program terminating");
@@ -158,84 +157,3 @@ static int recv_mic_data(const void *frame_arg, void *cx)
     // return status to continue
     return 0;
 }
-
-// ============================================================================
-// ============================================================================
-// ============================================================================
-
-// variables
-static pthread_t proc_cmd_thread_tid;
-static char *cmd;
-static bool cancel;
-
-// prototypes
-static void *proc_cmd_thread(void *cx);
-static void proc_cmd_exit(void);
-
-// -------------------------------------------
-
-static void proc_cmd_init(void)
-{
-    pthread_create(&proc_cmd_thread_tid, NULL, proc_cmd_thread, NULL);
-
-    atexit(proc_cmd_exit);
-}
-
-static void proc_cmd_exit(void)
-{
-    pthread_join(proc_cmd_thread_tid, NULL);
-}
-
-static void proc_cmd_execute(char *transcript)
-{
-    cmd = transcript;
-}
-
-static bool proc_cmd_in_progress(void)
-{
-    return cmd != NULL;
-}
-
-static bool proc_cmd_cancel(void)
-{
-    cancel = true;
-}
-
-// -------------------------------------------
-
-static void *proc_cmd_thread(void *cx)
-{
-    while (true) {
-        // wait for cmd
-        while (cmd == NULL) {
-            if (prog_terminating) return NULL;
-            usleep(10000);
-        }
-
-        // process the cmd
-        INFO("cmd = '%s'\n", cmd);
-        if (strcmp(cmd, "what time is it") == 0) {
-            t2s_play_text("the time is 11:30");
-        } else if (strcmp(cmd, "sleep") == 0) {
-            t2s_play_text("sleeping for 10 seconds");
-            for (int i = 0; i < 10; i++) {
-                sleep(1);
-                if (cancel) {
-                    t2s_play_text("cancelling");
-                    break;
-                }
-            }
-        } else if (strcmp(cmd, "exit") == 0) {
-            prog_terminating = true;
-        } else {
-            t2s_play_text("sorry, I can't do that");
-        }
-
-        // free the cmd
-        free(cmd);
-        cmd = NULL;
-
-        cancel = false;
-    }
-}
-

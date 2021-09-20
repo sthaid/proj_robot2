@@ -11,6 +11,7 @@
 #include <fcntl.h>
 #include <pthread.h>
 #include <signal.h>
+#include <assert.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <sys/stat.h>
@@ -50,8 +51,14 @@ void leds_init(void);
 void doa_init(void);
 void pa_init(void);
 
-uint64_t microsec_timer(void);
-char *time2str(time_t t, char *s);
-// xxx run_program
+
+void proc_cmd_init(void);
+void proc_cmd_exit(void);
+
+void proc_cmd_execute(char *transcript);
+bool proc_cmd_in_progress(void);
+bool proc_cmd_cancel(void);
 
 
+typedef int (*proc_cmd_hndlr_t)(int argc, char **argv);
+proc_cmd_hndlr_t proc_cmd_lookup_hndlr(char *name);

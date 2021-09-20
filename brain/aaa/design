@@ -1,22 +1,12 @@
-convert prints to logging macros
+sep proccmd files
+work on proccmd    rotate|turn
 
-all of these need init routines, they shoudl exit themselves
+-------------
 
-UTILS
-wwd          okay
-t2s          okay
-s2t
-doa
-leds         okay but will need a thread
-pa           okay
-misc         okay so far
-utils.h
+use sigint to exit
+utils:  doa and st2
 
-TODO
-- makefile  with the 2 go pgms
-- main.c
-- wwd.c
-- leds.c
+submake for go dir
 
 --------------------------
 

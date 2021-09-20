@@ -5,7 +5,11 @@
 # - submake for go
 # - review the -I list
 
-brain: brain.c utils/doa.c utils/leds.c utils/misc.c utils/pa.c utils/s2t.c utils/t2s.c utils/wwd.c
+SOURCES = brain.c \
+          proc_cmd.c proc_cmd_hndlrs.c \
+          utils/doa.c utils/leds.c utils/misc.c utils/pa.c utils/s2t.c utils/t2s.c utils/wwd.c
+
+brain: $(SOURCES)
 	gcc -g  -O2 -I. -Iutils -Idevel/repos/Porcupine/include $^ \
             -lpthread -lportaudio -lm -ldl \
             -o $@
