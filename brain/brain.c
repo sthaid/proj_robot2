@@ -133,6 +133,7 @@ static int recv_mic_data(const void *frame_arg, void *cx)
         break; }
     case STATE_RECEIVING_CMD: {
         transcript = s2t_feed(sound_val);
+        // xxx TIMEDOUT
         if (transcript) {
             proc_cmd_execute(transcript);
             state = STATE_PROCESSING_CMD;

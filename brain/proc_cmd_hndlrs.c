@@ -6,8 +6,8 @@
 
 typedef struct {
     char *name;
-    proc_cmd_hndlr_t proc;
-} hndlr_t;
+    hndlr_t proc;
+} hndlr_lookup_t;
 
 //
 // variables
@@ -17,19 +17,19 @@ typedef struct {
 // prototypes
 //
 
-static int hndlr_rotate(int argc, char **argv);
+static int hndlr_rotate(args_t args);
 
 //
 // handlers lookup table
 //
 
-static hndlr_t tbl[] = {
+static hndlr_lookup_t tbl[] = {
     { "rotate", hndlr_rotate }
                 };
 
 // ----------------------------------------------------------------------
 
-proc_cmd_hndlr_t proc_cmd_lookup_hndlr(char *name)
+hndlr_t proc_cmd_lookup_hndlr(char *name)
 {
     #define MAX_TBL  (sizeof(tbl)/sizeof(tbl[0]))
     int i;
@@ -45,11 +45,13 @@ proc_cmd_hndlr_t proc_cmd_lookup_hndlr(char *name)
 
 // ----------------------------------------------------------------------
 
-static int hndlr_rotate(int argc, char **argv)
+static int hndlr_rotate(args_t args)
 {
-    assert(argc == 2);
+    INFO("rotate: degrees=%s  dir=%s\n", args[0], args[1]);
 
-    INFO("rotate: degrees=%s  dir=%s\n", argv[0], argv[1]);
+    for (int i=0; i < 10; i++) {
+        INFO("args[%d] = %s\n", i, args[i]);
+    }
 
     return 0;
 }

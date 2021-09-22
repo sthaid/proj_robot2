@@ -1,22 +1,34 @@
-DEF COLOR  red|orange|yellow|green|blue|purple
-DEF WORD   (*)
-DEF NUMBER (-99999999:+99999999)
+predefined   NUMBER  WORD
+
+DEF COLOR  |red orange yellow green blue purple|
 
 HNDLR rotate 360 clockwise
-DEF AMOUNT    NUMBER-degrees|half-way-around|all-of-the-way-around|all-the-way-around
-DEF DIRECTION clockwise|counterclockwise
-[robot] rotate|turn [1=AMOUNT] [2=DIRECTION]
+DEF AMOUNT    |(NUMBER degrees)  (half way around)  (all of the way around)  (all the way around)|
+DEF DIRECTION |clockwise  counterclockwise|
+[robot] |rotate turn| 1=[AMOUNT] 2=[DIRECTION]
 END
 
-HNDLR db_set
-DEF AGE (1-99)
+HNDLR values_set
+DEF AGE  NUMBER_1_TO_99
 my 1=favorite-color is 2=COLOR
 my 1=age            is 2=AGE
 my 1=name           is 2=WORD
 END
 
+bool match(pattern, is-single-tok, str)
+{
+    if pattern is a single token
+        word            adv-str
+        anyword            adv-str
+        number            adv-str
+        X=xxxx
+        (aaa bcd)
+        [aaa bbb ccc |ddd eee|]
+        |clockwise counterclockwise|
+    endif
+        
+    loop over all tokens in pattern
+        if match(token, is-single str) == false return false
+    endloop        
+}
 
-
-tbl
-
-proc   default-args   phrase

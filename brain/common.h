@@ -52,6 +52,11 @@ void doa_init(void);
 void pa_init(void);
 
 
+// ------------------------------------------
+
+typedef char args_t[10][1000];
+typedef int (*hndlr_t)(args_t args);
+
 void proc_cmd_init(void);
 void proc_cmd_exit(void);
 
@@ -59,6 +64,4 @@ void proc_cmd_execute(char *transcript);
 bool proc_cmd_in_progress(void);
 bool proc_cmd_cancel(void);
 
-
-typedef int (*proc_cmd_hndlr_t)(int argc, char **argv);
-proc_cmd_hndlr_t proc_cmd_lookup_hndlr(char *name);
+hndlr_t proc_cmd_lookup_hndlr(char *name);
