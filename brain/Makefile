@@ -10,7 +10,7 @@ SOURCES = brain.c \
           utils/doa.c utils/leds.c utils/misc.c utils/pa.c utils/s2t.c utils/t2s.c utils/wwd.c
 
 brain: $(SOURCES)
-	gcc -g  -O2 -I. -Iutils -Idevel/repos/Porcupine/include $^ \
+	gcc -g  -O2 -Wall -I. -Iutils -Idevel/repos/Porcupine/include $^ \
             -lpthread -lportaudio -lm -ldl \
             -o $@
 

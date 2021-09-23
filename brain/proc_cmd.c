@@ -17,6 +17,9 @@ void proc_cmd_init(void)
 {
     grammar_read_file();
     pthread_create(&proc_cmd_thread_tid, NULL, proc_cmd_thread, NULL);
+
+    printf("*** EXIT\n");
+    exit(1);
 }
 
 void proc_cmd_exit(void)
@@ -37,7 +40,7 @@ bool proc_cmd_in_progress(void)
     return cmd != NULL;
 }
 
-bool proc_cmd_cancel(void)
+void proc_cmd_cancel(void)
 {
     cancel = true;
 }
@@ -130,12 +133,14 @@ typedef struct {
     char   * syntax;
 } grammar_t;
 
-def_t def[MAX_DEF];
-int max_def;
-grammar_t grammar[MAX_GRAMMAR];
-int max_grammar;
+static           def_t def[MAX_DEF];
+static int       max_def;
+static grammar_t grammar[MAX_GRAMMAR];
+static int       max_grammar;
 
 static bool match(char *syntax, char *s, args_t args);
+static void substitute_defs(char *s);
+static void add_def(char *name, char *value);
 
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
 
@@ -167,6 +172,7 @@ static void grammar_find_match(char *cmd, hndlr_t *proc, args_t args)
 
 static bool match(char *syntax, char *s, args_t args)
 {
+    return false;
 }
 
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
@@ -176,84 +182,146 @@ static int grammar_read_file(void)
     FILE      *fp;
     grammar_t *g;
     char       sx[10000];
-    int        max_def_save, n;
+    int        max_def_save;
+
+    // xxx should free first
+
+    g = NULL;
+    fp = NULL;
+    max_def_save = 0;
+
+    max_def = 0;
+    max_grammar = 0;
+
+    add_def(" )", ")");
+    add_def(" >", ">");
+    add_def(" ]", "]");
+    add_def("( ", "(");
+    add_def("< ", "<");
+    add_def("[ ", "[");
 
     // open
-    fp = fopen("proc_cmds.txt", "r");
+    fp = fopen("proc_cmd.txt", "r");
     if (fp == NULL) {
-        ERROR("failed to open proc_cmds.txt, %s\n", strerror(errno));
+        ERROR("failed to open proc_cmd.txt, %s\n", strerror(errno));
         return -1;
     }
 
     // read lines
     while (memset(sx,0,sizeof(sx)), fgets(sx, sizeof(sx), fp) != NULL) {
-        char *s = sx;
+        char *s = sx, *p;
         int len, n;
 
-        // remove double spaces and spaces at the begining and end,
-        // also remove trailing newline
+        // remove spaces at the begining and end, and newline char, and 
+        // replace multiple spaces with single space
         len = strlen(s);
         while (len > 0 && (s[len-1] == '\n' || s[len-1] == ' ')) {
             s[len-1] = '\0';
             len--;
         }
+
         n = strspn(s, " ");
         memmove(s, s+n, len+1);
 
+        while ((p = strstr(s, "  "))) {
+            memmove(p, p+1, strlen(p)+1);
+        }
+
+        //printf("LINE '%s'\n", s);
+            
         // if line is blank, or a comment then continue
-        if (s[0] == '\0' || s[0] == '\n') {
+        if (s[0] == '\0' || s[0] == '#') {
             continue;
         }
 
         // DEF line
         if (strncmp(s, "DEFINE ", 7) == 0) {
-            char *name = s+7;
-            char *value = name + strlen(name) + 1;
-            if (name[0] == '\0' || value[0] == '\0') {
+            char *name, *value="", *p;
+            name = s+7;
+            if (name[0] == '\0') {
+                ERROR("XXX %d\n", __LINE__);
                 goto error;
             }
-            def[max_def].name = strdup(name);
-            def[max_def].value = strdup(value);
-            max_def++;
+            if ((p = strchr(name, ' '))) {
+                *p = '\0';
+                value = p+1;
+            }
+            printf("DEFINE '%s' '%s'\n", name, value);
+            add_def(name, value);
 
         // HNDLR line
         } else if (strncmp(s, "HNDLR ", 6) == 0) {
             if (g != NULL) {
+                ERROR("XXX %d\n", __LINE__);
                 goto error;
             }
             max_def_save = max_def;
             g = &grammar[max_grammar];
             g->default_args[0] = strdup(s+6);
             g->proc = proc_cmd_lookup_hndlr(s+6);
+            printf("HNDLR: arg[0]='%s'  proc=%p\n", g->default_args[0], g->proc);
+            if (g->proc == NULL) {
+                ERROR("XXX %d\n", __LINE__);
+                goto error;
+            }
 
         // DEFAULT_ARGn line
         } else if (sscanf(s, "DEFAULT_ARG%d ", &n) == 1) {
             if (n < 1 || n > 9) {
+                ERROR("XXX %d\n", __LINE__);
                 goto error;
             }
             if (g == NULL) {
+                ERROR("XXX %d\n", __LINE__);
                 goto error;
             }
             g->default_args[n] = strdup(s+13);
+            printf("DEFAULT_ARG %d = '%s'\n", n, g->default_args[n]);
 
         // END line
-        } else if (strncmp(s, "END ", 4) == 0) {
+        } else if (strncmp(s, "END", 3) == 0) {
             if (g == NULL) {
+                ERROR("XXX %d\n", __LINE__);
                 goto error;
             }
             max_def = max_def_save;
             max_grammar++;
             g = NULL;
+            printf("END: \n");
 
-#if 0
+        // XXX temp
+        } else if (strncmp(s, "EOF", 3) == 0) {
+            printf("XXX EOF\n");
+            break;
+
         // grammar line
         } else {
-            if (g == NULL;) {
-                ERROR
+            if (g == NULL) {
+                ERROR("XXX %d\n", __LINE__);
+                goto error;
             }
-            s1 = substitute_defines(s);
-            g->line[g->max_line++] = s1;
-#endif
+            substitute_defs(s);
+            g->syntax = strdup(s);
+            printf("SYNTAX: %s\n", g->syntax);
+
+            // xxx check 100 chars after for not 0
+
+            // sanity check syntax
+            int i, len=strlen(s), cnt1=0, cnt2=0, cnt3=0;
+            for (i = 0; i < len; i++) {
+                switch (s[i]) {
+                case '(': cnt1++; break;
+                case ')': cnt1--; break;
+                case '[': cnt2++; break;
+                case ']': cnt2--; break;
+                case '<': cnt3++; break;
+                case '>': cnt3--; break;
+                }
+            }
+            if (cnt1 || cnt2 || cnt3) {
+                ERROR("XXX %d - %d %d %d\n", __LINE__, cnt1, cnt2, cnt3);
+                goto error;
+            }
         }
     }
 
@@ -261,6 +329,18 @@ static int grammar_read_file(void)
     fclose(fp);
 
     // debug print the grammar table
+    INFO("max_grammar = %d\n", max_grammar);
+    for (int i = 0; i < max_grammar; i++) {
+        char str[1000]={0}, *p=str;
+        grammar_t *g = &grammar[i];
+        for (int j = 0; j < 10; j++) {
+            if (g->default_args[j]) {
+                p += sprintf(p, "%d='%s' ", j, g->default_args[j]);
+            }
+        }
+        INFO("grammar[%d]: %s\n", i, str);
+        INFO("  %s\n", g->syntax);
+    }
 
     // success
     return 0;
@@ -269,6 +349,29 @@ static int grammar_read_file(void)
 error:
     if (fp) fclose(fp);
     return -1;
+}
+
+static void substitute_defs(char *s)
+{
+    int i;
+    char *p, *name, *value;
+
+    for (i = max_def-1; i >= 0; i--) {
+        name = def[i].name;
+        value = def[i].value;
+        while ((p = strstr(s, name))) {
+            memmove(p, p+strlen(name), strlen(p)+1);
+            memmove(p+strlen(value), p, strlen(p)+1);
+            memcpy(p, value, strlen(value));
+        }
+    }
+}
+
+static void add_def(char *name, char *value)
+{
+    def[max_def].name = strdup(name);
+    def[max_def].value = strdup(value);
+    max_def++;
 }
 
 // -----------------------------------------------------
@@ -311,5 +414,10 @@ bool match(pattern, is-single-tok, str)
         if match(token, is-single str) == false return false
     endloop
 }
+
+
+hello[planet world]
+hello [planet world]
+
 #endif
 

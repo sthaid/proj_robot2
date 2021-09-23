@@ -1,19 +1,40 @@
-predefined   NUMBER  WORD
-
-DEF COLOR  |red orange yellow green blue purple|
-
-HNDLR rotate 360 clockwise
-DEF AMOUNT    |(NUMBER degrees)  (half way around)  (all of the way around)  (all the way around)|
-DEF DIRECTION |clockwise  counterclockwise|
-[robot] |rotate turn| 1=[AMOUNT] 2=[DIRECTION]
+HNDLR rotate 
+DEFAULT_ARG1 360
+DEFAULT_ARG2 clockwise
+DEFINE AMOUNT    <(NUMBER degrees)  (half way around)  (all [of] the way around )  >
+DEFINE DIRECTION <clockwise  counterclockwise>
+[robot] <rotate turn> 1=[AMOUNT] 2=[DIRECTION]
 END
 
+EOF
+  #   hello     world   
+    
+
+DEFINE COLOR  <red   orange yellow green blue purple   >
+
 HNDLR values_set
-DEF AGE  NUMBER_1_TO_99
+DEFINE AGE  NUMBER_1_TO_99
 my 1=favorite-color is 2=COLOR
 my 1=age            is 2=AGE
 my 1=name           is 2=WORD
 END
+
+EOF
+
+DEFINE COLOR  <red orange yellow green blue purple>
+
+
+HNDLR values_set
+DEFINE AGE  NUMBER_1_TO_99
+my 1=favorite-color is 2=COLOR
+my 1=age            is 2=AGE
+my 1=name           is 2=WORD
+END
+
+EOF
+
+
+predefined   NUMBER  WORD
 
 bool match(pattern, is-single-tok, str)
 {

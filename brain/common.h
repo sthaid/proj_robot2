@@ -62,6 +62,6 @@ void proc_cmd_exit(void);
 
 void proc_cmd_execute(char *transcript);
 bool proc_cmd_in_progress(void);
-bool proc_cmd_cancel(void);
+void proc_cmd_cancel(void);
 
 hndlr_t proc_cmd_lookup_hndlr(char *name);

@@ -35,6 +35,7 @@ int main(int argc, char **argv)
     sigaction(SIGINT, &act, NULL);
     sigaction(SIGTERM, &act, NULL);
 
+#if 0
     // initialize utils
     pa_init();
     wwd_init();
@@ -42,6 +43,7 @@ int main(int argc, char **argv)
     s2t_init();
     doa_init();
     leds_init();
+#endif
 
     // xxx
     proc_cmd_init();

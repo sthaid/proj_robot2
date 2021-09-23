@@ -8,7 +8,7 @@ void t2s_init(void)
 void t2s_play_text(char *text_arg)
 {
     int rc;
-    char cmd[10000];
+    char cmd[10100];
     char text[10000];
 
     // xxx add extra 'the'
