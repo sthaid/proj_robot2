@@ -17,6 +17,7 @@ typedef struct {
 // prototypes
 //
 
+static int hndlr_test(args_t args);
 static int hndlr_rotate(args_t args);
 
 //
@@ -24,7 +25,8 @@ static int hndlr_rotate(args_t args);
 //
 
 static hndlr_lookup_t tbl[] = {
-    { "rotate", hndlr_rotate }
+    { "test",   hndlr_test },
+    { "rotate", hndlr_rotate },
                 };
 
 // ----------------------------------------------------------------------
@@ -44,6 +46,17 @@ hndlr_t proc_cmd_lookup_hndlr(char *name)
 }
 
 // ----------------------------------------------------------------------
+
+static int hndlr_test(args_t args)
+{
+    INFO("test: degrees=%s  dir=%s\n", args[0], args[1]);
+
+    for (int i=0; i < 10; i++) {
+        INFO("args[%d] = %s\n", i, args[i]);
+    }
+
+    return 0;
+}
 
 static int hndlr_rotate(args_t args)
 {

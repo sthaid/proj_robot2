@@ -1,19 +1,17 @@
-# reference:
-# - https://stackoverflow.com/questions/3220277/what-do-the-makefile-symbols-and-mean
+CC       = gcc
+CFLAGS   = -g  -O2 -Wall -I. -Iutils -Idevel/repos/Porcupine/include
+LDFLAGS  =  -lpthread -lportaudio -lm -ldl
 
-# XXX todo
-# - submake for go
-# - review the -I list
+TARGET   = brain
+SOURCES  = brain.c \
+           proc_cmd.c proc_cmd_hndlrs.c \
+           utils/doa.c utils/leds.c utils/misc.c utils/pa.c utils/s2t.c utils/t2s.c utils/wwd.c
 
-SOURCES = brain.c \
-          proc_cmd.c proc_cmd_hndlrs.c \
-          utils/doa.c utils/leds.c utils/misc.c utils/pa.c utils/s2t.c utils/t2s.c utils/wwd.c
+OBJ := $(SOURCES:.c=.o)
 
-brain: $(SOURCES)
-	gcc -g  -O2 -Wall -I. -Iutils -Idevel/repos/Porcupine/include $^ \
-            -lpthread -lportaudio -lm -ldl \
-            -o $@
+$(TARGET): $(OBJ)
+	$(CC) -o $@ $(OBJ) $(LDFLAGS)
 
 clean:
-	rm -f brain
+	rm -f $(TARGET) $(OBJ)
 
