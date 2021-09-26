@@ -1,9 +1,10 @@
 HNDLR test
+DEFAULT_ARG1 DEFAULT OPTIONAL
 #hello world (aaa bbb (ccc ddd)) eee
 #hello world (aaa bbb [ccc ddd]) eee
 #hello [world] again
-DEFAULT_ARG5   testarg 5  
-hello 1=<choice1 choice2 (ch3 ch4)> again
+#hello 1=<choice1 choice2 (ch3 ch4)> again
+[robot] simple test 1=[<optional1 optional2 (aaa bbb)>] endofline
 END
 
 EOF

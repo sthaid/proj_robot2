@@ -1,5 +1,6 @@
+#XXX -O2
 CC       = gcc
-CFLAGS   = -g  -O2 -Wall -I. -Iutils -Idevel/repos/Porcupine/include
+CFLAGS   = -g  -Wall -I. -Iutils -Idevel/repos/Porcupine/include
 LDFLAGS  =  -lpthread -lportaudio -lm -ldl
 
 TARGET   = brain

@@ -24,8 +24,16 @@ void proc_cmd_init(void)
     args_t args;
     hndlr_t proc;
     printf("---------- TEST 1 -----------\n");
-    grammar_find_match("hello ch3 ch4 again XXX", &proc, args);
-    proc(args);
+    //grammar_find_match("hello ch3 ch4 again XXX", &proc, args);
+
+    char cmd[100];
+    memset(cmd, 'x', sizeof(cmd));
+    strcpy(cmd, "simple test optional2 endofline");
+    grammar_find_match(cmd, &proc, args);
+
+
+    if (proc) proc(args);
+
 #if 0
     printf("---------- TEST 2 -----------\n");
     grammar_find_match("hello choice2 again XXX", &proc, args);
@@ -71,6 +79,9 @@ static void *proc_cmd_thread(void *cx)
 {
     hndlr_t proc;
     args_t args;
+
+// XXX
+    return NULL;
 
     while (true) {
         // wait for cmd
@@ -182,7 +193,9 @@ static void grammar_find_match(char *cmd, hndlr_t *proc, args_t args)
             args[j][0] = '\0';
         }
 
-        if (match(g->syntax, cmd, args)) {
+        int match_len;
+        int len_cmd = strlen(cmd);
+        if ((match_len = match(g->syntax, cmd, args)) && match_len == len_cmd) {
             *proc = g->proc;
             for (j = 0; j < 10; j++) {
                 if (args[j][0] == '\0' && g->default_args[j] != NULL) {
@@ -208,14 +221,19 @@ static char *args_str(args_t args)
     return s;
 }
 
-static int match(char *syntax, char *cmd_arg, args_t args)
+// xxx make a do_match routine to run this 
+//         and confirm cmd doesn't have leading or trainling spaces
+
+// xxx caller must ensure cmd has no trailing spaces
+static int match(char *syntax, char *cmd, args_t args)
 {
-    char *cmd = cmd_arg;
     char token[1000];
     int token_len;
     char first_word[100];
 
     // loop over the syntax tokens
+
+    int total_match_len = 0;
     while (true) {
         // get the next token
         get_token(syntax, token, &token_len);
@@ -283,13 +301,19 @@ static int match(char *syntax, char *cmd_arg, args_t args)
             match_len = strlen(first_word);
         }
 
-        if (match_len) {
-            cmd += match_len+1;
-        }
+        if (match_len) total_match_len += match_len + 1;
+        printf("tml = %d\n", total_match_len);
 
         if (syntax[token_len] == '\0') {
-            printf("MATCH OKAY, ret matchlen = %d\n", cmd - cmd_arg - 1);
-            return cmd - cmd_arg - 1;
+            printf("MATCH OKAY, ret matchlen = %d\n", total_match_len - 1);
+            return total_match_len ? total_match_len - 1 : 0;
+        }
+
+        // advance cmd
+        if (match_len) {
+            cmd += match_len;
+            if (*cmd == ' ') cmd++;
+            printf("XXX UPDATED CMD TO '%s'\n", cmd);
         }
 
         // advance syntax to point to the next token
@@ -297,9 +321,14 @@ static int match(char *syntax, char *cmd_arg, args_t args)
     }
 }
 
+// xxx maybe don't need this
 static void get_first_word(char *cmd, char *first_word)
 {
+    printf("GFW called for  '%s'\n", cmd);
     int len = strcspn(cmd, " ");
+    if (cmd[0] == ' ') {
+        printf("XXXXXXXXXXXXXXXXXXXXX len=%d BUG BUG\n", len);
+    }
     memcpy(first_word, cmd, len);
     first_word[len] = '\0';
 }
