@@ -1,6 +1,7 @@
 // XXX 
-// - don't use a longer cmd str
 // - cleanup
+// - seperate build just for this file with unit test main
+// - add support for numbers
 
 #include <common.h>
 

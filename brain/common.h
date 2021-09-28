@@ -19,6 +19,7 @@
 
 #include <utils.h>
 
+#if 0
 // -----------------  LOGGING  ------------------------------------
 
 #define MAX_VERBOSE 4
@@ -41,27 +42,26 @@ FILE *fp_log;
 #define VERBOSE3(fmt, args...) do { if (verbose[3]) PRINT_COMMON("VERBOSE3", fmt, ## args); } while (0)
 
 #define FATAL(fmt, args...) do { PRINT_COMMON("FATAL", fmt, ## args); exit(1); } while (0)
+#endif
 
 // -----------------  XXXXXXXXXXXX  -------------------------------
 
+#if 0
 void wwd_init(void);
 void t2s_init(void);
 void s2t_init(void);
 void leds_init(void);
 void doa_init(void);
 void pa_init(void);
-
+#endif
 
 // ------------------------------------------
 
-typedef char args_t[10][1000];
-typedef int (*hndlr_t)(args_t args);
+//void proc_cmd_init(void);
+//void proc_cmd_exit(void);
 
-void proc_cmd_init(void);
-void proc_cmd_exit(void);
+//void proc_cmd_execute(char *transcript);
+//bool proc_cmd_in_progress(void);
+//void proc_cmd_cancel(void);
 
-void proc_cmd_execute(char *transcript);
-bool proc_cmd_in_progress(void);
-void proc_cmd_cancel(void);
-
-hndlr_t proc_cmd_lookup_hndlr(char *name);
+//hndlr_t proc_cmd_lookup_hndlr(char *name);

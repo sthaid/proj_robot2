@@ -1,4 +1,4 @@
-#include <common.h>
+#include <utils.h>
 
 #include <dlfcn.h>
 #include <pv_porcupine.h>
