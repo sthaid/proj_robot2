@@ -35,7 +35,7 @@ int main(int argc, char **argv)
     sigaction(SIGINT, &act, NULL);
     sigaction(SIGTERM, &act, NULL);
 
-#if 0
+#if 1
     // initialize utils
     pa_init();
     wwd_init();

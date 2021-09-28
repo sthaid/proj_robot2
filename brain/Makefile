@@ -4,7 +4,7 @@ CFLAGS   = -g  -Wall -I. -Iutils -Idevel/repos/Porcupine/include
 LDFLAGS  =  -lpthread -lportaudio -lm -ldl
 
 TARGET   = brain
-SOURCES  = brain.c \
+SOURCES  = brain.c proc_cmd.c \
            utils/doa.c utils/grammar.c utils/leds.c utils/misc.c \
            utils/pa.c utils/s2t.c utils/t2s.c utils/wwd.c
 
