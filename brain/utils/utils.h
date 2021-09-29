@@ -40,7 +40,6 @@ FILE *fp_log;
 
 #define FATAL(fmt, args...) do { PRINT_COMMON("FATAL", fmt, ## args); exit(1); } while (0)
 
-
 // -------- misc.c --------
 
 uint64_t microsec_timer(void);

@@ -35,11 +35,13 @@ int grammar_init(char *filename, hndlr_lookup_t *hlu)
     int      n;
     def_t    def[MAX_DEF];
     int      max_def;
+    int      line_num;
 
-    // xxx init  (also free)
-    max_grammar = 0;
+    // xxx memory leaks
+    // - def[]/name,value should be freed
+    // - if called multiple times, grammar should be freed
 
-    // init local vars
+    // init 
     fp = NULL;
     max_def_save = 0;
     proc = NULL;
@@ -48,6 +50,9 @@ int grammar_init(char *filename, hndlr_lookup_t *hlu)
     n = 0;
     memset(def, 0, sizeof(def));
     max_def = 0;
+    line_num = 0;
+
+    max_grammar = 0;
 
     // open
     fp = fopen(filename, "r");
@@ -58,15 +63,14 @@ int grammar_init(char *filename, hndlr_lookup_t *hlu)
 
     // read lines
     while (memset(s,0,sizeof(s)), fgets(s, sizeof(s), fp) != NULL) {
-        printf("LINE '%s'\n", s);
-            
+        line_num++;
+
         // sanitize the line
         // - removes newline at end
         // - removes spaces at the begining and end
-        // - replaces double spaces with single spaces
+        // - replaces multiple spaces with single spaces
         sanitize(s);
-        // xxx this removes double spaces that you might want in args
-        
+
         // if line is blank, or a comment then continue
         if (s[0] == '\0' || s[0] == '#') {
             continue;
@@ -77,14 +81,13 @@ int grammar_init(char *filename, hndlr_lookup_t *hlu)
             char *name, *value="", *p;
             name = s+7;
             if (name[0] == '\0') {
-                ERROR("XXX %d\n", __LINE__);
+                ERROR("line %d: '%s'\n", line_num, s);
                 goto error;
             }
             if ((p = strchr(name, ' '))) {
                 *p = '\0';
                 value = p+1;
             }
-            printf("DEFINE '%s' '%s'\n", name, value);
             def[max_def].name = strdup(name);
             def[max_def].value = strdup(value);
             max_def++;
@@ -92,52 +95,40 @@ int grammar_init(char *filename, hndlr_lookup_t *hlu)
         // HNDLR line
         } else if (strncmp(s, "HNDLR ", 6) == 0) {
             if (proc) {
-                ERROR("XXX %d\n", __LINE__);
+                ERROR("line %d: '%s'\n", line_num, s);
                 goto error;
             }
             max_def_save = max_def;
             default_args[0] = strdup(s+6);
             proc = lookup_hndlr(s+6, hlu);
-            printf("HNDLR: arg[0]='%s'  proc=%p\n", default_args[0], proc);
             if (proc == NULL) {
-                ERROR("XXX %d\n", __LINE__);
+                ERROR("line %d: '%s'\n", line_num, s);
                 goto error;
             }
 
         // DEFAULT_ARGn line
         } else if (sscanf(s, "DEFAULT_ARG%d ", &n) == 1) {
-            if (n < 1 || n > 9) {
-                ERROR("XXX %d\n", __LINE__);
-                goto error;
-            }
-            if (proc == NULL) {
-                ERROR("XXX %d\n", __LINE__);
+            if (n < 1 || n > 9 || proc == NULL) {
+                ERROR("line %d: '%s'\n", line_num, s);
                 goto error;
             }
             default_args[n] = strdup(s+13);
-            printf("DEFAULT_ARG %d = '%s'\n", n, default_args[n]);
 
         // END line
         } else if (strncmp(s, "END", 3) == 0) {
             if (proc == NULL) {
-                ERROR("XXX %d\n", __LINE__);
+                ERROR("line %d: '%s'\n", line_num, s);
                 goto error;
             }
-            printf("END: \n");
 
             max_def = max_def_save;
             proc = NULL;
             memset(default_args, 0, sizeof(default_args));
 
-        // XXX temp
-        } else if (strncmp(s, "EOF", 3) == 0) {
-            printf("XXX EOF\n");
-            break;
-
         // grammar syntax line
         } else {
             if (proc == NULL) {
-                ERROR("XXX %d\n", __LINE__);
+                ERROR("line %d: '%s'\n", line_num, s);
                 goto error;
             }
 
@@ -154,10 +145,8 @@ int grammar_init(char *filename, hndlr_lookup_t *hlu)
             substitute(s, "< ", "<");
             substitute(s, " >", ">");
 
-            printf("SYNTAX: %s\n", s);
-
             if (check_syntax(s) == -1) {
-                ERROR("XXX %d\n", __LINE__);
+                ERROR("line %d: '%s'\n", line_num, s);
                 goto error;
             }
 
@@ -171,22 +160,13 @@ int grammar_init(char *filename, hndlr_lookup_t *hlu)
     // close
     fclose(fp);
 
+#if 0
     // debug print the grammar table
     INFO("max_grammar = %d\n", max_grammar);
     for (int i = 0; i < max_grammar; i++) {
-        char str[1000]={0}, *p=str;
-        grammar_t *g = &grammar[i];
-        for (int j = 0; j < 10; j++) {
-            if (g->default_args[j]) {
-                p += sprintf(p, "%d='%s' ", j, g->default_args[j]);
-            }
-        }
-        INFO("GRAMMAR[%d]: %s\n", i, str);
-        INFO("  '%s'\n", g->syntax);
+        INFO("'%s'\n", grammar[i].syntax);
     }
-
-    // free defs
-    // xxx
+#endif
 
     // success
     return 0;
@@ -199,20 +179,24 @@ error:
 
 static void sanitize(char *s)
 {
+    // remove newline at eol
     int len = strlen(s);
     if (len > 0 && s[len-1] == '\n') {
         s[len-1] = '\0';
         len--;
     }
 
+    // remove spaces at eol
     while (len > 0 && s[len-1] == ' ') {
         s[len-1] = '\0';
         len--;
     }
 
+    // remove spaces at begining of line
     int n = strspn(s, " ");
     memmove(s, s+n, len+1);
 
+    // replace multiple spaces with single space
     for (char *p = s; (p = strstr(p, "  ")); ) {
         memmove(p, p+1, strlen(p));
     }
@@ -272,40 +256,31 @@ static hndlr_t lookup_hndlr(char *name, hndlr_lookup_t *hlu)
 
 static int match(char *syntax, char *cmd, args_t args);
 static void get_token(char *syntax, char *token, int *token_len);
-static void get_first_word(char *cmd, char *first_word);
-static char *args_str(args_t args);
+static char *args_str(args_t args) __attribute__((unused));
 
-bool grammar_match(char *cmd, hndlr_t *proc, args_t args)
+bool grammar_match(char *cmd_arg, hndlr_t *proc, args_t args)
 {
-    int i,j;
-    grammar_t *g;
+    int i, j, match_len,cmd_len;
+    char cmd[1000];
 
     *proc = NULL;
 
-    // xxx check for leading and trailing spaces in cmd
+    strcpy(cmd, cmd_arg);
+    sanitize(cmd);
+    cmd_len = strlen(cmd);
 
     for (i = 0; i < max_grammar; i++) {
-        g = &grammar[i];
+        grammar_t *g = &grammar[i];
 
-        printf("XXXXX[%d] = '%s'\n", i, g->syntax);
+        for (j = 0; j < 10; j++) args[j][0] = '\0';
 
-// xxx move this ?
-        for (j = 0; j < 10; j++) {
-            args[j][0] = '\0';
-        }
-
-        int match_len;
-        int len_cmd = strlen(cmd);
-        if ((match_len = match(g->syntax, cmd, args)) && match_len == len_cmd) {
+        if ((match_len = match(g->syntax, cmd, args)) && match_len == cmd_len) {
             *proc = g->proc;
             for (j = 0; j < 10; j++) {
                 if (args[j][0] == '\0' && g->default_args[j] != NULL) {
                     strcpy(args[j], g->default_args[j]);
                 }
             }
-            printf("ARGS = %s\n", args_str(args));
-            printf("--------------------------------------\n");
-
             return true;
         }
     }
@@ -313,27 +288,25 @@ bool grammar_match(char *cmd, hndlr_t *proc, args_t args)
     return false;
 }
 
+// xxx comments
+// xxx optimize
 static int match(char *syntax, char *cmd, args_t args)
 {
     char token[1000];
     int token_len;
-    char first_word[100];
 
     // loop over the syntax tokens
     int total_match_len = 0;
     while (true) {
         // get the next token
         get_token(syntax, token, &token_len);
-        printf("got token '%s' len=%d\n", token, token_len);
 
         int match_len;
 
         if (token[0] >= '1' && token[0] <= '9' && token[1] == '=') {
             int n = token[0] - '0';
             memmove(token, token+2, token_len);
-            printf("EQUALS TOKEN = '%s'\n", token);
             match_len = match(token, cmd, args);
-            printf("EQUALS match_len = %d\n", match_len);
             if (match_len) {
                 memcpy(args[n], cmd, match_len);
                 args[n][match_len] = '\0';
@@ -342,21 +315,17 @@ static int match(char *syntax, char *cmd, args_t args)
         } else if (token[0] == '<') {
             token[token_len-1] = '\0';
             memmove(token, token+1, token_len);
-            printf("OR TOKEN = '%s'\n", token);
 
             char *txx = token;
             while (true) {
                 int tl;
                 char t[1000];
                 get_token(txx, t, &tl);
-                printf("OR TOKEN - t='%s' cmd='%s'\n", t, cmd);
                 match_len = match(t, cmd, args);
-                printf("OR TOKEN - match_len = %d\n", match_len);
                 if (match_len) {
                     break;
                 }
                 if (txx[tl] == '\0') {
-                    printf("OR TOKEN - DONE, return 0\n");
                     return 0;
                 }
                 txx += tl + 1;
@@ -365,46 +334,42 @@ static int match(char *syntax, char *cmd, args_t args)
         } else if (token[0] == '[') {
             token[token_len-1] = '\0';
             memmove(token, token+1, token_len);  // xxx just use a ptr
-            printf("BRACKETS TOKEN = '%s'\n", token);
             match_len = match(token, cmd, args);
-            printf("BRACKETS match_len = %d\n", match_len);
 
         } else if (token[0] == '(') {
             token[token_len-1] = '\0';
             memmove(token, token+1, token_len);
-            printf("PAREN TOKEN = '%s'\n", token);
             match_len = match(token, cmd, args);
             if (match_len == 0) {
-                printf("PAREN MISCOMPARE RET false\n");
                 return 0;
             }
         } else {
-            double tmp;
-            get_first_word(cmd, first_word);
-            printf("COMPARE FIRST_WORD = '%s' TO TOKEN = '%s'\n", first_word, token);
+            char *p = cmd, save;
+            while (*p != ' ' && *p != '\0') {
+                p++;
+            }
+            save = *p;
+            *p = '\0';
+
             if (strcmp(token, "NUMBER") == 0) {
-                if (sscanf(first_word, "%lf", &tmp) != 1) {
-                    printf("MISCOMPARE NUMBER RET false\n");
+                double tmp;
+                if (sscanf(cmd, "%lf", &tmp) != 1) {
+                    *p = save;
                     return 0;
-                } else {
-                    printf("NUMBER OKAY\n");
                 }
             } else {
-                if (strcmp(first_word, token) != 0) {
-                    printf("MISCOMPARE RET false\n");
+                if (strcmp(cmd, token) != 0) {
+                    *p = save;
                     return 0;
-                } else {
-                    printf("string OKAY\n");
                 }
             }
-            match_len = strlen(first_word);
+            match_len = p - cmd;
+            *p = save;
         }
 
         if (match_len) total_match_len += match_len + 1;
-        printf("tml = %d\n", total_match_len);
 
         if (syntax[token_len] == '\0') {
-            printf("MATCH OKAY, ret matchlen = %d\n", total_match_len - 1);
             return total_match_len ? total_match_len - 1 : 0;
         }
 
@@ -412,7 +377,6 @@ static int match(char *syntax, char *cmd, args_t args)
         if (match_len) {
             cmd += match_len;
             if (*cmd == ' ') cmd++;
-            printf("XXX UPDATED CMD TO '%s'\n", cmd);
         }
 
         // advance syntax to point to the next token
@@ -420,40 +384,29 @@ static int match(char *syntax, char *cmd, args_t args)
     }
 }
 
-// xxx maybe don't need this
-static void get_first_word(char *cmd, char *first_word)
-{
-    printf("GFW called for  '%s'\n", cmd);
-    int len = strcspn(cmd, " ");
-    if (cmd[0] == ' ') {
-        printf("XXXXXXXXXXXXXXXXXXXXX len=%d BUG BUG\n", len);
-    }
-    memcpy(first_word, cmd, len);
-    first_word[len] = '\0';
-}
-
 static void get_token(char *syntax, char *token, int *token_len)
 {
     int cnt;
-    char *p;
+    char *p = syntax;
 
-    // skip leading spaces
-    // xxx is this needed
-    while (*syntax == ' ') {
-        syntax++;
+    // syntax is expected to not start with a space or by an empty string
+    if (*p == ' ' || *p == '\0') {
+        FATAL("invalid syntax '%s' passed to get_token\n", p);
     }
 
-    p = syntax;
-
-#if 1
-    if (*p == '\0') {
-        *token_len = 0;
-        token[0] = '\0';
-        FATAL("BUG\n");
+    // optimized for tokens that do not contain (), [], or <>
+    if ((p[0] >= 'a' && p[0] <= 'z') ||
+        ((p[1] == '=') && (p[2] >= 'a' && p[2] <= 'z')))
+    {
+        while (*p != ' ' && *p != '\0') {
+            *token++ = *p++;
+        }
+        *token = '\0';
+        *token_len = p - syntax;
         return;
-    }        
-#endif
+    }
 
+    // tokens that do contain (), [], or <>
     cnt = 0;
     while (true) {
         if (*p == '(' || *p == '[' || *p == '<') {
@@ -463,7 +416,6 @@ static void get_token(char *syntax, char *token, int *token_len)
         }
 
         if (cnt < 0 || (*p == '\0' && cnt)) {
-            //printf("cnt %d  offset=%d  char=%c\n", cnt, p-syntax, *p);
             FATAL("invalid syntax '%s'\n", syntax);
         }
 
@@ -478,7 +430,7 @@ static void get_token(char *syntax, char *token, int *token_len)
     }
 }
 
-static char *args_str(args_t args) // xxx del
+static char *args_str(args_t args)
 {
     static char s[1000], *p = s;
     for (int i = 0; i < 10; i++) {

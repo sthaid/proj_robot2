@@ -70,7 +70,7 @@ int main(int argc, char **argv)
             strcmp(args[1], t->arg1) == 0 &&
             strcmp(args[2], t->arg2) == 0) 
         {
-            printf("TEST %d: OKAY\n", i);
+            //printf("TEST %d: OKAY\n", i);
         } else {
             printf("TEST %d: FAILED\n", i);
             printf("cmd   = '%s'\n", t->cmd);
@@ -81,6 +81,22 @@ int main(int argc, char **argv)
             exit(1);
         }
     }
+    printf("ALL TESTS PASSED\n");
+    printf("\n");
+
+    #define CYCLES 10000
+    printf("TIMING ...\n");
+    uint64_t start, duration;
+    start = microsec_timer();
+    for (i = 0; i < CYCLES; i++) {
+        ok = grammar_match("turn ccw all of the way around", &hndlr, args);
+        if (!ok) {
+            printf("BUG\n");
+            exit(1);
+        }
+    }
+    duration = microsec_timer() - start;
+    printf("time = %0.3f usecs\n", (double)duration / CYCLES);
 
     return 0;
 }
