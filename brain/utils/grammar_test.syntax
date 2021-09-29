@@ -13,3 +13,7 @@ DEFAULT_ARG2 DEFARG2
 test1 [next] 1=[<opt1 opt2 (opt 3 and 4)>] 2=[eol]
 test2 next
 END
+
+HNDLR name
+my name is 1=WORD 2=WORD eol
+END

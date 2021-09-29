@@ -288,12 +288,10 @@ bool grammar_match(char *cmd_arg, hndlr_t *proc, args_t args)
     return false;
 }
 
-// xxx comments
-// xxx optimize
 static int match(char *syntax, char *cmd, args_t args)
 {
     char token[1000];
-    int token_len;
+    int token_len, match_len;
 
     // loop over the syntax tokens
     int total_match_len = 0;
@@ -301,22 +299,19 @@ static int match(char *syntax, char *cmd, args_t args)
         // get the next token
         get_token(syntax, token, &token_len);
 
-        int match_len;
-
+        // process token: N=token
         if (token[0] >= '1' && token[0] <= '9' && token[1] == '=') {
             int n = token[0] - '0';
-            memmove(token, token+2, token_len);
-            match_len = match(token, cmd, args);
+            match_len = match(token+2, cmd, args);
             if (match_len) {
                 memcpy(args[n], cmd, match_len);
                 args[n][match_len] = '\0';
             }
 
+        // match on the first token in a list: <token token token ...>  
         } else if (token[0] == '<') {
             token[token_len-1] = '\0';
-            memmove(token, token+1, token_len);
-
-            char *txx = token;
+            char *txx = token+1;
             while (true) {
                 int tl;
                 char t[1000];
@@ -331,19 +326,22 @@ static int match(char *syntax, char *cmd, args_t args)
                 txx += tl + 1;
             }
 
+        // match is optional: [token]
         } else if (token[0] == '[') {
             token[token_len-1] = '\0';
-            memmove(token, token+1, token_len);  // xxx just use a ptr
-            match_len = match(token, cmd, args);
+            match_len = match(token+1, cmd, args);
 
+        // match all: (token token ...)
         } else if (token[0] == '(') {
             token[token_len-1] = '\0';
-            memmove(token, token+1, token_len);
-            match_len = match(token, cmd, args);
+            match_len = match(token+1, cmd, args);
             if (match_len == 0) {
                 return 0;
             }
+
+        // match a word or NUMBER
         } else {
+            // put a temporary '\0' at the end of the first word of cmd
             char *p = cmd, save;
             while (*p != ' ' && *p != '\0') {
                 p++;
@@ -351,29 +349,36 @@ static int match(char *syntax, char *cmd, args_t args)
             save = *p;
             *p = '\0';
 
+            // check for failed match, and if so then return match_len = 0
             if (strcmp(token, "NUMBER") == 0) {
                 double tmp;
                 if (sscanf(cmd, "%lf", &tmp) != 1) {
                     *p = save;
                     return 0;
                 }
+            } else if (strcmp(token, "WORD") == 0) {
+                // match any word
             } else {
                 if (strcmp(cmd, token) != 0) {
                     *p = save;
                     return 0;
                 }
             }
+
+            // match okay, return match_len is the length of the first word of cmd
             match_len = p - cmd;
             *p = save;
         }
 
+        // keep track of the total_macth_len
         if (match_len) total_match_len += match_len + 1;
 
+        // if there are no more tokens then return the total_match_len
         if (syntax[token_len] == '\0') {
             return total_match_len ? total_match_len - 1 : 0;
         }
 
-        // advance cmd
+        // advance cmd to the next word
         if (match_len) {
             cmd += match_len;
             if (*cmd == ' ') cmd++;

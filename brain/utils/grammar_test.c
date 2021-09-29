@@ -2,12 +2,12 @@
 
 #include <utils.h>
 
-static int hndlr_test(args_t args);
-static int hndlr_rotate(args_t args);
+static int hndlr_stub(args_t args);
 
 static hndlr_lookup_t hlu[] = {
-    { "test",   hndlr_test },
-    { "rotate", hndlr_rotate },
+    { "test",   hndlr_stub },
+    { "rotate", hndlr_stub },
+    { "name", hndlr_stub },
     { NULL, NULL } };
 
 struct test_s {
@@ -33,6 +33,7 @@ struct test_s {
     { "test1 opt1",                     true, "test",   "opt1", "DEFARG2" },
     { "test1 next opt1 eol",            true, "test",   "opt1", "eol" },
     { "test2 next",                     true, "test",   "DEFARG1", "DEFARG2" },
+    { "my name is first last eol",      true, "name",   "first", "last" },
     // match not okay
     { "hello world",                    false, "", "", "" },
     { "test1 hello opt1 eol",           false, "", "", "" },
@@ -103,14 +104,9 @@ int main(int argc, char **argv)
 
 // -----------------  HANDLERS  ---------------------------------
 
-static int hndlr_test(args_t args)
+static int hndlr_stub(args_t args)
 {
     // nothing needed here in this test program
     return 0;
 }
 
-static int hndlr_rotate(args_t args)
-{
-    // nothing needed here in this test program
-    return 0;
-}
