@@ -86,7 +86,7 @@ int main(int argc, char **argv)
     printf("\n");
 
     #define CYCLES 10000
-    printf("TIMING ...\n");
+    printf("TIMING: COMPLEX MATCH ...\n");
     uint64_t start, duration;
     start = microsec_timer();
     for (i = 0; i < CYCLES; i++) {
@@ -97,7 +97,19 @@ int main(int argc, char **argv)
         }
     }
     duration = microsec_timer() - start;
-    printf("time = %0.3f usecs\n", (double)duration / CYCLES);
+    printf("time = %0.3f usecs\n\n", (double)duration / CYCLES);
+
+    printf("TIMING: SIMPLE NOT-A-MATCH ...\n");
+    start = microsec_timer();
+    for (i = 0; i < CYCLES; i++) {
+        ok = grammar_match("notamatch", &hndlr, args);
+        if (ok) {
+            printf("BUG\n");
+            exit(1);
+        }
+    }
+    duration = microsec_timer() - start;
+    printf("time = %0.3f usecs\n\n", (double)duration / CYCLES);
 
     return 0;
 }
