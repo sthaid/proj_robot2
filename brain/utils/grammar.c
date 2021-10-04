@@ -18,6 +18,9 @@ static void substitute(char *s, char *current, char *replace);
 static int check_syntax(char *s);
 static hndlr_t lookup_hndlr(char *name, hndlr_lookup_t *hlu);
 
+// xxx should this be fatal 
+// xxx add audio cmd to terminate  pgm
+// xxx add audio cmd to read this again
 int grammar_init(char *filename, hndlr_lookup_t *hlu)
 {
     #define MAX_DEF 100
@@ -160,7 +163,7 @@ int grammar_init(char *filename, hndlr_lookup_t *hlu)
     // close
     fclose(fp);
 
-#if 0
+#if 1
     // debug print the grammar table
     INFO("max_grammar = %d\n", max_grammar);
     for (int i = 0; i < max_grammar; i++) {
@@ -267,7 +270,10 @@ bool grammar_match(char *cmd_arg, hndlr_t *proc, args_t args)
 
     strcpy(cmd, cmd_arg);
     sanitize(cmd);
+    // xxx 
+    for (i = 0; cmd[i]; i++) cmd[i] = tolower(cmd[i]);
     cmd_len = strlen(cmd);
+    //xxx INFO("grammar_match called for '%s'\n", cmd);
 
     for (i = 0; i < max_grammar; i++) {
         grammar_t *g = &grammar[i];
@@ -285,6 +291,7 @@ bool grammar_match(char *cmd_arg, hndlr_t *proc, args_t args)
         }
     }
 
+    // xxx clear args here too
     return false;
 }
 
@@ -299,8 +306,8 @@ static int match(char *syntax, char *cmd, args_t args)
         // get the next token
         get_token(syntax, token, &token_len);
 
-        // process token: N=token
-        if (token[0] >= '1' && token[0] <= '9' && token[1] == '=') {
+        // process token: N:token
+        if (token[0] >= '1' && token[0] <= '9' && token[1] == ':') {
             int n = token[0] - '0';
             match_len = match(token+2, cmd, args);
             if (match_len) {
@@ -401,7 +408,7 @@ static void get_token(char *syntax, char *token, int *token_len)
 
     // optimized for tokens that do not contain (), [], or <>
     if ((p[0] >= 'a' && p[0] <= 'z') ||
-        ((p[1] == '=') && (p[2] >= 'a' && p[2] <= 'z')))
+        ((p[1] == ':') && (p[2] >= 'a' && p[2] <= 'z')))
     {
         while (*p != ' ' && *p != '\0') {
             *token++ = *p++;

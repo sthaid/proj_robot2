@@ -25,7 +25,6 @@ void s2t_init(void)
     atexit(s2t_exit);
 }
 
-// XXX add exit routines for all and don't use atexit
 static void s2t_exit(void)
 {
     // set terminating flag, so that the s2t_thread will terminate
@@ -35,6 +34,7 @@ static void s2t_exit(void)
     pthread_join(s2t_tid, NULL);
 
     // be extra sure that the livecaption program is not running
+    // xxx confirm livecaption is in 'ps'
     system("killall livecaption");
 }
 
@@ -115,8 +115,9 @@ static void *s2t_thread(void *cx)
                 break;
             }
 
-            // timeout if there is not a result from livecaption in 5 secs
-            if (microsec_timer() - start_time > 5000000) {
+            // timeout if there is not a result from livecaption in 10 secs
+            // xxx make this an arg
+            if (microsec_timer() - start_time > 10000000) {
                 WARN("timedout waiting for transcript from livecaption\n");
                 break;
             }
@@ -131,6 +132,7 @@ static void *s2t_thread(void *cx)
         transcript = ts;
 
         // close fds and call waitpid
+        // xxx how long does this take
         close(fd_to_lc);
         close(fd_from_lc);
         waitpid(lc_pid, NULL, 0);

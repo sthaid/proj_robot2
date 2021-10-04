@@ -12,6 +12,7 @@
 #include <pthread.h>
 #include <signal.h>
 #include <assert.h>
+#include <ctype.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <sys/stat.h>
@@ -22,6 +23,20 @@
 #define MAX_VERBOSE 4
 bool verbose[MAX_VERBOSE];
 FILE *fp_log;
+
+static inline void logging_init(char *filename, bool append)
+{
+    if (filename == NULL) {
+        fp_log = stdout;
+    } else {
+        fp_log = fopen(filename, append ? "a" : "w");
+        if (fp_log == NULL) {
+            printf("FATAL: failed to open log file %s, %s\n", filename, strerror(errno));
+            exit(1);
+        }
+        setlinebuf(fp_log);
+    }
+}
 
 #define PRINT_COMMON(lvl, fmt, args...) \
     do { \
@@ -41,6 +56,8 @@ FILE *fp_log;
 #define FATAL(fmt, args...) do { PRINT_COMMON("FATAL", fmt, ## args); exit(1); } while (0)
 
 // -------- misc.c --------
+
+void misc_init(void);
 
 uint64_t microsec_timer(void);
 char *time2str(time_t t, char *s);
@@ -79,6 +96,7 @@ void pa_print_device_info_all(void);
 // notes:
 // - led_brightness range  0 - 100
 // - all_brightness range  0 - 31
+// - xxx rotate mode
 
 #define LED_RGB(r,g,b) ((unsigned int)(((r) << 0) | ((g) << 8) | ((b) << 16)))
 
@@ -97,7 +115,7 @@ void leds_init(void);
 
 void leds_set(int num, unsigned int rgb, int led_brightness);
 void leds_set_all(unsigned int rgb, int led_brightness);
-void leds_set_all_off(void);
+void leds_set_all_off(void);  // xxx probably not needed
 void leds_rotate(int mode);
 
 void leds_show(int all_brightness);
@@ -110,8 +128,8 @@ void t2s_play_text(char *text);
 
 // -------- wwd.c --------
 
-#define WW_PORCUPINE  0
-#define WW_TERMINATOR 1
+#define WW_KEYWORD  0
+#define WW_TERMINATE 1
 
 void wwd_init(void);
 

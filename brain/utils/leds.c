@@ -80,8 +80,9 @@ void leds_set(int num, unsigned int rgb, int led_brightness)
     }
 
     // xxx comment
+    // xxx optimize
     if (led_brightness > 0) {
-        b = 1e-6 * (led_brightness * led_brightness* led_brightness) + .002;
+        b = 1e-6 * (led_brightness * led_brightness * led_brightness) + .002;
         if (b > 1) b = 1;
     } else {
         b = 0;
@@ -95,6 +96,7 @@ void leds_set(int num, unsigned int rgb, int led_brightness)
 
 void leds_set_all(unsigned int rgb, int led_brightness)
 {
+    // xxx set the first and replicate the rest
     for (int num = 0; num < MAX_LED; num++) {
         leds_set(num, rgb, led_brightness);
     }

@@ -1,33 +1,29 @@
 #include <common.h>
 
 // variables
-static pthread_t cmd_thread_tid;
 static char *cmd;
 static bool cancel;
-static bool prog_terminating;
 
 // prototypes
 static void *cmd_thread(void *cx);
-static int rotate_hndlr(args_t args);
 
-// handlers lookup table
+// handlers
+static int rotate_hndlr(args_t args);
+static int test_hndlr(args_t args);
+
 static hndlr_lookup_t hndlr_lookup_tbl[] = {
     { "rotate", rotate_hndlr },
+    { "test",   test_hndlr },
                 };
 
-// -----------------  INIT & EXIT  ------------------------------------------
+// -----------------  INIT  -------------------------------------------------
 
 void proc_cmd_init(void)
 {
+    pthread_t tid;
+
     grammar_init("grammar.syntax", hndlr_lookup_tbl);
-    pthread_create(&cmd_thread_tid, NULL, cmd_thread, NULL);
-
-}
-
-void proc_cmd_exit(void) // xxx is this called
-{
-    prog_terminating = true;
-    pthread_join(cmd_thread_tid, NULL);
+    pthread_create(&tid, NULL, cmd_thread, NULL);
 }
 
 // -----------------  RUNTIME API  ------------------------------------------
@@ -57,32 +53,40 @@ static void *cmd_thread(void *cx)
     while (true) {
         // wait for cmd
         while (cmd == NULL) {
-            if (prog_terminating) return NULL;
             usleep(10000);
         }
 
-        // check if cmd matches known grammar
-        grammar_match(cmd, &proc, args);
-
-        // if grammar match found then call the handler
-        // xxx else ?
-        if (proc) {
+        // check if cmd matches known grammar, and call hndlr proc
+        bool match = grammar_match(cmd, &proc, args);
+        INFO("match=%d, args=  '%s'  '%s'  '%s'\n", match, args[0], args[1], args[2]);
+        if (match) {
             proc(args);
         }
 
-        // free the cmd, xxx etc
+        // done with this cmd
         free(cmd);
         cmd = NULL;
         cancel = false;
     }
+
+    return NULL;
 }
 
 // -----------------  CMD HANDLERS  -----------------------------------------
 
 static int rotate_hndlr(args_t args)
 {
-    INFO("rotate: degrees=%s  dir=%s\n", args[0], args[1]);
+    INFO("rotate: proc=%s amount=%s dir=%s\n", args[0], args[1], args[2]);
+    for (int i=0; i < 10; i++) {
+        INFO("args[%d] = %s\n", i, args[i]);
+    }
 
+    return 0;
+}
+
+static int test_hndlr(args_t args)
+{
+    INFO("test: proc=%s word=%s\n", args[0], args[1]);
     for (int i=0; i < 10; i++) {
         INFO("args[%d] = %s\n", i, args[i]);
     }

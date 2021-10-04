@@ -1,5 +1,14 @@
 #include <utils.h>
   
+// ----------------------------------------------------------------------
+
+void misc_init(void)
+{
+    // nothing needed yet
+}
+
+// ----------------------------------------------------------------------
+
 uint64_t microsec_timer(void)
 {
     struct timespec ts;
