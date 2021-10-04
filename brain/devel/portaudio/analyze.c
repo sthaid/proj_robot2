@@ -488,16 +488,18 @@ static void *get_data_from_file_thread2(void *cx)
 #define N                       (15)   
 
 // duration of a sound block analysis
-#define MAX_FRAME               (MS_TO_FRAMES(500))
+#define DURATION_MS             600
+#define MAX_FRAME               (MS_TO_FRAMES(DURATION_MS))
 
-#define WINDOW_DURATION         ((double)MAX_FRAME / SAMPLE_RATE)
 #define MS_TO_FRAMES(ms)        (SAMPLE_RATE * (ms) / 1000)
 #define FRAMES_TO_MS(frames)    (1000 * (frames) / SAMPLE_RATE)
 #define FRAME_CNT_TO_TIME(fc)   ((double)(fc) / SAMPLE_RATE)
 
 #define DATA(_chan,_offset) \
     ( data [ _chan ] [ data_idx+(_offset) >= 0 ? data_idx+(_offset) : data_idx+(_offset)+MAX_FRAME ] )
-#define AH(x) ( &amp_history[ ahidx+(x) >= 0 ? ahidx+(x) : ahidx+(x)+100 ] )
+
+#define MAX_AH 1000
+#define AH(x) (&amp_history[(ahidx + (x)) % MAX_AH])
 
 static void process_frame(const float *frame)
 {
@@ -512,8 +514,8 @@ static void process_frame(const float *frame)
         double   amp;
         uint64_t frame_cnt;
         bool     flag;
-    } amp_history[200];
-    static int ahidx;
+    } amp_history[MAX_AH];
+    static uint64_t ahidx = MAX_AH;
 
     static uint64_t start_sound_block_frame_cnt;
     static double   start_sound_block_amp_sum;
@@ -552,7 +554,7 @@ static void process_frame(const float *frame)
     // save amp in the amp_history circular buffer;
     // note - amp is scaled by 1e5 to make the values more convenient
     amp *= 1e5;
-    ahidx = (ahidx + 1) % 100;
+    ahidx = ahidx + 1;
     AH(0)->amp       = amp;
     AH(0)->frame_cnt = frame_cnt;
     AH(0)->flag      = false;
@@ -574,13 +576,15 @@ static void process_frame(const float *frame)
     //   debug print the sound block amplitude values (these are in 10 ms intervals), and
     //   set the analyze flag
     bool analyze = false;
-    if (start_sound_block_frame_cnt != 0 && frame_cnt - start_sound_block_frame_cnt >= MS_TO_FRAMES(400)) {
+    if (start_sound_block_frame_cnt != 0 && 
+        frame_cnt - start_sound_block_frame_cnt >= MS_TO_FRAMES(DURATION_MS-100)) 
+    {
         dbgpr("\n");
         dbgpr("============================================================================================\n");
         dbgpr("AMP: LIMIT=%d  SUM=%0.0f\n", 
               start_sound_block_amp_limit, start_sound_block_amp_sum);
 
-        for (int i = -49; i <= 0; i++) {
+        for (int i = -DURATION_MS/10 + 1; i <= 0; i++) {
             char s[200];
             dbgpr("%8.3f: %-4.0f %c : %s\n",
                 FRAME_CNT_TO_TIME(AH(i)->frame_cnt),
@@ -616,6 +620,9 @@ static void process_frame(const float *frame)
         for (int i = -N; i <= N; i++) x[i+N] = i;
     }
 
+    // time how long this analysis takes
+    uint64_t start_us = microsec_timer();
+    
     // Each of the 2 pairs of mics has 2*N+1 cross correlation results that
     // is computed by the code near the top of this routine.
     // Determine the max cross-corr value for the sets of cross correlations
@@ -668,6 +675,9 @@ static void process_frame(const float *frame)
     angle = atan2(ccb_x, cca_x) * (180/M_PI);
     angle = normalize_angle(angle + ANGLE_OFFSET);
 
+    // determine the duration of the analysis
+    uint64_t analysis_dur_us = microsec_timer() - start_us;
+
     // make the direction of sound arrival angle available to the led_thread
     doa.angle = angle;
     __sync_synchronize();
@@ -676,8 +686,8 @@ static void process_frame(const float *frame)
     // debug prints results of sound direction analysis
     if (1) {
         double tnow = FRAME_CNT_TO_TIME(frame_cnt);
-        dbgpr("%8.3f: ANALYZE SOUND - intvl=%0.3f ... %0.3f\n", 
-              FRAME_CNT_TO_TIME(frame_cnt), tnow-WINDOW_DURATION, tnow);
+        dbgpr("%8.3f: ANALYZE SOUND - intvl=%0.3f ... %0.3f - analysis_dur_us = %lld\n", 
+              FRAME_CNT_TO_TIME(frame_cnt), tnow-(DURATION_MS/1000.), tnow, analysis_dur_us);
         for (int i = -N; i <= N; i++) {
             char s1[100], s2[100];
             dbgpr("%3d: %5.1f %-30s - %5.1f %-30s\n",
