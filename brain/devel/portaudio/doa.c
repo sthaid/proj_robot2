@@ -448,7 +448,7 @@ static void *get_data_from_file_thread2(void *cx)
 
 // -----------------  PROCESS 4 CHANNEL AUDIO DATA --------------------------
 
-#if 1
+#if 0
 //      Cross correlate data for mics:
 //      - AX and AY
 //      - BX and BY
@@ -579,18 +579,20 @@ static void process_frame(const float *frame)
     if (start_sound_block_frame_cnt != 0 && 
         frame_cnt - start_sound_block_frame_cnt >= MS_TO_FRAMES(DURATION_MS-100)) 
     {
-        dbgpr("\n");
-        dbgpr("============================================================================================\n");
-        dbgpr("AMP: LIMIT=%d  SUM=%0.0f\n", 
-              start_sound_block_amp_limit, start_sound_block_amp_sum);
+        if (0) {
+            dbgpr("\n");
+            dbgpr("============================================================================================\n");
+            dbgpr("AMP: LIMIT=%d  SUM=%0.0f\n", 
+                  start_sound_block_amp_limit, start_sound_block_amp_sum);
 
-        for (int i = -DURATION_MS/10 + 1; i <= 0; i++) {
-            char s[200];
-            dbgpr("%8.3f: %-4.0f %c : %s\n",
-                FRAME_CNT_TO_TIME(AH(i)->frame_cnt),
-                AH(i)->amp,
-                AH(i)->flag ? 'X' : ' ',
-                stars(AH(i)->amp, 1000, 100, s));
+            for (int i = -DURATION_MS/10 + 1; i <= 0; i++) {
+                char s[200];
+                dbgpr("%8.3f: %-4.0f %c : %s\n",
+                    FRAME_CNT_TO_TIME(AH(i)->frame_cnt),
+                    AH(i)->amp,
+                    AH(i)->flag ? 'X' : ' ',
+                    stars(AH(i)->amp, 1000, 100, s));
+            }
         }
 
         start_sound_block_frame_cnt = 0;
@@ -615,6 +617,7 @@ static void process_frame(const float *frame)
 
     int           max_cca_idx, max_ccb_idx;
     double        max_cca, max_ccb, coeffs[3], cca_x, ccb_x, angle;
+    bool          discard;
     static double x[2*N+1];
     if (x[0] == 0) { // init on first call
         for (int i = -N; i <= N; i++) x[i+N] = i;
@@ -622,6 +625,16 @@ static void process_frame(const float *frame)
 
     // time how long this analysis takes
     uint64_t start_us = microsec_timer();
+
+    // check for inconclusive cross correlation results ...
+    // - all cc values less than a limit
+    double max_cca_val = -100;
+    double max_ccb_val = -100;
+    for (int i = -N; i <= N; i++) {
+        if (cca[i] > max_cca_val) max_cca_val = cca[i];
+        if (ccb[i] > max_ccb_val) max_ccb_val = ccb[i];
+    }
+    discard = (max_cca_val < 10 || max_ccb_val < 10);
     
     // Each of the 2 pairs of mics has 2*N+1 cross correlation results that
     // is computed by the code near the top of this routine.
@@ -679,24 +692,36 @@ static void process_frame(const float *frame)
     uint64_t analysis_dur_us = microsec_timer() - start_us;
 
     // make the direction of sound arrival angle available to the led_thread
-    doa.angle = angle;
-    __sync_synchronize();
-    doa.angle_frame_cnt = frame_cnt;
+    if (!discard) {
+        doa.angle = angle;
+        __sync_synchronize();
+        doa.angle_frame_cnt = frame_cnt;
+    }
 
     // debug prints results of sound direction analysis
     if (1) {
         double tnow = FRAME_CNT_TO_TIME(frame_cnt);
-        dbgpr("%8.3f: ANALYZE SOUND - intvl=%0.3f ... %0.3f - analysis_dur_us = %lld\n", 
-              FRAME_CNT_TO_TIME(frame_cnt), tnow-(DURATION_MS/1000.), tnow, analysis_dur_us);
+        char *prefix_str = (discard ? "DISCARD  " : "");
+        dbgpr("%s%8.3f: ANALYZE SOUND - intvl=%0.3f ... %0.3f - analysis_dur_us = %lld\n", 
+              prefix_str,
+              FRAME_CNT_TO_TIME(frame_cnt), 
+              tnow-(DURATION_MS/1000.), 
+              tnow, 
+              analysis_dur_us);
         for (int i = -N; i <= N; i++) {
             char s1[100], s2[100];
-            dbgpr("%3d: %5.1f %-30s - %5.1f %-30s\n",
+            dbgpr("%s%3d: %5.1f %-30s - %5.1f %-30s\n",
+                   prefix_str,
                    i,
                    cca[i+N], stars(cca[i+N], max_cca, 30, s1),
                    ccb[i+N],  stars(ccb[i+N], max_ccb, 30, s2));
         }
-        dbgpr("       LARGEST AT %-10.3f                 LARGEST AT %-10.3f\n", cca_x, ccb_x);
-        dbgpr("       SOUND ANGLE = %0.1f degs *****\n", angle);
+        dbgpr("%s       LARGEST AT %-10.3f                 LARGEST AT %-10.3f\n", 
+              prefix_str,
+              cca_x, ccb_x);
+        dbgpr("%s       SOUND ANGLE = %0.1f degs *****\n", 
+              prefix_str,
+              angle);
     }
 }
 
@@ -734,9 +759,9 @@ static FILE *fp_dbgpr;
 static int dbgpr_init(void)
 {
     // open dbgpr logfile, and set linebuffered
-    fp_dbgpr = fopen("analyze.log", "w");
+    fp_dbgpr = fopen("doa.log", "w");
     if (fp_dbgpr == NULL) {
-        printf("ERROR: open analyze.log, %s\n", strerror(errno));
+        printf("ERROR: open doa.log, %s\n", strerror(errno));
         return -1;
     }
     setlinebuf(fp_dbgpr);
