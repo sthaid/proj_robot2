@@ -1,0 +1,15 @@
+HNDLR rotate
+DEFAULT_ARG1 360
+DEFAULT_ARG2 clockwise
+DEFINE AMOUNT    <(NUMBER degrees)  (halfway around)  (all [of] the way around)>
+DEFINE DIRECTION <clockwise  counter-clockwise counterclockwise>
+<rotate turn> 1:[AMOUNT] 2:[DIRECTION]
+<rotate turn> 2:[DIRECTION] 1:[AMOUNT]
+END
+
+HNDLR test
+DEFAULT_ARG1 none
+#test 1:WORD
+#test 1:[WORD] 2:[WORD] 3:[WORD] 4:[WORD]
+test 1:([WORD] [WORD] [WORD] [WORD] [WORD] [WORD])
+END

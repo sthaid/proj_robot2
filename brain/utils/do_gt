@@ -1,0 +1,11 @@
+
+gcc -Wall -g -O2 -I. grammar_test.c grammar.c misc.c -lm -o gt
+
+if [ $? -ne 0 ]; then
+  echo ABORT
+  exit
+fi
+
+./gt
+
+rm gt
