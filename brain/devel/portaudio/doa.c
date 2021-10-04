@@ -448,7 +448,7 @@ static void *get_data_from_file_thread2(void *cx)
 
 // -----------------  PROCESS 4 CHANNEL AUDIO DATA --------------------------
 
-#if 0
+#if 1
 //      Cross correlate data for mics:
 //      - AX and AY
 //      - BX and BY

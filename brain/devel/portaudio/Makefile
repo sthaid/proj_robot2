@@ -1,7 +1,7 @@
 # reference:
 # https://stackoverflow.com/questions/3220277/what-do-the-makefile-symbols-and-mean
 
-TARGETS = gen devs record plot filters analyze
+TARGETS = gen devs record plot filters doa
 
 ARCH := $(shell arch)
 
@@ -27,10 +27,10 @@ filters: filters.c pa_utils.c sf_utils.c util/util_sdl.c util/util_misc.c util/u
             -o $@ 
 
 ifeq ($(ARCH),armv7l)
-analyze: analyze.c sf_utils.c pa_utils.c poly_fit.c apa102.c 
+doa: doa.c sf_utils.c pa_utils.c poly_fit.c apa102.c 
 	gcc -g -Wall -O2 -I. -DRASPBERRY_PI $^ -lsndfile -lportaudio -lwiringPi -lpthread -lm -o $@ 
 else
-analyze: analyze.c sf_utils.c pa_utils.c poly_fit.c
+doa: doa.c sf_utils.c pa_utils.c poly_fit.c
 	gcc -g -Wall -Wno-unused-function -O2 -I. -DLINUX $^ -lsndfile -lportaudio -lpthread -lm -o $@ 
 endif
 
