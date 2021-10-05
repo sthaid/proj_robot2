@@ -28,7 +28,8 @@ void proc_cmd_init(void)
 
 // -----------------  RUNTIME API  ------------------------------------------
 
-void proc_cmd_execute(char *transcript)
+// xxx doa is tbd
+void proc_cmd_execute(char *transcript, double doa)
 {
     cmd = transcript;
 }

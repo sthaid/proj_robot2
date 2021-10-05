@@ -61,8 +61,17 @@ void misc_init(void);
 
 uint64_t microsec_timer(void);
 char *time2str(time_t t, char *s);
+
 unsigned int wavelen_to_rgb(double wavelength);
+
 void run_program(pid_t *prog_pid, int *fd_to_prog, int *fd_from_prog, char *prog, ...);
+
+void poly_fit(int max_data, double *x_data, double *y_data, int degree_of_poly, double *coefficients);
+
+double normalize_angle(double angle);
+double max_doubles(double *x, int n, int *max_idx);
+double min_doubles(double *x, int n, int *min_idx);
+char *stars(double v, double max_v, int max_stars, char *s);
 
 // -------- pa.c --------
 
@@ -140,6 +149,7 @@ int wwd_feed(short sound_val);
 void doa_init(void);
 
 void doa_feed(const float * frame);
+double doa_get(void);
 
 // -------- s2t.c --------
 

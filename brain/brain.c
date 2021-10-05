@@ -6,7 +6,8 @@ static bool prog_terminating;
 // prototypes
 static void sig_hndlr(int sig);
 static int recv_mic_data(const void *frame_arg, void *cx);
-static void set_leds(unsigned int color, int brightness);
+static void set_leds(unsigned int color, int brightness, double doa);
+static void convert_angle_to_led_num(double angle, int *led_a, int *led_b);
 
 // -----------------  MAIN  ------------------------------------------------------
 
@@ -35,7 +36,7 @@ int main(int argc, char **argv)
     proc_cmd_init();  // this calls grammar_init
 
     // set leds blue
-    set_leds(LED_BLUE, 50);
+    set_leds(LED_BLUE, 50, -1);
 
     // call portaudio util to start acquiring mic data;
     // - recv_mic_data callback will be called repeatedly with the mic data;
@@ -54,7 +55,7 @@ int main(int argc, char **argv)
 
     // program is terminating
     INFO("TERMINATING\n")
-    set_leds(LED_OFF, 0);
+    set_leds(LED_OFF, 0, -1);
     return 0;
 }
 
@@ -73,8 +74,10 @@ static int recv_mic_data(const void *frame_arg, void *cx)
     #define STATE_PROCESSING_CMD         2
     #define STATE_DONE_WITH_CMD          3
 
-    static int   state = STATE_WAITING_FOR_WAKE_WORD;
     const float *frame = frame_arg;
+
+    static int    state = STATE_WAITING_FOR_WAKE_WORD;
+    static double doa;
 
     // check if this program is terminating
     if (prog_terminating) {
@@ -100,7 +103,8 @@ static int recv_mic_data(const void *frame_arg, void *cx)
         if (wwd_feed(sound_val) == WW_KEYWORD) {
             state = STATE_RECEIVING_CMD;
             // XXX get doa
-            set_leds(LED_WHITE, 100);
+            doa = doa_get();
+            set_leds(LED_WHITE, 100, doa);
         }
         break; }
     case STATE_RECEIVING_CMD: {
@@ -112,7 +116,7 @@ static int recv_mic_data(const void *frame_arg, void *cx)
                 state = STATE_DONE_WITH_CMD;
                 break;
             }
-            proc_cmd_execute(transcript);
+            proc_cmd_execute(transcript, doa);
             state = STATE_PROCESSING_CMD;
         }
         break; }
@@ -126,8 +130,9 @@ static int recv_mic_data(const void *frame_arg, void *cx)
             proc_cmd_cancel();
         }
         break; }
-    case STATE_DONE_WITH_CMD: { // xxx is this state needed
-        set_leds(LED_BLUE, 50);
+    case STATE_DONE_WITH_CMD: {
+        doa = -1;
+        set_leds(LED_BLUE, 50, -1);
         state = STATE_WAITING_FOR_WAKE_WORD;
         break; }
     }
@@ -138,8 +143,47 @@ static int recv_mic_data(const void *frame_arg, void *cx)
 
 // -----------------  XXXXXXXXXXXX  ----------------------------------------------
 
-static void set_leds(unsigned int color, int brightness)
+static void set_leds(unsigned int color, int led_brightness, double doa)
 {
-    leds_set_all(color, brightness);
-    leds_show(color == LED_OFF ? 0 : 31);
+    // xxx use leds_stage_xxx
+    //         leds_commit
+
+    int all_brightness = (color == LED_OFF ? 0 : 31);
+    int led_a, led_b;
+
+    leds_set_all(color, led_brightness);
+
+    if (doa != -1) {
+        convert_angle_to_led_num(doa, &led_a, &led_b);
+        if (led_a != -1) leds_set(led_a, LED_LIGHT_BLUE, led_brightness);
+        if (led_b != -1) leds_set(led_b, LED_LIGHT_BLUE, led_brightness);
+    }
+
+    leds_show(all_brightness);
 }
+
+static void convert_angle_to_led_num(double angle, int *led_a, int *led_b)
+{
+    #define MAX_LEDS 12
+    // this ifdef selects between returning one or two led_nums to
+    // represent the angle
+#if 0
+    *led_a = nearbyint( normalize_angle(angle) / (360/MAX_LEDS) );
+    if (*led_a == 12) *led_a = 0;
+    *led_b = -1;
+#else
+    int tmp = nearbyint( normalize_angle(angle) / (360/(2*MAX_LEDS)) );
+
+    if ((tmp & 1) == 0) {
+        *led_a = tmp/2;
+        *led_b = -1;
+    } else {
+        *led_a = tmp/2;
+        *led_b = *led_a + 1;
+    }
+
+    if (*led_a == MAX_LEDS) *led_a = 0;
+    if (*led_b == MAX_LEDS) *led_b = 0;
+#endif
+}
+

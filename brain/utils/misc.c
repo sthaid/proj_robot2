@@ -1,13 +1,13 @@
 #include <utils.h>
   
-// ----------------------------------------------------------------------
+// -----------------  INIT  ---------------------------------------------
 
 void misc_init(void)
 {
-    // nothing needed yet
+    // nothing needed
 }
 
-// ----------------------------------------------------------------------
+// -----------------  TIME  ---------------------------------------------
 
 uint64_t microsec_timer(void)
 {
@@ -28,6 +28,8 @@ char *time2str(time_t t, char *s)
 
     return s;
 }
+
+// -----------------  WAVELEN TO RGB  -----------------------------------
 
 // ported from http://www.noah.org/wiki/Wavelength_to_RGB_in_Python
 unsigned int wavelen_to_rgb(double wavelength)
@@ -77,7 +79,8 @@ unsigned int wavelen_to_rgb(double wavelength)
            ((int)nearbyint(B*255) << 16);
 }
 
-// run program using fork and exec
+// -----------------  RUN PROGRAM USING FORK AND EXEC  ------------------
+
 void run_program(pid_t *prog_pid, int *fd_to_prog, int *fd_from_prog, char *prog, ...)
 {
     char *args[100];
@@ -140,4 +143,175 @@ void run_program(pid_t *prog_pid, int *fd_to_prog, int *fd_from_prog, char *prog
         *fd_from_prog = pipe_from_child[0];
         *prog_pid = pid;
     }
+}
+
+// -----------------  POLYNOMIAL FITTING  -------------------------------
+
+// ported from:  https://www.bragitoff.com/2018/06/polynomial-fitting-c-program/
+
+static void gaussEliminationLS(int m, int n, double a[m][n], double x[n - 1]);
+static void printMatrix(int m, int n, double matrix[m][n])  __attribute__((unused));
+
+void poly_fit(int max_data, double *x_data, double *y_data, int degree_of_poly, double *coefficients)
+{
+    int     N = max_data;
+    double *x = x_data;
+    double *y = y_data;
+    int     n = degree_of_poly;
+    int     i, j;
+
+    // an array of size 2*n+1 for storing N, Sig xi, Sig xi^2, ...., etc. 
+    // which are the independent components of the normal matrix
+    double X[2 * n + 1];
+    for (i = 0; i <= 2 * n; i++) {
+	X[i] = 0;
+	for (j = 0; j < N; j++) {
+	    X[i] = X[i] + pow(x[j], i);
+	}
+    }
+
+    // the normal augmented matrix
+    double B[n + 1][n + 2];
+
+    // rhs
+    double Y[n + 1];
+    for (i = 0; i <= n; i++) {
+	Y[i] = 0;
+	for (j = 0; j < N; j++) {
+	    Y[i] = Y[i] + pow(x[j], i) * y[j];
+	}
+    }
+    for (i = 0; i <= n; i++) {
+	for (j = 0; j <= n; j++) {
+	    B[i][j] = X[i + j];
+	}
+    }
+    for (i = 0; i <= n; i++) {
+	B[i][n + 1] = Y[i];
+    }
+
+    //printMatrix(n + 1, n + 2, B);
+    gaussEliminationLS(n + 1, n + 2, B, coefficients);
+}
+
+// Function that performs Gauss-Elimination and returns the Upper triangular 
+// matrix and solution of equations:
+// 
+// There are two options to do this in C.
+// 1. Pass the augmented matrix (a) as the parameter, and calculate and store the 
+//    upperTriangular(Gauss-Eliminated Matrix) in it.
+// 2. Use malloc and make the function of pointer type and return the pointer.
+//
+// This program uses the first option.
+static void gaussEliminationLS(int m, int n, double a[m][n], double x[n - 1])
+{
+    int i, j, k;
+    for (i = 0; i < m - 1; i++) {
+	//Partial Pivoting
+	for (k = i + 1; k < m; k++) {
+	    //If diagonal element(absolute vallue) is smaller than any of the terms below it
+	    if (fabs(a[i][i]) < fabs(a[k][i])) {
+		//Swap the rows
+		for (j = 0; j < n; j++) {
+		    double temp;
+		    temp = a[i][j];
+		    a[i][j] = a[k][j];
+		    a[k][j] = temp;
+		}
+	    }
+	}
+	//Begin Gauss Elimination
+	for (k = i + 1; k < m; k++) {
+	    double term = a[k][i] / a[i][i];
+	    for (j = 0; j < n; j++) {
+		a[k][j] = a[k][j] - term * a[i][j];
+	    }
+	}
+
+    }
+    //Begin Back-substitution
+    for (i = m - 1; i >= 0; i--) {
+	x[i] = a[i][n - 1];
+	for (j = i + 1; j < n - 1; j++) {
+	    x[i] = x[i] - a[i][j] * x[j];
+	}
+	x[i] = x[i] / a[i][i];
+    }
+}
+
+// Function that prints the elements of a matrix row-wise
+// Parameters: rows(m),columns(n),matrix[m][n] 
+static void printMatrix(int m, int n, double matrix[m][n])
+{
+    int i, j;
+    for (i = 0; i < m; i++) {
+	for (j = 0; j < n; j++) {
+	    printf("%lf\t", matrix[i][j]);
+	}
+	printf("\n");
+    }
+}
+
+// -----------------  GENERAL UTILS  ------------------------------------
+
+double normalize_angle(double angle)
+{
+    if (angle < 0) {
+        while (angle < 0) angle += 360;
+    } else if (angle >= 360) {
+        while (angle >= 360) angle -= 360;
+    }
+    return angle;
+}
+
+double max_doubles(double *x, int n, int *max_idx_arg)
+{
+    double max = x[0];
+    int    max_idx = 0;
+
+    for (int i = 1; i < n; i++) {
+        if (x[i] > max) {
+            max = x[i];
+            max_idx = i;
+        }
+    }
+
+    if (max_idx_arg) {
+        *max_idx_arg = max_idx;
+    }
+
+    return max;
+}
+
+double min_doubles(double *x, int n, int *min_idx_arg)
+{
+    double min = x[0];
+    int    min_idx = 0;
+
+    for (int i = 1; i < n; i++) {
+        if (x[i] < min) {
+            min = x[i];
+            min_idx = i;
+        }
+    }
+
+    if (min_idx_arg) {
+        *min_idx_arg = min_idx;
+    }
+
+    return min;
+}
+
+char *stars(double v, double max_v, int max_stars, char *s)
+{
+    int n;
+
+    if (v < 0) v = 0;
+    if (v > max_v) v = max_v;
+
+    n = nearbyint(v / max_v * max_stars);
+    memset(s, '*', n);
+    s[n] = '\0';
+
+    return s;
 }
