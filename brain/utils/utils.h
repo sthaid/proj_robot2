@@ -137,8 +137,8 @@ void t2s_play_text(char *text);
 
 // -------- wwd.c --------
 
-#define WW_KEYWORD  0
-#define WW_TERMINATE 1
+#define WW_KEYWORD_MASK    7
+#define WW_TERMINATE_MASK  8
 
 void wwd_init(void);
 

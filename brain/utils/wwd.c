@@ -14,15 +14,16 @@
 #define MODEL_PATH    "./devel/repos/Porcupine/lib/common/porcupine_params.pv"
 #define INPUT_DEVICE  "seeed-4mic-voicecard"
 
-// xxx check this list
 static const char *keyword_paths[] = {
     "./devel/repos/Porcupine/resources/keyword_files/raspberry-pi/picovoice_raspberry-pi.ppn",
-    //"./devel/repos/Porcupine/resources/keyword_files/raspberry-pi/porcupine_raspberry-pi.ppn",
-    //"./devel/repos/Porcupine/resources/keyword_files/raspberry-pi/computer_raspberry-pi.ppn",
+    "./devel/repos/Porcupine/resources/keyword_files/raspberry-pi/porcupine_raspberry-pi.ppn",
+    "./devel/repos/Porcupine/resources/keyword_files/raspberry-pi/computer_raspberry-pi.ppn",
     "./devel/repos/Porcupine/resources/keyword_files/raspberry-pi/terminator_raspberry-pi.ppn",
             };
-static const float sensitivities[] = {
-    0.8,  // xxx what is this?
+static const float sensitivities[] = { // xxx what is this?
+    0.8,
+    0.8,
+    0.8,
     0.8,
             };
 
@@ -104,8 +105,8 @@ static void porcupine_lib_init(void)
 
 // -----------------  FEED DATA TO WWD  ---------------------------------
 
-// returns -1:      no wake word detected
-//         keyword: which wake word was detected
+// returns 0 : no keyworddetected
+//         1<<keyword : indication of which keyword was detected
 int wwd_feed(short sound_val)
 {
     pv_status_t  pvrc;
@@ -114,20 +115,18 @@ int wwd_feed(short sound_val)
     static short sd[FRAME_LENGTH];
     static int   max_sd;
 
-    // xxx name sd and max_sd
     sd[max_sd++] = sound_val;
     if (max_sd < FRAME_LENGTH) {
-        return -1;
+        return 0;
     }
 
     max_sd = 0;
 
-    //INFO("feed %d\n", sound_val);
     pvrc = pv_porcupine_process_func(porcupine, sd, &keyword);
     if (pvrc != PV_STATUS_SUCCESS) {
         FATAL("pv_porcupine_process, %s\n", pv_status_to_string_func(pvrc));
     }
     if (keyword != -1) INFO("XXX GOT KEYWORD %d\n", keyword);
 
-    return keyword;
+    return (keyword == -1 ? 0 : (1 << keyword));
 }

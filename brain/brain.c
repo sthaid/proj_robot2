@@ -100,7 +100,7 @@ static int recv_mic_data(const void *frame_arg, void *cx)
 
     switch (state) {
     case STATE_WAITING_FOR_WAKE_WORD: {
-        if (wwd_feed(sound_val) == WW_KEYWORD) {
+        if (wwd_feed(sound_val) & WW_KEYWORD_MASK) {
             state = STATE_RECEIVING_CMD;
             // XXX get doa
             doa = doa_get();
@@ -125,7 +125,7 @@ static int recv_mic_data(const void *frame_arg, void *cx)
             state = STATE_DONE_WITH_CMD;
             break;
         }
-        if (wwd_feed(sound_val) == WW_TERMINATE) {
+        if (wwd_feed(sound_val) & WW_TERMINATE_MASK) {
             INFO("CANCELLING\n");
             proc_cmd_cancel();
         }
@@ -169,7 +169,7 @@ static void convert_angle_to_led_num(double angle, int *led_a, int *led_b)
     // represent the angle
 #if 0
     *led_a = nearbyint( normalize_angle(angle) / (360/MAX_LEDS) );
-    if (*led_a == 12) *led_a = 0;
+    if (*led_a == MAX_LEDS) *led_a = 0;
     *led_b = -1;
 #else
     int tmp = nearbyint( normalize_angle(angle) / (360/(2*MAX_LEDS)) );

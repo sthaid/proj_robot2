@@ -117,7 +117,7 @@ static void *s2t_thread(void *cx)
 
             // timeout if there is not a result from livecaption in 10 secs
             // xxx make this an arg
-            if (microsec_timer() - start_time > 10000000) {
+            if (microsec_timer() - start_time > 1000000) {//xxx temp
                 WARN("timedout waiting for transcript from livecaption\n");
                 break;
             }
