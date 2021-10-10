@@ -13,18 +13,18 @@ void t2s_init(void)
 void t2s_play(char *fmt, ...)
 {
     int rc;
-    char cmd[10100];
-    char text[10000];  // xxx dont need this , just vsprintf to cmd
+    char cmd[10000], *p=cmd;
     va_list ap;
 
-    // vsprintf to text
+    // make cmd string to run go pgm synthesize_text
+    p += sprintf(p, "./go/synthesize_text --text \"");
     va_start(ap, fmt);
-    vsprintf(text, fmt, ap);
+    p += vsprintf(p, fmt, ap);
     va_end(ap);
+    p += sprintf(p, "\"");
 
     // run synthesize_text to convert text to wav file;
-    INFO("RUN_PROG synthesize_text, '%s'\n", text);
-    sprintf(cmd, "./go/synthesize_text --text \"%s\"", text);
+    INFO("RUN_PROG '%s'\n", cmd);
     rc = system(cmd);
     if (rc < 0) {
         ERROR("system(synthesize_text)) failed, rc=%d, %s\n", rc, strerror(errno));
