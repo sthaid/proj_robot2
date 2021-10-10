@@ -44,7 +44,7 @@ void t2s_init(void)
 
     t2s_set_volume(DEFAULT_VOLUME, false);
 
-    for (i = MAX_BEEP_DATA/2; i < MAX_BEEP_DATA; i++) {
+    for (i = MAX_BEEP_DATA/4; i < MAX_BEEP_DATA*3/4; i++) {
         beep.data[i] = BEEP_AMPLITUDE * sin(i * (2*M_PI / MAX_BEEP_DATA * BEEP_FREQUENCY));
     }
 }
