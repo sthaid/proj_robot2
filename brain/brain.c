@@ -1,9 +1,15 @@
 #include <common.h>
 
+//
 // variables
+//
+
 static bool prog_terminating;
 
+//
 // prototypes
+//
+
 static void sig_hndlr(int sig);
 static int recv_mic_data(const void *frame_arg, void *cx);
 static void set_leds(unsigned int color, int brightness, double doa);
@@ -102,7 +108,6 @@ static int recv_mic_data(const void *frame_arg, void *cx)
     case STATE_WAITING_FOR_WAKE_WORD: {
         if (wwd_feed(sound_val) & WW_KEYWORD_MASK) {
             state = STATE_RECEIVING_CMD;
-            // XXX get doa
             doa = doa_get();
             set_leds(LED_WHITE, 100, doa);
         }
@@ -111,7 +116,6 @@ static int recv_mic_data(const void *frame_arg, void *cx)
         char *transcript = s2t_feed(sound_val);
         if (transcript) {
             if (strcmp(transcript, "TIMEDOUT") == 0) {
-                INFO("XXX transcript timedout\n");
                 free(transcript);
                 state = STATE_DONE_WITH_CMD;
                 break;
@@ -145,26 +149,22 @@ static int recv_mic_data(const void *frame_arg, void *cx)
 
 static void set_leds(unsigned int color, int led_brightness, double doa)
 {
-    // xxx use leds_stage_xxx
-    //         leds_commit
-
-    int all_brightness = (color == LED_OFF ? 0 : 31);
-    int led_a, led_b;
-
-    leds_set_all(color, led_brightness);
+    leds_stage_all(color, led_brightness);
 
     if (doa != -1) {
+        int led_a, led_b;
         convert_angle_to_led_num(doa, &led_a, &led_b);
-        if (led_a != -1) leds_set(led_a, LED_LIGHT_BLUE, led_brightness);
-        if (led_b != -1) leds_set(led_b, LED_LIGHT_BLUE, led_brightness);
+        if (led_a != -1) leds_stage_led(led_a, LED_LIGHT_BLUE, led_brightness);
+        if (led_b != -1) leds_stage_led(led_b, LED_LIGHT_BLUE, led_brightness);
     }
 
-    leds_show(all_brightness);
+    leds_commit();
 }
 
 static void convert_angle_to_led_num(double angle, int *led_a, int *led_b)
 {
     #define MAX_LEDS 12
+
     // this ifdef selects between returning one or two led_nums to
     // represent the angle
 #if 0
