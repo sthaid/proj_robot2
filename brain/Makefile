@@ -1,6 +1,6 @@
 CC       = gcc
 CFLAGS   = -g -O2 -Wall -I. -Iutils -Idevel/repos/Porcupine/include
-LDFLAGS  =  -lpthread -lportaudio -lm -ldl
+LDFLAGS  =  -lpthread -lportaudio -lm -ldl -lwiringPi
 
 TARGET   = brain
 SOURCES  = brain.c proc_cmd.c \

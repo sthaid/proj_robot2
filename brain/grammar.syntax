@@ -1,15 +1,29 @@
+HNDLR volume
+0:<increase decrease> volume [by] [1:PERCENT]
+volume 0:<increase decrease up down> [by] [1:PERCENT]
+0:set volume [to] 1:PERCENT
+0:reset volume
+0:<get query> volume
+0:what is <the your> volume
+END
+
+HNDLR sleep
+sleep 0:NUMBER
+
+EXIT
+
 HNDLR rotate
 DEFAULT_ARG1 360
 DEFAULT_ARG2 clockwise
 DEFINE AMOUNT    <(NUMBER degrees)  (halfway around)  (all [of] the way around)>
 DEFINE DIRECTION <clockwise  counter-clockwise counterclockwise>
-<rotate turn> 1:[AMOUNT] 2:[DIRECTION]
-<rotate turn> 2:[DIRECTION] 1:[AMOUNT]
+<rotate turn> 0:[AMOUNT] 1:[DIRECTION]
+<rotate turn> 1:[DIRECTION] 0:[AMOUNT]
 END
 
 HNDLR test
 DEFAULT_ARG1 none
-#test 1:WORD
-#test 1:[WORD] 2:[WORD] 3:[WORD] 4:[WORD]
-test 1:([WORD] [WORD] [WORD] [WORD] [WORD] [WORD])
+#test 0:WORD
+#test 0:[WORD] 1:[WORD] 2:[WORD] 3:[WORD]
+test 0:([WORD] [WORD] [WORD] [WORD] [WORD] [WORD])
 END
