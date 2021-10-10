@@ -1,0 +1,16 @@
+HNDLR rotate
+DEFINE AMOUNT    <(NUMBER degrees)  (half way around)  (all [of] the way around)>
+DEFINE DIRECTION <cw  ccw>
+<rotate turn> [0:AMOUNT] [1:DIRECTION]
+<rotate turn> [1:DIRECTION] [0:AMOUNT]
+END
+
+HNDLR test
+test1 [next] 0:[<opt1 opt2 (opt 3 and 4)>] 1:[eol]
+test2 next
+test3 0:next
+END
+
+HNDLR name
+my name is 0:WORD 1:WORD eol
+END

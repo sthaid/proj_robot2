@@ -4,7 +4,6 @@
 
 typedef struct {
     hndlr_t  proc;
-    char   * default_args[10];
     char   * syntax;
 } grammar_t;
 
@@ -19,8 +18,6 @@ static int check_syntax(char *s);
 static hndlr_t lookup_hndlr(char *name, hndlr_lookup_t *hlu);
 
 // xxx should this be fatal 
-// xxx add audio cmd to terminate  pgm
-// xxx add audio cmd to read this again
 int grammar_init(char *filename, hndlr_lookup_t *hlu)
 {
     #define MAX_DEF 100
@@ -33,24 +30,18 @@ int grammar_init(char *filename, hndlr_lookup_t *hlu)
     FILE    *fp;
     int      max_def_save;
     hndlr_t  proc;
-    char    *default_args[10];
     char     s[10000];
-    int      n;
     def_t    def[MAX_DEF];
     int      max_def;
     int      line_num;
 
-    // xxx memory leaks
-    // - def[]/name,value should be freed
-    // - if called multiple times, grammar should be freed
+    // xxx memory leaks in here
 
     // init 
     fp = NULL;
     max_def_save = 0;
     proc = NULL;
-    memset(default_args, 0, sizeof(default_args));
     memset(s, 0, sizeof(s));
-    n = 0;
     memset(def, 0, sizeof(def));
     max_def = 0;
     line_num = 0;
@@ -79,7 +70,7 @@ int grammar_init(char *filename, hndlr_lookup_t *hlu)
             continue;
         }
 
-        // DEF line
+        // DEFINE line
         if (strncmp(s, "DEFINE ", 7) == 0) {
             char *name, *value="", *p;
             name = s+7;
@@ -102,23 +93,14 @@ int grammar_init(char *filename, hndlr_lookup_t *hlu)
                 goto error;
             }
             max_def_save = max_def;
-            default_args[0] = strdup(s+6);
             proc = lookup_hndlr(s+6, hlu);
             if (proc == NULL) {
                 ERROR("line %d: '%s'\n", line_num, s);
                 goto error;
             }
 
-        // DEFAULT_ARGn line
-        } else if (sscanf(s, "DEFAULT_ARG%d ", &n) == 1) {
-            if (n < 1 || n > 9 || proc == NULL) {
-                ERROR("line %d: '%s'\n", line_num, s);
-                goto error;
-            }
-            default_args[n] = strdup(s+13);
-
         // END line
-        } else if (strncmp(s, "END", 3) == 0) {
+        } else if (strcmp(s, "END") == 0) {
             if (proc == NULL) {
                 ERROR("line %d: '%s'\n", line_num, s);
                 goto error;
@@ -126,7 +108,10 @@ int grammar_init(char *filename, hndlr_lookup_t *hlu)
 
             max_def = max_def_save;
             proc = NULL;
-            memset(default_args, 0, sizeof(default_args));
+
+        // EXIT line
+        } else if (strcmp(s, "EXIT") == 0) {
+            break;
 
         // grammar syntax line
         } else {
@@ -155,7 +140,6 @@ int grammar_init(char *filename, hndlr_lookup_t *hlu)
 
             grammar_t *g = &grammar[max_grammar++];
             g->proc = proc;
-            memcpy(g->default_args, default_args, sizeof(g->default_args));
             g->syntax = strdup(s);
         }
     }
@@ -266,32 +250,29 @@ bool grammar_match(char *cmd_arg, hndlr_t *proc, args_t args)
     int i, j, match_len,cmd_len;
     char cmd[1000];
 
+    // preset return proc to NULL
     *proc = NULL;
 
+    // make a copy of cmd because cmd is sanitized and converted to lower case hee
     strcpy(cmd, cmd_arg);
     sanitize(cmd);
-    // xxx 
     for (i = 0; cmd[i]; i++) cmd[i] = tolower(cmd[i]);
     cmd_len = strlen(cmd);
-    //xxx INFO("grammar_match called for '%s'\n", cmd);
 
+    // loop over grammar table to find a match;
+    // if match found return the handler proc to caller
     for (i = 0; i < max_grammar; i++) {
         grammar_t *g = &grammar[i];
 
         for (j = 0; j < 10; j++) args[j][0] = '\0';
-
         if ((match_len = match(g->syntax, cmd, args)) && match_len == cmd_len) {
             *proc = g->proc;
-            for (j = 0; j < 10; j++) {
-                if (args[j][0] == '\0' && g->default_args[j] != NULL) {
-                    strcpy(args[j], g->default_args[j]);
-                }
-            }
             return true;
         }
     }
 
-    // xxx clear args here too
+    // clear args and return no-match
+    for (j = 0; j < 10; j++) args[j][0] = '\0';
     return false;
 }
 
@@ -299,24 +280,25 @@ static int match(char *syntax, char *cmd, args_t args)
 {
     char token[1000];
     int token_len, match_len;
+    int total_match_len, is_arg;
 
     // loop over the syntax tokens
-    int total_match_len = 0;
+    total_match_len = 0;
     while (true) {
         // get the next token
         get_token(syntax, token, &token_len);
 
-        // process token: N:token
-        if (token[0] >= '1' && token[0] <= '9' && token[1] == ':') {
-            int n = token[0] - '0';
-            match_len = match(token+2, cmd, args);
-            if (match_len) {
-                memcpy(args[n], cmd, match_len);
-                args[n][match_len] = '\0';
-            }
+        // xxx comment
+        is_arg = -1;
+        if (token[0] >= '0' && token[0] <= '9' && token[1] == ':') {
+            is_arg = token[0] - '0';
+            memmove(token, token+2, token_len+1);
+            token_len -= 2;
+            syntax += 2;
+        }
 
         // match on the first token in a list: <token token token ...>  
-        } else if (token[0] == '<') {
+        if (token[0] == '<') {
             token[token_len-1] = '\0';
             char *txx = token+1;
             while (true) {
@@ -346,7 +328,7 @@ static int match(char *syntax, char *cmd, args_t args)
                 return 0;
             }
 
-        // match a word or NUMBER
+        // match a word or number or percent
         } else {
             // put a temporary '\0' at the end of the first word of cmd
             char *p = cmd, save;
@@ -363,6 +345,12 @@ static int match(char *syntax, char *cmd, args_t args)
                     *p = save;
                     return 0;
                 }
+            } else if (strcmp(token, "PERCENT") == 0) {
+                double tmp;
+                if (sscanf(cmd, "%lf%%", &tmp) != 1) {
+                    *p = save;
+                    return 0;
+                }
             } else if (strcmp(token, "WORD") == 0) {
                 // match any word
             } else {
@@ -372,9 +360,15 @@ static int match(char *syntax, char *cmd, args_t args)
                 }
             }
 
-            // match okay, return match_len is the length of the first word of cmd
+            // match okay, match_len is the length of the first word of cmd
             match_len = p - cmd;
             *p = save;
+        }
+
+        // xxx
+        if (is_arg != -1) {
+            memcpy(args[is_arg], cmd, match_len);
+            args[is_arg][match_len] = '\0';
         }
 
         // keep track of the total_macth_len
