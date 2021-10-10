@@ -1,0 +1,12 @@
+#!/bin/bash
+
+gcc -Wall -g -O2 -I.. leds_test.c ../leds.c ../misc.c -lm -lwiringPi -o lt
+
+if [ $? -ne 0 ]; then
+  echo ABORT
+  exit
+fi
+
+./lt
+
+rm lt
