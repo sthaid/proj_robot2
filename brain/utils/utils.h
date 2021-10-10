@@ -137,6 +137,7 @@ void leds_commit(void);
 void t2s_init(void);
 
 void t2s_play(char *fmt, ...) __attribute__((format(printf, 1, 2)));
+void t2s_beep(int n);
 void t2s_set_volume(int percent, bool relative);
 int t2s_get_volume(void);
 
@@ -153,7 +154,7 @@ int wwd_feed(short sound_val);
 
 void doa_init(void);
 
-void doa_feed(const float * frame);
+void doa_feed(const float * frame);  // xxx try using short
 double doa_get(void);
 
 // -------- s2t.c --------
@@ -161,11 +162,10 @@ double doa_get(void);
 void s2t_init(void);
 char * s2t_feed(short sound_val);
 
-
 // -------- grammar.c --------
 
 typedef char args_t[10][1000];
-typedef int (*hndlr_t)(args_t args);
+typedef void (*hndlr_t)(args_t args);
 
 typedef struct {
     char *name;
@@ -174,4 +174,11 @@ typedef struct {
 
 int grammar_init(char *filename, hndlr_lookup_t *hlu);
 bool grammar_match(char *cmd, hndlr_t *proc, args_t args);
+
+// -------- sf.c --------
+
+void sf_init(void);
+
+int sf_write_wav_file(char *filename, short *data, int max_chan, int max_data, int sample_rate);
+int sf_read_wav_file(char *filename, short **data, int *max_chan, int *max_data, int *sample_rate);
 

@@ -1,6 +1,6 @@
 #include <utils.h>
 
-#include <portaudio.h>
+#include <portaudio.h>  // xxx review includes
 
 #define SIZEOF_SAMPLE_FORMAT(sf) \
     ((sf) == PA_FLOAT32  ? 4 : \

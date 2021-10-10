@@ -1,5 +1,7 @@
 #include <utils.h>
 
+bool end_program;
+
 void proc_cmd_init(void);
 void proc_cmd_exit(void);
 

@@ -19,12 +19,18 @@ static bool strmatch(char *s, ...);  // xxx utils
 // handlers
 //
 
-static int hndlr_volume(args_t args);
-static int hndlr_sleep(args_t args);
+static void hndlr_set_volume(args_t args);
+static void hndlr_get_volume(args_t args);
+static void hndlr_sleep(args_t args);
+static void hndlr_end_program(args_t args);
+
+#define HNDLR(name) { #name, hndlr_##name }
 
 static hndlr_lookup_t hndlr_lookup_tbl[] = {
-    { "volume", hndlr_volume },
-    { "sleep", hndlr_sleep },
+    HNDLR(set_volume),
+    HNDLR(get_volume),
+    HNDLR(sleep),
+    HNDLR(end_program),
     { NULL, NULL }
                 };
 
@@ -73,8 +79,9 @@ static void *cmd_thread(void *cx)
         INFO("match=%d, args=  '%s'  '%s'  '%s'\n", match, args[0], args[1], args[2]);
         if (match) {
             proc(args);
+            if (cancel) t2s_beep(6);
         } else {
-            t2s_play("Don't grok: %s.", cmd);   // xxx rename to transcript
+            t2s_beep(3);
         }
 
         // done with this cmd
@@ -86,17 +93,12 @@ static void *cmd_thread(void *cx)
     return NULL;
 }
 
-// -----------------  HNDLR - VOLUME  ---------------------------------------
+// -----------------  PROC CMD HANDLERS  ------------------------------------
 
-static int hndlr_volume(args_t args)
+static void hndlr_set_volume(args_t args)
 {
     char *action = args[0];
     char *amount = args[1];
-
-    if (strmatch(action, "get", "query", "what", NULL)) {
-        t2s_play("The volume is %d%%.", t2s_get_volume());
-        return 0;  // xxx how is this ret used
-    }
 
     if (strmatch(action, "up", "increase", NULL)) {
         t2s_set_volume(getnum(amount, DELTA_VOLUME), true);
@@ -108,28 +110,30 @@ static int hndlr_volume(args_t args)
         t2s_set_volume(DEFAULT_VOLUME, false);
     }
     t2s_play("The volume is now %d%%.", t2s_get_volume());
-
-    return 0;
 }
 
-// -----------------  HNDLR - SLEEP  ----------------------------------------
+static void hndlr_get_volume(args_t args)
+{
+    t2s_play("The volume is %d%%.", t2s_get_volume());
+}
 
-static int hndlr_sleep(args_t args)
+static void hndlr_sleep(args_t args)
 {
     int secs = getnum(args[0], 10);
     
     t2s_play("Sleeping for %d seconds.", secs);
 
-    for (int i = 0; i < secs; i++) {
-        sleep(1);
-        if (cancel) {
-            t2s_play("sleep has been cancelled");
-            break;
-        }
+    for (int i = 0; i < 10*secs; i++) {
+        usleep(100000);
+        if (cancel) break;
     }
-
-    return 0;
 }
+
+static void hndlr_end_program(args_t args)
+{
+    end_program = true;
+}
+
 
 // -----------------  SUPPORT  ----------------------------------------------
 

@@ -1,12 +1,6 @@
 #include <common.h>
 
 //
-// variables
-//
-
-static bool prog_terminating;
-
-//
 // prototypes
 //
 
@@ -39,6 +33,7 @@ int main(int argc, char **argv)
     s2t_init();
     doa_init();
     leds_init();
+    sf_init();
     proc_cmd_init();  // this calls grammar_init
 
     // set leds blue
@@ -48,6 +43,7 @@ int main(int argc, char **argv)
     // - recv_mic_data callback will be called repeatedly with the mic data;
     // - pa_record2 blocks until recv_mic_data returns non-zero
     INFO("RUNNING\n");
+    t2s_play("program running");
     rc =  pa_record2("seeed-4mic-voicecard",
                      4,                   // max_chan
                      48000,               // sample_rate
@@ -61,13 +57,14 @@ int main(int argc, char **argv)
 
     // program is terminating
     INFO("TERMINATING\n")
+    t2s_play("program terminating");
     set_leds(LED_OFF, 0, -1);
     return 0;
 }
 
 static void sig_hndlr(int sig)
 {
-    prog_terminating = true;
+    end_program = true;
 }
 
 // -----------------  XXXXXXXXXXXX  ----------------------------------------------
@@ -86,7 +83,7 @@ static int recv_mic_data(const void *frame_arg, void *cx)
     static double doa;
 
     // check if this program is terminating
-    if (prog_terminating) {
+    if (end_program) {
         return -1;
     }
 

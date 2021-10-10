@@ -1,14 +1,24 @@
-HNDLR volume
+HNDLR set_volume
 0:<increase decrease> volume [by] [1:PERCENT]
 volume 0:<increase decrease up down> [by] [1:PERCENT]
 0:set volume [to] 1:PERCENT
 0:reset volume
-0:<get query> volume
-0:what is <the your> volume
+END
+
+HNDLR get_volume
+get volume
+query volume
+what is <the your> volume
 END
 
 HNDLR sleep
 sleep 0:NUMBER
+END
+
+HNDLR end_program
+end program
+END
+
 
 EXIT
 
