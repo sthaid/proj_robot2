@@ -154,7 +154,7 @@ int wwd_feed(short sound_val);
 
 void doa_init(void);
 
-void doa_feed(const float * frame);  // xxx try using short
+void doa_feed(const short * frame);
 double doa_get(void);
 
 // -------- s2t.c --------

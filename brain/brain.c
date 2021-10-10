@@ -47,7 +47,7 @@ int main(int argc, char **argv)
     rc =  pa_record2("seeed-4mic-voicecard",
                      4,                   // max_chan
                      48000,               // sample_rate
-                     PA_FLOAT32,          // 32 bit floating point data
+                     PA_INT16,            // 16 bit signed data
                      recv_mic_data,       // callback
                      NULL,                // cx passed to recv_mic_data
                      0);                  // discard_samples count
@@ -77,7 +77,7 @@ static int recv_mic_data(const void *frame_arg, void *cx)
     #define STATE_PROCESSING_CMD         2
     #define STATE_DONE_WITH_CMD          3
 
-    const float *frame = frame_arg;
+    const short *frame = frame_arg;
 
     static int    state = STATE_WAITING_FOR_WAKE_WORD;
     static double doa;
@@ -87,7 +87,7 @@ static int recv_mic_data(const void *frame_arg, void *cx)
         return -1;
     }
 
-    // supply the frame for doa analysis, frame is 4 float values
+    // supply the frame for doa analysis, frame is 4 shorts
     doa_feed(frame);
 
     // discard 2 out of 3 frames, so the sample rate for the code following is 16000
@@ -97,9 +97,8 @@ static int recv_mic_data(const void *frame_arg, void *cx)
     }
     discard_cnt = 0;
 
-    // the sound value used for the remaining of this routine is 
-    // a single 16 bit signed integer, from mic channel0
-    short sound_val = frame[0] * 32767;
+    // the sound value used for the remaining of this routine is the value from mic chan 0
+    short sound_val = frame[0];
 
     switch (state) {
     case STATE_WAITING_FOR_WAKE_WORD: {

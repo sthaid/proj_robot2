@@ -83,15 +83,16 @@ void doa_init(void)
 
 // -----------------  PROCESS MIC DATA  ------------------------------------------
 
-void doa_feed(const float * frame)
+void doa_feed(const short * frame)
 {
     // increment data_idx, and frame_cnt
     data_idx = (data_idx + 1) % MAX_FRAME;
     frame_cnt++;
 
     // for each mic channel, copy the input frame to data arrays
+    // xxx try to avoid the multiply
     for (int chan = 0; chan < MAX_CHAN; chan++) {
-        DATA(chan,0) = frame[chan];
+        DATA(chan,0) = frame[chan] * (1./32767);
     }
 
     // compute cross correlations for the 2 pairs of mic channels
