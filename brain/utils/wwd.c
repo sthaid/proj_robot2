@@ -15,14 +15,10 @@
 #define INPUT_DEVICE  "seeed-4mic-voicecard"
 
 static const char *keyword_paths[] = {
-    "./devel/repos/Porcupine/resources/keyword_files/raspberry-pi/picovoice_raspberry-pi.ppn",
     "./devel/repos/Porcupine/resources/keyword_files/raspberry-pi/porcupine_raspberry-pi.ppn",
-    "./devel/repos/Porcupine/resources/keyword_files/raspberry-pi/computer_raspberry-pi.ppn",
     "./devel/repos/Porcupine/resources/keyword_files/raspberry-pi/terminator_raspberry-pi.ppn",
             };
 static const float sensitivities[] = { // xxx what is this?
-    0.8,
-    0.8,
     0.8,
     0.8,
             };

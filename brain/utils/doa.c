@@ -5,21 +5,23 @@
 // The deviation of the max cross correlation from center is
 // limitted by the speed of sound, the distance between the mics, and
 // the sample_rate. Using:
-// - distance between mics = 0.061 m
+//
+// Assuming mic pairs used are 0,2 an 
+// - distance between mics = 0.080 m
 // - speed of sond         = 343 m/s
 // - sample rate           = 48000 samples per second
-// time = .061 / 343 = .00018
-// samples = .00018 * 48000 = 8.5
+// time = .080 / 343 = .00023
+// samples = .00023 * 48000 = 11.2
 
+// mic numbers, from info found in picture here:
+// https://wiki.seeedstudio.com/ReSpeaker_4_Mic_Array_for_Raspberry_Pi/
 // ---------------------
-// |1=AY           2=na|
+// |1                 2|
 // |                   |
 // |     RESPEAKER     |
 // |                   |
-// |0=AX/BX        3=BY|
+// |0                 3|
 // ---------------------
-
-// xxxxxxxxxxxxxxxxxxxx
 
 //
 // defines
@@ -29,13 +31,19 @@
 #define MAX_CHAN            4
 
 // mic numbers used to compute cross correlations
+#if 0
 #define CCA_MICX     0
 #define CCA_MICY     1
 #define CCB_MICX     0
 #define CCB_MICY     3
-
-// used to add a fixed offset to the doa result
 #define ANGLE_OFFSET 0
+#else
+#define CCA_MICX     0
+#define CCA_MICY     2
+#define CCB_MICX     1
+#define CCB_MICY     3
+#define ANGLE_OFFSET 45
+#endif
 
 // N is half the number of cross correlations 
 #define N  15
@@ -158,6 +166,10 @@ double doa_get(void)
         ccb_x = (max_ccb_idx <= -N ? -N : N);
     }
 
+    // xxx
+    double xxx;
+    xxx = sqrt(cca_x * cca_x + ccb_x * ccb_x);
+
     // determine the direction of sound arrival angle
     angle = atan2(ccb_x, cca_x) * (180/M_PI);
     angle = normalize_angle(angle + ANGLE_OFFSET);
@@ -186,8 +198,8 @@ double doa_get(void)
         }
         INFO("%s       LARGEST AT %-10.3f                 LARGEST AT %-10.3f\n", 
               prefix_str, cca_x, ccb_x);
-        INFO("%s       DOA = %0.1f degs *****\n", 
-              prefix_str, angle);
+        INFO("%s       DOA = %0.1f degs    XXX = %0.1f\n", 
+              prefix_str, angle, xxx);
     }
 
     // return angle

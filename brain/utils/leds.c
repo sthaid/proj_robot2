@@ -1,6 +1,7 @@
 #include <utils.h>
 
 #include <linux/spi/spidev.h>
+#include <wiringPi.h>
 
 // developed using info from:
 //   brain/devel/repos/4mics_hat/leds.py
@@ -36,6 +37,13 @@ static int tx_buff_size;
 
 void leds_init(void)
 {
+    // this enables Vcc for the Respeaker LEDs
+    if (wiringPiSetupGpio() == -1) {
+        FATAL("wiringPiSetupGpio failed\n");
+    }
+    pinMode (5, OUTPUT);
+    digitalWrite(5, 1);
+
     // open spi device
     fd = open("/dev/spidev0.1", O_RDWR);
     if (fd < 0) {
@@ -58,16 +66,26 @@ void leds_init(void)
     memset(tx, 0, tx_buff_size);
 
     // set leds off, 
-    leds_set_all_off();
-    leds_show(0);
+    leds_stage_all(LED_OFF,0);
+    leds_commit();
 }
 
 // -----------------  XXX  ---------------------------------------------------------------
 
-void leds_set(int num, unsigned int rgb, int led_brightness)
+void leds_stage_led(int num, unsigned int rgb, int led_brightness)
 {
     struct led_s *x = &tx->led[num];
-    double b;
+
+    static double b[101];
+    static bool first_call = true;
+
+    if (first_call) {
+        first_call = false;
+        for (int i = 0; i <= 100; i++) {
+            b[i] = 1e-6 * (i * i * i) + .002;
+            if (b[i] > 1) b[i] = 1;
+        }
+    }
 
     if (num < 0 || num >= MAX_LED) {
         ERROR("invalid arg num=%d\n", num);
@@ -79,35 +97,24 @@ void leds_set(int num, unsigned int rgb, int led_brightness)
         return;
     }
 
-    // xxx comment
-    // xxx optimize
-    if (led_brightness > 0) {
-        b = 1e-6 * (led_brightness * led_brightness * led_brightness) + .002;
-        if (b > 1) b = 1;
+    x->red   = nearbyint(((rgb >>  0) & 0xff) * b[led_brightness]);
+    x->green = nearbyint(((rgb >>  8) & 0xff) * b[led_brightness]);
+    x->blue  = nearbyint(((rgb >> 16) & 0xff) * b[led_brightness]);
+}
+
+void leds_stage_all(unsigned int rgb, int led_brightness)
+{
+    if (rgb == LED_OFF) {
+        memset(tx, 0, tx_buff_size);
     } else {
-        b = 0;
-    }
-    //INFO("num=%d  led_brightness=%d  b=%0.3f\n", num, led_brightness, b);
-
-    x->red   = nearbyint(((rgb >>  0) & 0xff) * b);
-    x->green = nearbyint(((rgb >>  8) & 0xff) * b);
-    x->blue  = nearbyint(((rgb >> 16) & 0xff) * b);
-}
-
-void leds_set_all(unsigned int rgb, int led_brightness)
-{
-    // xxx set the first and replicate the rest
-    for (int num = 0; num < MAX_LED; num++) {
-        leds_set(num, rgb, led_brightness);
+        leds_stage_led(0, rgb, led_brightness);
+        for (int num = 1; num < MAX_LED; num++) {
+            tx->led[num] = tx->led[0];
+        }
     }
 }
 
-void leds_set_all_off(void)
-{
-    memset(tx, 0, tx_buff_size);
-}
-
-void leds_rotate(int mode)
+void leds_stage_rotate(int mode)
 {
     struct led_s x;
 
@@ -128,14 +135,12 @@ void leds_rotate(int mode)
     }
 }
 
-void leds_show(int all_brightness)
+void leds_commit(void)
 {
     int rc;
+    int all_brightness = 31;
 
-    if (all_brightness < 0 || all_brightness > 31) {
-        ERROR("invalid arg all_brightnesss=%d\n", all_brightness);
-        return;
-    }
+// xxx if all off use 0
 
     for (int num = 0; num < MAX_LED; num++) {
         struct led_s *x = &tx->led[num];
@@ -144,7 +149,7 @@ void leds_show(int all_brightness)
 
     rc = write(fd, tx, tx_buff_size);
     if (rc != tx_buff_size) {
-        ERROR("leds_show_leds write rc=%d exp=%d, %s\n", rc, tx_buff_size, strerror(errno));
+        ERROR("leds_commit write rc=%d exp=%d, %s\n", rc, tx_buff_size, strerror(errno));
         return;
     }
 }

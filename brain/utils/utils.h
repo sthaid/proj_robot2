@@ -104,8 +104,9 @@ void pa_print_device_info_all(void);
 
 // notes:
 // - led_brightness range  0 - 100
-// - all_brightness range  0 - 31
-// - xxx rotate mode
+// - mode: 0=counterclockwise, 1=clockwise (on respeaker)
+
+#define MAX_LED 12
 
 #define LED_RGB(r,g,b) ((unsigned int)(((r) << 0) | ((g) << 8) | ((b) << 16)))
 
@@ -122,23 +123,27 @@ void pa_print_device_info_all(void);
 
 void leds_init(void);
 
-void leds_set(int num, unsigned int rgb, int led_brightness);
-void leds_set_all(unsigned int rgb, int led_brightness);
-void leds_set_all_off(void);  // xxx probably not needed
-void leds_rotate(int mode);
+void leds_stage_led(int num, unsigned int rgb, int led_brightness);
+void leds_stage_all(unsigned int rgb, int led_brightness);
+void leds_stage_rotate(int mode);
 
-void leds_show(int all_brightness);
+void leds_commit(void);
 
 // -------- t2s.c --------
 
+#define DEFAULT_VOLUME 20
+#define DELTA_VOLUME   5
+
 void t2s_init(void);
 
-void t2s_play_text(char *text);
+void t2s_play(char *fmt, ...) __attribute__((format(printf, 1, 2)));
+void t2s_set_volume(int percent, bool relative);
+int t2s_get_volume(void);
 
 // -------- wwd.c --------
 
-#define WW_KEYWORD_MASK    7
-#define WW_TERMINATE_MASK  8
+#define WW_KEYWORD_MASK    1
+#define WW_TERMINATE_MASK  2
 
 void wwd_init(void);
 

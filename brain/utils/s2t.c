@@ -59,6 +59,31 @@ char * s2t_feed(short sound_val)
 
 static void *s2t_thread(void *cx)
 {
+#if 0  // xxx
+    char *ts;
+
+    while (true) {
+        // wait for indication to start 
+        while (max_sv == 0) {
+            if (terminating) return NULL;
+            usleep(30000);
+        }
+
+        // provide a dummy transcript
+        sleep(1);
+        ts = malloc(100);
+        strcpy(ts, "dummy transcript");
+        INFO("TRANSCRIPT: '%s'\n", ts);
+        transcript = ts;
+
+        // wait for s2t_feed to acknowledge that it has the transcript
+        while (transcript) {
+            if (terminating) return NULL;
+            usleep(10000);
+        }
+    }
+    return NULL;
+#else
     #define MAX_TS 4096
 
     uint64_t start_time;
@@ -117,7 +142,7 @@ static void *s2t_thread(void *cx)
 
             // timeout if there is not a result from livecaption in 10 secs
             // xxx make this an arg
-            if (microsec_timer() - start_time > 1000000) {//xxx temp
+            if (microsec_timer() - start_time > 10000000) {
                 WARN("timedout waiting for transcript from livecaption\n");
                 break;
             }
@@ -127,8 +152,8 @@ static void *s2t_thread(void *cx)
         }
 
         // the transcript is ready to be returned by s2t_feed
-        INFO("TRANSCRIPT: '%s'\n", ts);
         ts[strcspn(ts, "\n")] = '\0';
+        INFO("TRANSCRIPT: '%s'\n", ts);
         transcript = ts;
 
         // close fds and call waitpid
@@ -143,4 +168,5 @@ static void *s2t_thread(void *cx)
             usleep(10000);
         }
     }
+#endif
 }
