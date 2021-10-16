@@ -2,7 +2,7 @@
 
 #include <utils.h>
 
-static int hndlr_stub(args_t args);
+static void hndlr_stub(args_t args);
 
 static hndlr_lookup_t hlu[] = {
     { "test",   hndlr_stub },
@@ -115,9 +115,8 @@ int main(int argc, char **argv)
 
 // -----------------  HANDLERS  ---------------------------------
 
-static int hndlr_stub(args_t args)
+static void hndlr_stub(args_t args)
 {
     // nothing needed here in this test program
-    return 0;
 }
 

@@ -1,11 +1,12 @@
-// xxx tbd
-// - msync
+// xxx now
 // - rwlock
 // - unit test pgm
-// - routine to get all for a keyid
-// - add_to_free_list should combine with free neighbors
-// - make list utils inline funcs
 // - remove printf
+// - hash func
+
+// xxx tbd later
+// - msync
+// - make list utils inline funcs
 
 #include <utils.h>
 
@@ -20,8 +21,10 @@
 #define GB        (1024 * MB)
 #define PAGE_SIZE 4096
 
-#define MIN_FILE_LEN   MB
-#define MIN_RECORD_LEN (sizeof(record_t) + 32)
+#define MIN_FILE_LEN MB
+
+#define RECORD_BOUNDARY 32
+#define MIN_RECORD_LEN  (sizeof(record_t) + RECORD_BOUNDARY)
 
 #define MAX_KEYID  128
 
@@ -29,12 +32,19 @@
 #define MAGIC_RECORD_FREE  0x22222222
 #define MAGIC_RECORD_ENTRY 0x33333333
 
+#define REC_LEN_AT_END(r)  (*(uint64_t*)((void*)(r) + (r)->len - sizeof(uint64_t)))
+#define SET_REC_LEN(r,l) \
+    do { \
+        (r)->len = (l); \
+        REC_LEN_AT_END(r) = (r)->len; \
+    } while (0)
+
 //
 // defines for lists
 //
 
 #define NODE(offset)   ((node_t*)(mmap_addr + (offset)))
-#define NODE_OFFSET(node)  ((uint64_t)((void*)(node) - mmap_addr))
+#define NODE_OFFSET(node)  ((uint64_t)((void*)(node) - mmap_addr))  // xxx review where this is used
 
 #define CONTAINER(node,type,field)  ((type*)((void*)(node) - offsetof(type,field)))
 
@@ -84,11 +94,12 @@ static_assert(sizeof(record_t) == 64, "");
 // variables
 //
 
+// xxx comments
 static void   * mmap_addr;
 static hdr_t  * hdr;
 static node_t * hash_tbl;
 static void   * data;
-
+static void   * data_end;
 static node_t * free_head;
 static node_t * keyid_head;
 
@@ -96,15 +107,15 @@ static node_t * keyid_head;
 // prototypes
 //
 static record_t *find(char keyid, char *keystr, int *htidx);
-static record_t *alloc(uint64_t keyfull_len, uint64_t val_len);
-static void add_to_free_list(record_t *rec, uint64_t len);
+static record_t *alloc_record(uint64_t keyfull_len, uint64_t val_len);
+static void combine_free(record_t *rec);
 static int hash(char keyid, char *keystr);
 static uint64_t round_up64(uint64_t x, uint64_t boundary);
 
-void init_list_head(node_t *n);
-void add_to_list_tail(node_t *head, node_t *new_tail);
-void add_to_list_head(node_t *head, node_t *new_tail);
-void remove_from_list(node_t *node);
+static void init_list_head(node_t *n);
+static void add_to_list_tail(node_t *head, node_t *new_tail);
+static void add_to_list_head(node_t *head, node_t *new_tail);
+static void remove_from_list(node_t *node);
 
 // -----------------  DB CREATE AND INIT  -------------------------------------------
 
@@ -144,16 +155,8 @@ void db_create(char *file_name, uint64_t file_len)
     printf("hash_tbl len %lld  0x%llx\n", max_hash_tbl * sizeof(node_t), max_hash_tbl * sizeof(node_t));
     printf("file len     %lld  0x%llx\n", file_len, file_len);
 
-    // init pointers to the 3 sections of the file, and convenience pointers
-    hdr       = mmap_addr;
-    hash_tbl  = mmap_addr + sizeof(hdr_t);
-    data      = hash_tbl + max_hash_tbl;
-    free_head = &hdr->free_head;
-    keyid_head = hdr->keyid_head;
-
-    printf("hdr=%p  hash_tbl=%p  data=%p\n", hdr, hash_tbl, data);
-
     // init hdr
+    hdr = mmap_addr;
     hdr->magic        = MAGIC_HDR;
     hdr->file_len     = file_len;
     hdr->hdr_len      = sizeof(hdr_t);
@@ -164,6 +167,18 @@ void db_create(char *file_name, uint64_t file_len)
     for (i = 0; i < MAX_KEYID; i++) {
         init_list_head(&hdr->keyid_head[i]);
     }
+
+    // init global pointers
+    hdr        = mmap_addr;
+    hash_tbl   = mmap_addr + sizeof(hdr_t);
+    data       = hash_tbl + hdr->max_hash_tbl;
+    data_end   = data + hdr->data_len;
+    free_head  = &hdr->free_head;
+    keyid_head = hdr->keyid_head;
+
+    assert(data_end == mmap_addr + hdr->file_len);
+
+    printf("hdr=%p  hash_tbl=%p  data=%p\n", hdr, hash_tbl, data);
     printf("datalen = %lld  0x%llx\n", hdr->data_len, hdr->data_len);
         
     // init hash_tbl 
@@ -172,23 +187,39 @@ void db_create(char *file_name, uint64_t file_len)
     }
 
     // init data by placing a free record at the begining of data
-    add_to_free_list((record_t*)data, hdr->data_len);
+    record_t *rec = (record_t*)data;
+    rec->magic = MAGIC_RECORD_FREE;
+    SET_REC_LEN(rec, hdr->data_len);
+    add_to_list_head(free_head, &rec->free.node);
 
-    // xxx
+    // unmap and close
     munmap(mmap_addr, file_len);
     close(fd);
 }
 
-void db_init(char *file_name)
+void db_init(char *file_name, bool create, uint64_t file_len)
 {
     int fd;
     hdr_t Hdr;
     struct stat buf;
 
+// xxx review all FATAL, NOTICE
+    // if db file does not exist and the create flag is set then create it
+    if (stat(file_name, &buf) < 0) {
+        if (errno != ENOENT) {
+            FATAL("file %s, unexpected stat errno, %s\n", file_name, strerror(errno));
+        }
+        if (!create) {
+            FATAL("file %s does not exist\n", file_name);
+        }
+        INFO("db_init is creating db file %s\n", file_name);
+        db_create(file_name, file_len);
+    }
+
     // open file and read hdr
     fd = open(file_name, O_RDWR, 0666);
     if (fd < 0) {
-        FATAL("create %s, %s\n", file_name, strerror(errno));
+        FATAL("open %s, %s\n", file_name, strerror(errno));
     }
     if (read(fd, &Hdr, sizeof(Hdr)) != sizeof(Hdr)) {
         FATAL("read hdr %s, %s\n", file_name, strerror(errno));
@@ -213,12 +244,15 @@ void db_init(char *file_name)
         FATAL("mmap %s, %s\n", file_name, strerror(errno));
     }
 
-    // init pointers to the 3 sections of the file, and convenience pointers
+    // init global pointers
     hdr        = mmap_addr;
     hash_tbl   = mmap_addr + sizeof(hdr_t);
     data       = hash_tbl + hdr->max_hash_tbl;
+    data_end   = data + hdr->data_len;
     free_head  = &hdr->free_head;
     keyid_head = hdr->keyid_head;
+
+    assert(data_end == mmap_addr + hdr->file_len);
 
     printf("db_init max_hash_tbl  0x%llx\n", hdr->max_hash_tbl);
 }
@@ -276,20 +310,23 @@ int db_set(char keyid, char *keystr, void *val, unsigned int val_len)
         } else {
             remove_from_list(&rec->entry.node_keyid);
             remove_from_list(&rec->entry.node_hashtbl);
-            add_to_free_list(rec, rec->len);
+
+            rec->magic = MAGIC_RECORD_FREE;
+            add_to_list_head(free_head, &rec->free.node);
+            combine_free(rec);
         }
     }
 
     // allocate a record from the free list
     unsigned int keyfull_len = (1 + strlen(keystr) + 1);
-    rec = alloc(keyfull_len, val_len);
+    rec = alloc_record(keyfull_len, val_len);
     if (rec == NULL) {
         return -1;
     }
 
     // initialize record fields
-    rec->entry.value_offset = sizeof(record_t); //xxx needed ?
-    rec->entry.keyfull_offset = sizeof(record_t) + val_len;  //xxx needed?0
+    rec->entry.value_offset = sizeof(record_t);
+    rec->entry.keyfull_offset = sizeof(record_t) + val_len;
     rec->entry.value_len = val_len;
     rec->entry.value_alloc_len = val_len;
 
@@ -331,7 +368,9 @@ int db_rm(char keyid, char *keystr)
     remove_from_list(&rec->entry.node_hashtbl);
 
     // add record to free list
-    add_to_free_list(rec, rec->len);
+    rec->magic = MAGIC_RECORD_FREE;
+    add_to_list_head(free_head, &rec->free.node);
+    combine_free(rec);
 
     // success
     return 0;
@@ -346,9 +385,10 @@ int db_get_all_keyid(char keyid, void (*callback)(void *val, unsigned int val_le
     // check keyid arg
     if (keyid <= 0 || keyid >= MAX_KEYID) {
         ERROR("invalid keyid %d\n", keyid);
-        return -1;  // xxx these could be assert or fatal  and then some of these routines could ret void
+        return -1;
     }
 
+    // xxx comments
     head = &keyid_head[(int)keyid];
 
     for (off = head->next; off != NODE_OFFSET(head); off = NODE(off)->next) {
@@ -373,6 +413,12 @@ static record_t *find(char keyid, char *keystr, int *htidx)
 
     for (off = head->next; off != NODE_OFFSET(head); off = NODE(off)->next) {
         rec = CONTAINER(NODE(off), record_t, entry.node_hashtbl);
+
+        assert(rec->magic == MAGIC_RECORD_ENTRY);
+        assert(rec->len >= MIN_RECORD_LEN);
+        assert((rec->len & (RECORD_BOUNDARY-1)) == 0);
+        assert(rec->len == REC_LEN_AT_END(rec));
+
         keyfull = (void*)rec + rec->entry.keyfull_offset;
 
         if (keyfull[0] == keyid && strcmp(keystr, &keyfull[1]) == 0) {
@@ -383,7 +429,7 @@ static record_t *find(char keyid, char *keystr, int *htidx)
     return NULL;
 }
 
-static record_t *alloc(uint64_t keyfull_len, uint64_t val_len)
+static record_t *alloc_record(uint64_t keyfull_len, uint64_t val_len)
 {
     uint64_t  len_to_alloc, off;
     record_t *rec;
@@ -391,8 +437,8 @@ static record_t *alloc(uint64_t keyfull_len, uint64_t val_len)
 
     // xxx
     len_to_alloc = round_up64(
-                    sizeof(record_t) + val_len + keyfull_len + sizeof(uint64_t),
-                    32); // xxx define for 32
+                        sizeof(record_t) + val_len + keyfull_len + sizeof(uint64_t),
+                        RECORD_BOUNDARY);
     if (len_to_alloc < MIN_RECORD_LEN) {
         len_to_alloc = MIN_RECORD_LEN;
     }
@@ -404,8 +450,8 @@ static record_t *alloc(uint64_t keyfull_len, uint64_t val_len)
 
         assert(rec->magic == MAGIC_RECORD_FREE);
         assert(rec->len >= MIN_RECORD_LEN);
-        assert((rec->len & (32-1)) == 0);
-        // xxx assert the len at the end too
+        assert((rec->len & (RECORD_BOUNDARY-1)) == 0);
+        assert(rec->len == REC_LEN_AT_END(rec));
 
         if (rec->len >= len_to_alloc) {
             found = true;
@@ -421,36 +467,66 @@ static record_t *alloc(uint64_t keyfull_len, uint64_t val_len)
     // remove the record found from the free list
     remove_from_list(&rec->free.node);
 
+    rec->magic = MAGIC_RECORD_ENTRY;
+
     // if the record found does not have enough length to be divided then
     // return the record
     if (rec->len - len_to_alloc < MIN_RECORD_LEN) {
-        rec->magic = MAGIC_RECORD_ENTRY;
         return rec;
     }
 
-    // divide the record
-    uint64_t new_free_rec_len = rec->len - len_to_alloc;
+    // divide the record  xxx explain
+
+    uint64_t rec_len_save = rec->len;
+    SET_REC_LEN(rec, len_to_alloc);
+
     record_t *new_free_rec = (void*)rec + len_to_alloc;
-    add_to_free_list(new_free_rec, new_free_rec_len);
+    new_free_rec->magic = MAGIC_RECORD_FREE;
+    SET_REC_LEN(new_free_rec, rec_len_save - len_to_alloc);
+    add_to_list_head(free_head, &new_free_rec->free.node);  // xxx tail?
+
+    combine_free(new_free_rec);
 
     // return allocated record, with it's magic and len fields set
-    rec->magic = MAGIC_RECORD_ENTRY;
-    rec->len = len_to_alloc;
     return rec;
 }
 
-static void add_to_free_list(record_t *rec, uint64_t len)
+static void combine_free(record_t *rec)
 {
-    printf("add to free list   %lld  0x%llx\n", len,len);
-    assert(len >= MIN_RECORD_LEN);
-    assert((len & (32-1)) == 0);  //xxx 32 
+    assert(rec->magic == MAGIC_RECORD_FREE);
 
-    // init the record
-    rec->magic = MAGIC_RECORD_FREE;
-    rec->len = len;
+    // if the next record in data memory exists and is free then
+    //   remove the next record from the free list
+    //   combine its space into the rec
+    // endif
+    if ((void*)rec + rec->len < data_end) {
+        record_t * next_rec = (record_t*)((void*)rec + rec->len);
 
-    // add rec to the head of the free list
-    add_to_list_head(free_head, &rec->free.node);
+        assert(next_rec->magic == MAGIC_RECORD_FREE || next_rec->magic == MAGIC_RECORD_ENTRY);
+
+        if (next_rec->magic == MAGIC_RECORD_FREE) {
+            INFO("COMPACTING with NEXT\n");
+            remove_from_list(&next_rec->free.node);
+            SET_REC_LEN(rec, rec->len + next_rec->len);
+        }
+    }
+
+    // if the prior record in data memory exists and is free then
+    //   remove the prior record from the free list
+    //   combine its space into the rec
+    // endif
+    if ((void*)rec > data) {
+        uint64_t prior_rec_len = *(uint64_t*)((void*)rec - sizeof(uint64_t));
+        record_t * prior_rec = (record_t*)((void*)rec - prior_rec_len);
+
+        assert(prior_rec->magic == MAGIC_RECORD_FREE || prior_rec->magic == MAGIC_RECORD_ENTRY);
+
+        if (prior_rec->magic == MAGIC_RECORD_FREE) {
+            INFO("COMPACTING with PRIOR\n");
+            remove_from_list(&rec->free.node);
+            SET_REC_LEN(prior_rec, prior_rec->len + rec->len);
+        }
+    }
 }
 
 static int hash(char keyid, char *keystr)
@@ -466,12 +542,12 @@ static uint64_t round_up64(uint64_t x, uint64_t boundary)
 
 // -----------------  LIST UTILS  ---------------------------------------------------
 
-void init_list_head(node_t *n)
+static void init_list_head(node_t *n)
 {
     n->next = n->prev = NODE_OFFSET(n);
 }
 
-void add_to_list_tail(node_t *head, node_t *new_last)
+static void add_to_list_tail(node_t *head, node_t *new_last)
 {
     node_t *old_last = NODE(head->prev);
     new_last->next   = NODE_OFFSET(head);
@@ -480,7 +556,7 @@ void add_to_list_tail(node_t *head, node_t *new_last)
     head->prev       = NODE_OFFSET(new_last);
 }
 
-void add_to_list_head(node_t *head, node_t *new_first)
+static void add_to_list_head(node_t *head, node_t *new_first)
 {
     node_t *old_first = NODE(head->next);
     new_first->next   = NODE_OFFSET(old_first);
@@ -489,7 +565,7 @@ void add_to_list_head(node_t *head, node_t *new_first)
     head->next        = NODE_OFFSET(new_first);
 }
 
-void remove_from_list(node_t *node)
+static void remove_from_list(node_t *node)
 {
     node_t *prev = NODE(node->prev);
     node_t *next = NODE(node->next);
@@ -497,103 +573,3 @@ void remove_from_list(node_t *node)
     prev->next = NODE_OFFSET(next);
     next->prev = NODE_OFFSET(prev);
 }
-
-// -----------------  DB TOOL  ------------------------------------------------------
-
-#ifdef DB_TOOL
-
-#define KEYID1  1
-
-void get_all_cb(void *val, unsigned int val_len)
-{
-    INFO("  '%s'  %d\n", (char*)val, val_len);
-}
-
-int main(int argc, char **argv)
-{
-    int rc, i;
-    //void *val;
-    //unsigned int val_len;
-    char keystr[100], valstr[100];
-
-    logging_init(NULL, false);
-
-    INFO("calling db_create\n");
-    db_create("db_test.dat", GB);
-    INFO("done\n");
-
-    INFO("calling db_init\n");
-    db_init("db_test.dat");
-    INFO("done\n");
-
-    // add 100 entries to db
-    for (i = 0; i < 100; i++) {
-        sprintf(keystr, "key_%d", i);
-        sprintf(valstr, "value_%d", i);
-        rc = db_set(1, keystr, valstr, strlen(valstr)+1);
-        if (rc < 0) {
-            FATAL("db_set failed\n");
-        }
-    }
-
-    // remove every other one
-    for (i = 0; i < 100; i+=2) {
-        sprintf(keystr, "key_%d", i);
-        rc = db_rm(1, keystr);
-        if (rc < 0) {
-            FATAL("db_rm failed\n");
-        }
-    }
-
-    // get entries, and confirm
-    for (i = 0; i < 100; i++) {
-        void *val;
-        unsigned int val_len;
-        sprintf(keystr, "key_%d", i);
-        rc =  db_get(KEYID1, keystr, &val, &val_len);
-        if (rc < 0) {
-            INFO("db_get i=%d rc=%d\n", i, rc);
-            if ((i & 1) == 1) {
-                FATAL("xxx\n");
-            }
-        } else {
-            INFO("db_get i=%d rc=%d: '%s'  %d\n", i, rc, (char*)val, val_len);
-            sprintf(valstr, "value_%d", i);
-            if ((i & 1) == 0 || strcmp(val, valstr) || val_len != strlen(val)+1) {
-                FATAL("xxx\n");
-            }
-        }
-    }
-
-    // get all keyid==1 values
-    db_get_all_keyid(1, get_all_cb);
-
-    // print the free list
-    uint64_t off;
-    record_t *rec;
-    for (off = free_head->next; off != NODE_OFFSET(free_head); off = NODE(off)->next) {
-        rec = CONTAINER(NODE(off), record_t, free.node);
-        INFO(" 0x%llx :  magic=0x%llx  len=%lld  %lld MB\n", 
-             NODE_OFFSET(rec), rec->magic, rec->len, rec->len/MB);
-    }
-
-
-
-#if 0
-    val = "steve"; 
-    rc = db_set(KEYID1, "name", val, strlen(val)+1);
-    if (rc < 0) {
-        FATAL("db_set failed\n");
-    }
-
-    INFO("dbget return val='%s', val_len=%d\n", (char*)val, val_len);
-#endif
-
-
-    return 0;
-}
-
-// XXX later, test
-//  db_init("dbxxx.dat");
-#endif
-

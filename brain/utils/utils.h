@@ -34,8 +34,8 @@ static inline void logging_init(char *filename, bool append)
             printf("FATAL: failed to open log file %s, %s\n", filename, strerror(errno));
             exit(1);
         }
-        setlinebuf(fp_log);
     }
+   setlinebuf(fp_log);
 }
 
 #define PRINT_COMMON(lvl, fmt, args...) \
@@ -181,4 +181,13 @@ void sf_init(void);
 
 int sf_write_wav_file(char *filename, short *data, int max_chan, int max_data, int sample_rate);
 int sf_read_wav_file(char *filename, short **data, int *max_chan, int *max_data, int *sample_rate);
+
+// -------- db.c --------
+
+void db_create(char *file_name, uint64_t file_len);
+void db_init(char *file_name, bool create, uint64_t file_len);
+int db_get(char keyid, char *keystr, void **val, unsigned int *val_len);
+int db_set(char keyid, char *keystr, void *val, unsigned int val_len);
+int db_rm(char keyid, char *keystr);
+int db_get_all_keyid(char keyid, void (*callback)(void *val, unsigned int val_len));
 
