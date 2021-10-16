@@ -24,6 +24,9 @@
 bool verbose[MAX_VERBOSE];
 FILE *fp_log;
 
+// xxx brief opt
+// xxx blank line
+
 static inline void logging_init(char *filename, bool append)
 {
     if (filename == NULL) {
@@ -41,6 +44,10 @@ static inline void logging_init(char *filename, bool append)
 #define PRINT_COMMON(lvl, fmt, args...) \
     do { \
         char _s[100]; \
+        if (fp_log == NULL) { \
+            printf("ERROR: fp_log is not set\n"); \
+            exit(1); \
+        } \
         fprintf(fp_log, "%s " lvl ": " fmt, time2str(time(NULL),_s), ## args); \
     } while (0)
 
@@ -186,8 +193,10 @@ int sf_read_wav_file(char *filename, short **data, int *max_chan, int *max_data,
 
 void db_create(char *file_name, uint64_t file_len);
 void db_init(char *file_name, bool create, uint64_t file_len);
-int db_get(char keyid, char *keystr, void **val, unsigned int *val_len);
-int db_set(char keyid, char *keystr, void *val, unsigned int val_len);
-int db_rm(char keyid, char *keystr);
-int db_get_all_keyid(char keyid, void (*callback)(void *val, unsigned int val_len));
 
+int db_get(int keyid, char *keystr, void **val, unsigned int *val_len);
+int db_set(int keyid, char *keystr, void *val, unsigned int val_len);
+int db_rm(int keyid, char *keystr);
+int db_get_keyid(int keyid, void (*callback)(int keyid, char *keystr, void *val, unsigned int val_len));
+
+void db_print_free_list(void);

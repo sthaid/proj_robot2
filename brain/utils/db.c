@@ -1,8 +1,12 @@
+// xxx make keyid an int
+
 // xxx now
 // - rwlock
 // - unit test pgm
 // - remove printf
 // - hash func
+
+// - reorg record so key is before value and value_alloc_len incorporates spare
 
 // xxx tbd later
 // - msync
@@ -106,10 +110,10 @@ static node_t * keyid_head;
 //
 // prototypes
 //
-static record_t *find(char keyid, char *keystr, int *htidx);
+static record_t *find(int keyid, char *keystr, int *htidx);
 static record_t *alloc_record(uint64_t keyfull_len, uint64_t val_len);
 static void combine_free(record_t *rec);
-static int hash(char keyid, char *keystr);
+static int hash(int keyid, char *keystr);
 static uint64_t round_up64(uint64_t x, uint64_t boundary);
 
 static void init_list_head(node_t *n);
@@ -261,11 +265,12 @@ void db_init(char *file_name, bool create, uint64_t file_len)
 
 // caller must ensure this db entry is not removed or changed
 // until after caller is done with val
-int db_get(char keyid, char *keystr, void **val, unsigned int *val_len)
+int db_get(int keyid, char *keystr, void **val, unsigned int *val_len)
 {
     record_t *rec;
     int htidx;
 
+// xxx check keyid, or maybe in find
     // find the record with keyid and keystr
     rec = find(keyid, keystr, &htidx);
     if (rec == NULL) {
@@ -278,7 +283,7 @@ int db_get(char keyid, char *keystr, void **val, unsigned int *val_len)
     return 0;
 }
 
-int db_set(char keyid, char *keystr, void *val, unsigned int val_len)
+int db_set(int keyid, char *keystr, void *val, unsigned int val_len)
 {
     record_t *rec;
     int htidx;
@@ -346,7 +351,7 @@ int db_set(char keyid, char *keystr, void *val, unsigned int val_len)
     return 0;
 }
 
-int db_rm(char keyid, char *keystr)
+int db_rm(int keyid, char *keystr)
 {
     record_t *rec;
     int htidx;
@@ -376,7 +381,8 @@ int db_rm(char keyid, char *keystr)
     return 0;
 }
 
-int db_get_all_keyid(char keyid, void (*callback)(void *val, unsigned int val_len))
+//xxx
+int db_get_keyid(int keyid, void (*callback)(int keyid, char *keystr, void *val, unsigned int val_len))
 {
     node_t *head;
     uint64_t off;
@@ -393,7 +399,11 @@ int db_get_all_keyid(char keyid, void (*callback)(void *val, unsigned int val_le
 
     for (off = head->next; off != NODE_OFFSET(head); off = NODE(off)->next) {
         rec = CONTAINER(NODE(off), record_t, entry.node_keyid);
-        callback((void*)rec+rec->entry.value_offset, rec->entry.value_len);
+        char *keyfull = (void*)rec + rec->entry.keyfull_offset;
+        callback(keyfull[0], 
+                 keyfull+1,
+                 (void*)rec+rec->entry.value_offset, 
+                 rec->entry.value_len);
     }
 
     return 0;
@@ -401,7 +411,7 @@ int db_get_all_keyid(char keyid, void (*callback)(void *val, unsigned int val_le
 
 // -----------------  GENERAL UTILS  ------------------------------------------------
 
-static record_t *find(char keyid, char *keystr, int *htidx)
+static record_t *find(int keyid, char *keystr, int *htidx)
 {
     uint64_t off;
     node_t *head;
@@ -529,7 +539,7 @@ static void combine_free(record_t *rec)
     }
 }
 
-static int hash(char keyid, char *keystr)
+static int hash(int keyid, char *keystr)
 {
     return 7; // xxx later  - remoember mod hash_tbl_len
 }
@@ -573,3 +583,20 @@ static void remove_from_list(node_t *node)
     prev->next = NODE_OFFSET(next);
     next->prev = NODE_OFFSET(prev);
 }
+
+// -----------------  DEBUG / TEST UTILS  -------------------------------------------
+
+void db_print_free_list(void)
+{
+    uint64_t off;
+    record_t *rec;
+
+    INFO("FREE LIST\n");
+    for (off = free_head->next; off != NODE_OFFSET(free_head); off = NODE(off)->next) {
+        rec = CONTAINER(NODE(off), record_t, free.node);
+        INFO("  node_offset = 0x%llx   magic = 0x%llx   len=%lld  %lld MB\n", 
+             NODE_OFFSET(rec), rec->magic, rec->len, rec->len/MB);
+    }
+    //xxx BLANK_LINE;
+}
+
