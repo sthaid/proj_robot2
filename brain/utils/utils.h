@@ -18,47 +18,55 @@
 #include <sys/stat.h>
 #include <sys/ioctl.h>
 
-
 // XXX re-order
+
+// -------- logging  ------
+
 #define MAX_VERBOSE 4
-bool verbose[MAX_VERBOSE];
-FILE *fp_log;
+bool log_verbose[MAX_VERBOSE];
+bool log_brief;
+FILE *log_fp;
 
-// xxx brief opt
-// xxx blank line
-
-static inline void logging_init(char *filename, bool append)
+static inline void logging_init(char *filename, bool append, bool brief)
 {
+    log_brief = brief;
+
     if (filename == NULL) {
-        fp_log = stdout;
+        log_fp = stdout;
     } else {
-        fp_log = fopen(filename, append ? "a" : "w");
-        if (fp_log == NULL) {
+        log_fp = fopen(filename, append ? "a" : "w");
+        if (log_fp == NULL) {
             printf("FATAL: failed to open log file %s, %s\n", filename, strerror(errno));
             exit(1);
         }
     }
-   setlinebuf(fp_log);
+   setlinebuf(log_fp);
 }
 
 #define PRINT_COMMON(lvl, fmt, args...) \
     do { \
         char _s[100]; \
-        if (fp_log == NULL) { \
-            printf("ERROR: fp_log is not set\n"); \
+        if (log_fp == NULL) { \
+            printf("ERROR: log_fp is not set\n"); \
             exit(1); \
         } \
-        fprintf(fp_log, "%s " lvl ": " fmt, time2str(time(NULL),_s), ## args); \
+        if (!log_brief) { \
+            fprintf(log_fp, "%s " lvl ": " fmt, time2str(time(NULL),_s), ## args); \
+        } else if (strcmp(lvl, "INFO") != 0) { \
+            fprintf(log_fp, lvl ": " fmt, ## args); \
+        } else { \
+            fprintf(log_fp, fmt, ## args); \
+        } \
     } while (0)
 
 #define INFO(fmt, args...) PRINT_COMMON("INFO", fmt, ## args);
 #define WARN(fmt, args...) PRINT_COMMON("WARN", fmt, ## args);
 #define ERROR(fmt, args...) PRINT_COMMON("ERROR", fmt, ## args);
 
-#define VERBOSE0(fmt, args...) do { if (verbose[0]) PRINT_COMMON("VERBOSE0", fmt, ## args); } while (0)
-#define VERBOSE1(fmt, args...) do { if (verbose[1]) PRINT_COMMON("VERBOSE1", fmt, ## args); } while (0)
-#define VERBOSE2(fmt, args...) do { if (verbose[2]) PRINT_COMMON("VERBOSE2", fmt, ## args); } while (0)
-#define VERBOSE3(fmt, args...) do { if (verbose[3]) PRINT_COMMON("VERBOSE3", fmt, ## args); } while (0)
+#define VERBOSE0(fmt, args...) do { if (log_verbose[0]) PRINT_COMMON("VERBOSE0", fmt, ## args); } while (0)
+#define VERBOSE1(fmt, args...) do { if (log_verbose[1]) PRINT_COMMON("VERBOSE1", fmt, ## args); } while (0)
+#define VERBOSE2(fmt, args...) do { if (log_verbose[2]) PRINT_COMMON("VERBOSE2", fmt, ## args); } while (0)
+#define VERBOSE3(fmt, args...) do { if (log_verbose[3]) PRINT_COMMON("VERBOSE3", fmt, ## args); } while (0)
 
 #define FATAL(fmt, args...) do { PRINT_COMMON("FATAL", fmt, ## args); exit(1); } while (0)
 

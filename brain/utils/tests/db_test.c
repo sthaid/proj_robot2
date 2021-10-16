@@ -17,7 +17,7 @@ int main(int argc, char **argv)
     char s[1000], s_orig[1000];
     int rc;
 
-    logging_init(NULL, false);
+    logging_init(NULL, false, true);
 
     db_init("db_test.dat", true, GB);
 
