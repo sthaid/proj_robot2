@@ -40,7 +40,7 @@ int main(int argc, char **argv)
             if (keystr == NULL || value == NULL) {
                 goto error;
             }
-            rc = db_set(3, keystr, value, strlen(value)+1);
+            rc = db_set(1, keystr, value, strlen(value)+1);
             if (rc < 0) {
                 ERROR("db_set ret %d\n", rc);
             }
@@ -51,7 +51,7 @@ int main(int argc, char **argv)
             if (keystr == NULL) {
                 goto error;
             }
-            rc = db_get(3, keystr, &value, &value_len);
+            rc = db_get(1, keystr, &value, &value_len);
             if (rc < 0) {
                 ERROR("db_get ret %d\n", rc);
             } else if (strlen(value)+1 != value_len) {
@@ -64,7 +64,7 @@ int main(int argc, char **argv)
             if (keystr == NULL) {
                 goto error;
             }
-            rc = db_rm(3, keystr);
+            rc = db_rm(1, keystr);
             if (rc < 0) {
                 ERROR("db_get ret %d\n", rc);
             }
