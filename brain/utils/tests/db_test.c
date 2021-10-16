@@ -26,6 +26,7 @@ int main(int argc, char **argv)
         strcpy(s_orig, s);
 
         cmd = strtok(s, " ");
+        if (cmd == NULL) continue;
         arg1 = strtok(NULL, " ");
         arg2 = strtok(NULL, " ");
 

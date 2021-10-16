@@ -1,5 +1,3 @@
-// xxx make keyid an int
-
 // xxx now
 // - rwlock
 // - unit test pgm
@@ -111,10 +109,11 @@ static node_t * keyid_head;
 // prototypes
 //
 static record_t *find(int keyid, char *keystr, int *htidx);
-static record_t *alloc_record(uint64_t keyfull_len, uint64_t val_len);
+static record_t *alloc_record(uint64_t alloc_len);
 static void combine_free(record_t *rec);
 static int hash(int keyid, char *keystr);
 static uint64_t round_up64(uint64_t x, uint64_t boundary);
+static unsigned int round_up32(unsigned int x, unsigned int boundary);
 
 static void init_list_head(node_t *n);
 static void add_to_list_tail(node_t *head, node_t *new_tail);
@@ -323,25 +322,37 @@ int db_set(int keyid, char *keystr, void *val, unsigned int val_len)
     }
 
     // allocate a record from the free list
-    unsigned int keyfull_len = (1 + strlen(keystr) + 1);
-    rec = alloc_record(keyfull_len, val_len);
+
+    // xxxxxxxx
+    unsigned int min_alloc_len, actual_alloc_len, spare_len, keyfull_len;
+
+    keyfull_len = round_up32(1 + strlen(keystr) + 1, 8);
+    min_alloc_len = sizeof(record_t) +
+                    keyfull_len + 
+                    val_len +
+                    sizeof(uint64_t);
+    actual_alloc_len = round_up32(min_alloc_len, RECORD_BOUNDARY);
+    spare_len = actual_alloc_len - min_alloc_len;
+    printf("XXXXXXXXXX spare_len %d\n", spare_len);
+
+    rec = alloc_record(actual_alloc_len);
     if (rec == NULL) {
         return -1;
     }
 
     // initialize record fields
-    rec->entry.value_offset = sizeof(record_t);
-    rec->entry.keyfull_offset = sizeof(record_t) + val_len;
+    rec->entry.keyfull_offset = sizeof(record_t);
+    rec->entry.value_offset = rec->entry.keyfull_offset + keyfull_len;
     rec->entry.value_len = val_len;
-    rec->entry.value_alloc_len = val_len;
+    rec->entry.value_alloc_len = val_len + spare_len;
 
     // copy the value and key to after the record_t
-    void *rec_value = (char*)rec + rec->entry.value_offset;
-    memcpy(rec_value, val, val_len);
-
     char *keyfull = (char*)rec + rec->entry.keyfull_offset;
     keyfull[0] = keyid;
     strcpy(keyfull+1, keystr);
+
+    void *rec_value = (char*)rec + rec->entry.value_offset;
+    memcpy(rec_value, val, val_len);
 
     // add the record's list nodes to the lists
     add_to_list_tail(&hash_tbl[htidx], &rec->entry.node_hashtbl);
@@ -381,7 +392,6 @@ int db_rm(int keyid, char *keystr)
     return 0;
 }
 
-//xxx
 int db_get_keyid(int keyid, void (*callback)(int keyid, char *keystr, void *val, unsigned int val_len))
 {
     node_t *head;
@@ -439,19 +449,11 @@ static record_t *find(int keyid, char *keystr, int *htidx)
     return NULL;
 }
 
-static record_t *alloc_record(uint64_t keyfull_len, uint64_t val_len)
+static record_t *alloc_record(uint64_t alloc_len)
 {
-    uint64_t  len_to_alloc, off;
+    uint64_t  off;
     record_t *rec;
     bool      found;
-
-    // xxx
-    len_to_alloc = round_up64(
-                        sizeof(record_t) + val_len + keyfull_len + sizeof(uint64_t),
-                        RECORD_BOUNDARY);
-    if (len_to_alloc < MIN_RECORD_LEN) {
-        len_to_alloc = MIN_RECORD_LEN;
-    }
     
     // loop over free list until a record is found with adequate len
     found = false;
@@ -463,7 +465,7 @@ static record_t *alloc_record(uint64_t keyfull_len, uint64_t val_len)
         assert((rec->len & (RECORD_BOUNDARY-1)) == 0);
         assert(rec->len == REC_LEN_AT_END(rec));
 
-        if (rec->len >= len_to_alloc) {
+        if (rec->len >= alloc_len) {
             found = true;
             break;
         }
@@ -481,18 +483,18 @@ static record_t *alloc_record(uint64_t keyfull_len, uint64_t val_len)
 
     // if the record found does not have enough length to be divided then
     // return the record
-    if (rec->len - len_to_alloc < MIN_RECORD_LEN) {
+    if (rec->len - alloc_len < MIN_RECORD_LEN) {
         return rec;
     }
 
     // divide the record  xxx explain
 
     uint64_t rec_len_save = rec->len;
-    SET_REC_LEN(rec, len_to_alloc);
+    SET_REC_LEN(rec, alloc_len);
 
-    record_t *new_free_rec = (void*)rec + len_to_alloc;
+    record_t *new_free_rec = (void*)rec + alloc_len;
     new_free_rec->magic = MAGIC_RECORD_FREE;
-    SET_REC_LEN(new_free_rec, rec_len_save - len_to_alloc);
+    SET_REC_LEN(new_free_rec, rec_len_save - alloc_len);
     add_to_list_head(free_head, &new_free_rec->free.node);  // xxx tail?
 
     combine_free(new_free_rec);
@@ -546,6 +548,11 @@ static int hash(int keyid, char *keystr)
 
 // boundary must be power of 2
 static uint64_t round_up64(uint64_t x, uint64_t boundary)
+{
+    return (x + (boundary-1)) & ~(boundary-1);
+}
+
+static unsigned int round_up32(unsigned int x, unsigned int boundary)
 {
     return (x + (boundary-1)) & ~(boundary-1);
 }
