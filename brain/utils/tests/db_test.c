@@ -140,15 +140,13 @@ void test1(void)
         sprintf(keystr, "key_%d", i);
         rc =  db_get(1, keystr, &val, &val_len);
         if (rc < 0) {
-            INFO("db_get i=%d rc=%d\n", i, rc);
             if (i >= 5) {
-                FATAL("xxx\n");
+                FATAL("db_get failed but should have succeeded, i=%d\n", i);
             }
         } else {
-            INFO("db_get i=%d rc=%d: '%s'  %d\n", i, rc, (char*)val, val_len);
             sprintf(valstr, "value_%d", i);
             if (i < 5 || strcmp(val, valstr) || val_len != strlen(val)+1) {
-                FATAL("xxx\n");
+                FATAL("db_get succeeded but should have failed, i=%d\n", i);
             }
         }
     }

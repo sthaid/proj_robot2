@@ -1,19 +1,15 @@
 // xxx now
 // - rwlock
 // - unit test pgm
-// - remove printf
 // - hash func
-
-// - reorg record so key is before value and value_alloc_len incorporates spare
 
 // xxx tbd later
 // - msync
+
+// xxx tbd maybe later
 // - make list utils inline funcs
 
 #include <utils.h>
-
-#include <sys/mman.h>
-#include <stddef.h>
 
 //
 // defines
@@ -40,15 +36,6 @@
         (r)->len = (l); \
         REC_LEN_AT_END(r) = (r)->len; \
     } while (0)
-
-//
-// defines for lists
-//
-
-#define NODE(offset)   ((node_t*)(mmap_addr + (offset)))
-#define NODE_OFFSET(node)  ((uint64_t)((void*)(node) - mmap_addr))  // xxx review where this is used
-
-#define CONTAINER(node,type,field)  ((type*)((void*)(node) - offsetof(type,field)))
 
 //
 // typedefs
@@ -89,14 +76,10 @@ typedef struct {
     };
 } record_t;
 
-static_assert(sizeof(hdr_t) == PAGE_SIZE, "");
-static_assert(sizeof(record_t) == 64, "");
-
 //
 // variables
 //
 
-// xxx comments
 static void   * mmap_addr;
 static hdr_t  * hdr;
 static node_t * hash_tbl;
@@ -108,6 +91,7 @@ static node_t * keyid_head;
 //
 // prototypes
 //
+
 static record_t *find(int keyid, char *keystr, int *htidx);
 static record_t *alloc_record(uint64_t alloc_len);
 static void combine_free(record_t *rec);
@@ -115,10 +99,25 @@ static int hash(int keyid, char *keystr);
 static uint64_t round_up64(uint64_t x, uint64_t boundary);
 static unsigned int round_up32(unsigned int x, unsigned int boundary);
 
+//
+// linked lists
+//
+
+#define NODE(offset)   ((node_t*)(mmap_addr + (offset)))
+#define NODE_OFFSET(node)  ((uint64_t)((void*)(node) - mmap_addr))
+#define CONTAINER(node,type,field)  ((type*)((void*)(node) - offsetof(type,field)))
+
 static void init_list_head(node_t *n);
 static void add_to_list_tail(node_t *head, node_t *new_tail);
 static void add_to_list_head(node_t *head, node_t *new_tail);
 static void remove_from_list(node_t *node);
+
+//
+// static asserts
+//
+
+static_assert(sizeof(hdr_t) == PAGE_SIZE, "");
+static_assert(sizeof(record_t) == 64, "");
 
 // -----------------  DB CREATE AND INIT  -------------------------------------------
 
@@ -126,9 +125,6 @@ void db_create(char *file_name, uint64_t file_len)
 {
     int fd, rc, i;
     uint64_t max_hash_tbl;
-
-    printf("hdr size    = %zd\n", sizeof(hdr_t));
-    printf("record size = %zd\n", sizeof(record_t));
 
     // verify file_len is a multiple of PAGE_SIZE
     if ((file_len % PAGE_SIZE) || (file_len < MIN_FILE_LEN)) {
@@ -138,7 +134,7 @@ void db_create(char *file_name, uint64_t file_len)
     // create empty file of size file_len
     fd = open(file_name, O_CREAT|O_EXCL|O_RDWR, 0666);
     if (fd < 0) {
-        FATAL("create %s, %s\n", file_name, strerror(errno));
+        FATAL("open for create %s, %s\n", file_name, strerror(errno));
     }
     rc = ftruncate(fd, file_len);
     if (rc < 0) {
@@ -154,9 +150,6 @@ void db_create(char *file_name, uint64_t file_len)
     // set max_hash_tbl so that the hash table size is 1/32 of file_len
     max_hash_tbl = (file_len / 32) / sizeof(node_t);
     max_hash_tbl = round_up64(max_hash_tbl, 256);
-    printf("max_hash_tbl %lld  0x%llx\n", max_hash_tbl, max_hash_tbl);
-    printf("hash_tbl len %lld  0x%llx\n", max_hash_tbl * sizeof(node_t), max_hash_tbl * sizeof(node_t));
-    printf("file len     %lld  0x%llx\n", file_len, file_len);
 
     // init hdr
     hdr = mmap_addr;
@@ -181,9 +174,6 @@ void db_create(char *file_name, uint64_t file_len)
 
     assert(data_end == mmap_addr + hdr->file_len);
 
-    printf("hdr=%p  hash_tbl=%p  data=%p\n", hdr, hash_tbl, data);
-    printf("datalen = %lld  0x%llx\n", hdr->data_len, hdr->data_len);
-        
     // init hash_tbl 
     for (i = 0; i < max_hash_tbl; i++) {
         init_list_head(&hash_tbl[i]);
@@ -206,7 +196,6 @@ void db_init(char *file_name, bool create, uint64_t file_len)
     hdr_t Hdr;
     struct stat buf;
 
-// xxx review all FATAL, NOTICE
     // if db file does not exist and the create flag is set then create it
     if (stat(file_name, &buf) < 0) {
         if (errno != ENOENT) {
@@ -230,7 +219,7 @@ void db_init(char *file_name, bool create, uint64_t file_len)
 
     // verify hdr magic
     if (Hdr.magic != MAGIC_HDR) {
-        FATAL("invalid hdr magic, 0x%llx should be 0x%x\n", Hdr.magic, MAGIC_HDR);
+        FATAL("file  %s, invalid hdr magic, 0x%llx should be 0x%x\n", file_name, Hdr.magic, MAGIC_HDR);
     }
 
     // stat file and validate st_size matches file_len stored in hdr
@@ -256,8 +245,6 @@ void db_init(char *file_name, bool create, uint64_t file_len)
     keyid_head = hdr->keyid_head;
 
     assert(data_end == mmap_addr + hdr->file_len);
-
-    printf("db_init max_hash_tbl  0x%llx\n", hdr->max_hash_tbl);
 }
 
 // -----------------  DB ACCESS  ----------------------------------------------------
@@ -269,7 +256,12 @@ int db_get(int keyid, char *keystr, void **val, unsigned int *val_len)
     record_t *rec;
     int htidx;
 
-// xxx check keyid, or maybe in find
+    // check keyid arg
+    if (keyid <= 0 || keyid >= MAX_KEYID) {
+        ERROR("invalid keyid %d\n", keyid);
+        return -1;
+    }
+
     // find the record with keyid and keystr
     rec = find(keyid, keystr, &htidx);
     if (rec == NULL) {
@@ -322,8 +314,6 @@ int db_set(int keyid, char *keystr, void *val, unsigned int val_len)
     }
 
     // allocate a record from the free list
-
-    // xxxxxxxx
     unsigned int min_alloc_len, actual_alloc_len, spare_len, keyfull_len;
 
     keyfull_len = round_up32(1 + strlen(keystr) + 1, 8);
@@ -333,7 +323,6 @@ int db_set(int keyid, char *keystr, void *val, unsigned int val_len)
                     sizeof(uint64_t);
     actual_alloc_len = round_up32(min_alloc_len, RECORD_BOUNDARY);
     spare_len = actual_alloc_len - min_alloc_len;
-    printf("XXXXXXXXXX spare_len %d\n", spare_len);
 
     rec = alloc_record(actual_alloc_len);
     if (rec == NULL) {
@@ -404,9 +393,9 @@ int db_get_keyid(int keyid, void (*callback)(int keyid, char *keystr, void *val,
         return -1;
     }
 
-    // xxx comments
+    // loop over they keyid list, for the caller specified keyid, and
+    // call callback proc for all db entries on this list
     head = &keyid_head[(int)keyid];
-
     for (off = head->next; off != NODE_OFFSET(head); off = NODE(off)->next) {
         rec = CONTAINER(NODE(off), record_t, entry.node_keyid);
         char *keyfull = (void*)rec + rec->entry.keyfull_offset;
@@ -416,6 +405,7 @@ int db_get_keyid(int keyid, void (*callback)(int keyid, char *keystr, void *val,
                  rec->entry.value_len);
     }
 
+    // success
     return 0;
 }
 
@@ -487,16 +477,16 @@ static record_t *alloc_record(uint64_t alloc_len)
         return rec;
     }
 
-    // divide the record  xxx explain
-
+    // divide the record
     uint64_t rec_len_save = rec->len;
     SET_REC_LEN(rec, alloc_len);
 
     record_t *new_free_rec = (void*)rec + alloc_len;
     new_free_rec->magic = MAGIC_RECORD_FREE;
     SET_REC_LEN(new_free_rec, rec_len_save - alloc_len);
-    add_to_list_head(free_head, &new_free_rec->free.node);  // xxx tail?
+    add_to_list_head(free_head, &new_free_rec->free.node);  // xxx or tail?
 
+    // call combine_free to combine this new_free_rec with adjacent free records
     combine_free(new_free_rec);
 
     // return allocated record, with it's magic and len fields set
@@ -517,7 +507,6 @@ static void combine_free(record_t *rec)
         assert(next_rec->magic == MAGIC_RECORD_FREE || next_rec->magic == MAGIC_RECORD_ENTRY);
 
         if (next_rec->magic == MAGIC_RECORD_FREE) {
-            INFO("COMPACTING with NEXT\n");
             remove_from_list(&next_rec->free.node);
             SET_REC_LEN(rec, rec->len + next_rec->len);
         }
@@ -534,7 +523,6 @@ static void combine_free(record_t *rec)
         assert(prior_rec->magic == MAGIC_RECORD_FREE || prior_rec->magic == MAGIC_RECORD_ENTRY);
 
         if (prior_rec->magic == MAGIC_RECORD_FREE) {
-            INFO("COMPACTING with PRIOR\n");
             remove_from_list(&rec->free.node);
             SET_REC_LEN(prior_rec, prior_rec->len + rec->len);
         }
@@ -598,12 +586,12 @@ void db_print_free_list(void)
     uint64_t off;
     record_t *rec;
 
-    INFO("FREE LIST\n");
+    INFO("FREE LIST ...\n");
     for (off = free_head->next; off != NODE_OFFSET(free_head); off = NODE(off)->next) {
         rec = CONTAINER(NODE(off), record_t, free.node);
         INFO("  node_offset = 0x%llx   magic = 0x%llx   len=%lld  %lld MB\n", 
              NODE_OFFSET(rec), rec->magic, rec->len, rec->len/MB);
     }
-    //xxx BLANK_LINE;
+    INFO("\n");
 }
 
