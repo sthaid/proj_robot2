@@ -1,7 +1,8 @@
+// xxx max_hash_bl should be global
+
 // xxx now
 // - rwlock
 // - unit test pgm
-// - hash func
 
 // xxx tbd later
 // - msync
@@ -36,6 +37,11 @@
         (r)->len = (l); \
         REC_LEN_AT_END(r) = (r)->len; \
     } while (0)
+
+#define RW_INITLOCK   do { pthread_rwlock_init(&rwlock,NULL); } while (0)
+#define RW_RDLOCK     do { pthread_rwlock_rdlock(&rwlock); } while (0)
+#define RW_WRLOCK     do { pthread_rwlock_wrlock(&rwlock); } while (0)
+#define RW_UNLOCK     do { pthread_rwlock_unlock(&rwlock); } while (0)
 
 //
 // typedefs
@@ -87,6 +93,8 @@ static void   * data;
 static void   * data_end;
 static node_t * free_head;
 static node_t * keyid_head;
+
+static pthread_rwlock_t rwlock;
 
 //
 // prototypes
@@ -188,6 +196,9 @@ void db_create(char *file_name, uint64_t file_len)
     // unmap and close
     munmap(mmap_addr, file_len);
     close(fd);
+
+    // xxx
+    INFO("created %s, size=%lld MB\n", file_name, file_len/MB);
 }
 
 void db_init(char *file_name, bool create, uint64_t file_len)
@@ -204,7 +215,6 @@ void db_init(char *file_name, bool create, uint64_t file_len)
         if (!create) {
             FATAL("file %s does not exist\n", file_name);
         }
-        INFO("db_init is creating db file %s\n", file_name);
         db_create(file_name, file_len);
     }
 
@@ -245,7 +255,12 @@ void db_init(char *file_name, bool create, uint64_t file_len)
     keyid_head = hdr->keyid_head;
 
     assert(data_end == mmap_addr + hdr->file_len);
+
+    // xxx
+    RW_INITLOCK;
 }
+
+// xxx move create here
 
 // -----------------  DB ACCESS  ----------------------------------------------------
 
@@ -256,21 +271,27 @@ int db_get(int keyid, char *keystr, void **val, unsigned int *val_len)
     record_t *rec;
     int htidx;
 
+    RW_RDLOCK;
+
     // check keyid arg
-    if (keyid <= 0 || keyid >= MAX_KEYID) {
+    if (keyid < 0 || keyid >= MAX_KEYID) {
         ERROR("invalid keyid %d\n", keyid);
+        RW_UNLOCK;
         return -1;
     }
 
     // find the record with keyid and keystr
     rec = find(keyid, keystr, &htidx);
     if (rec == NULL) {
+        RW_UNLOCK;
         return -1;
     }
 
     // return ptr to value and the length of value
     *val = (void*)rec + rec->entry.value_offset;
     *val_len = rec->entry.value_len;
+
+    RW_UNLOCK;
     return 0;
 }
 
@@ -279,9 +300,12 @@ int db_set(int keyid, char *keystr, void *val, unsigned int val_len)
     record_t *rec;
     int htidx;
 
+    RW_WRLOCK;
+
     // check keyid arg
-    if (keyid <= 0 || keyid >= MAX_KEYID) {
+    if (keyid < 0 || keyid >= MAX_KEYID) {
         ERROR("invalid keyid %d\n", keyid);
+        RW_UNLOCK;
         return -1;
     }
 
@@ -302,6 +326,7 @@ int db_set(int keyid, char *keystr, void *val, unsigned int val_len)
         if (rec->entry.value_alloc_len >= val_len) {
             memcpy((void*)rec+rec->entry.value_offset, val, val_len);
             rec->entry.value_len = val_len;
+            RW_UNLOCK;
             return 0;
         } else {
             remove_from_list(&rec->entry.node_keyid);
@@ -326,6 +351,7 @@ int db_set(int keyid, char *keystr, void *val, unsigned int val_len)
 
     rec = alloc_record(actual_alloc_len);
     if (rec == NULL) {
+        RW_UNLOCK;
         return -1;
     }
 
@@ -348,6 +374,7 @@ int db_set(int keyid, char *keystr, void *val, unsigned int val_len)
     add_to_list_tail(&keyid_head[(int)keyid], &rec->entry.node_keyid);
 
     // return success
+    RW_UNLOCK;
     return 0;
 }
 
@@ -356,15 +383,19 @@ int db_rm(int keyid, char *keystr)
     record_t *rec;
     int htidx;
 
+    RW_WRLOCK;
+
     // check keyid arg
-    if (keyid <= 0 || keyid >= MAX_KEYID) {
+    if (keyid < 0 || keyid >= MAX_KEYID) {
         ERROR("invalid keyid %d\n", keyid);
+        RW_UNLOCK;
         return -1;
     }
 
     // find the record that is to be removed
     rec = find(keyid, keystr, &htidx);
     if (rec == NULL) {
+        RW_UNLOCK;
         return -1;
     }
 
@@ -378,6 +409,7 @@ int db_rm(int keyid, char *keystr)
     combine_free(rec);
 
     // success
+    RW_UNLOCK;
     return 0;
 }
 
@@ -387,9 +419,12 @@ int db_get_keyid(int keyid, void (*callback)(int keyid, char *keystr, void *val,
     uint64_t off;
     record_t *rec;
 
+    RW_RDLOCK;
+
     // check keyid arg
-    if (keyid <= 0 || keyid >= MAX_KEYID) {
+    if (keyid < 0 || keyid >= MAX_KEYID) {
         ERROR("invalid keyid %d\n", keyid);
+        RW_UNLOCK;
         return -1;
     }
 
@@ -406,6 +441,7 @@ int db_get_keyid(int keyid, void (*callback)(int keyid, char *keystr, void *val,
     }
 
     // success
+    RW_UNLOCK;
     return 0;
 }
 
@@ -662,13 +698,35 @@ void db_print_free_list(void)
 {
     uint64_t off;
     record_t *rec;
+    int num_entries=0;
 
     INFO("FREE LIST ...\n");
     for (off = free_head->next; off != NODE_OFFSET(free_head); off = NODE(off)->next) {
         rec = CONTAINER(NODE(off), record_t, free.node);
         INFO("  node_offset = 0x%llx   magic = 0x%llx   len=%lld  %lld MB\n", 
              NODE_OFFSET(rec), rec->magic, rec->len, rec->len/MB);
+        num_entries++;
     }
+    INFO("  num_entries = %d\n", num_entries);
     INFO("\n");
 }
 
+void db_reset(void)
+{
+    int i;
+
+    // reset list heads
+    init_list_head(&hdr->free_head);
+    for (i = 0; i < MAX_KEYID; i++) {
+        init_list_head(&hdr->keyid_head[i]);
+    }
+    for (i = 0; i < hdr->max_hash_tbl; i++) {
+        init_list_head(&hash_tbl[i]);
+    }
+
+    // init data by placing a free record at the begining of data
+    record_t *rec = (record_t*)data;
+    rec->magic = MAGIC_RECORD_FREE;
+    SET_REC_LEN(rec, hdr->data_len);
+    add_to_list_head(free_head, &rec->free.node);
+}

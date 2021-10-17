@@ -9,7 +9,7 @@ grammar_test: grammar_test.c ../grammar.c ../misc.c
 	gcc -g -Wall -O2 -I.. $^ -lm -o $@
 
 db_test: db_test.c ../db.c ../misc.c
-	gcc -g -Wall -O2 -I.. -lm $^ -o $@
+	gcc -g -Wall -O2 -I.. -lm -lpthread $^ -o $@
 
 clean:
 	rm -f $(TARGETS) db_test.dat
