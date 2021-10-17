@@ -1,12 +1,6 @@
-// xxx max_hash_bl should be global
-
-// xxx now
-// - rwlock
-// - unit test pgm
-
 // xxx tbd later
 // - msync
-
+//
 // xxx tbd maybe later
 // - make list utils inline funcs
 
@@ -86,13 +80,14 @@ typedef struct {
 // variables
 //
 
-static void   * mmap_addr;
-static hdr_t  * hdr;
-static node_t * hash_tbl;
-static void   * data;
-static void   * data_end;
-static node_t * free_head;
-static node_t * keyid_head;
+static void       * mmap_addr;
+static hdr_t      * hdr;
+static node_t     * hash_tbl;
+static void       * data;
+static void       * data_end;
+static node_t     * free_head;
+static node_t     * keyid_head;
+static unsigned int max_hash_tbl;
 
 static pthread_rwlock_t rwlock;
 
@@ -127,79 +122,7 @@ static void remove_from_list(node_t *node);
 static_assert(sizeof(hdr_t) == PAGE_SIZE, "");
 static_assert(sizeof(record_t) == 64, "");
 
-// -----------------  DB CREATE AND INIT  -------------------------------------------
-
-void db_create(char *file_name, uint64_t file_len)
-{
-    int fd, rc, i;
-    uint64_t max_hash_tbl;
-
-    // verify file_len is a multiple of PAGE_SIZE
-    if ((file_len % PAGE_SIZE) || (file_len < MIN_FILE_LEN)) {
-        FATAL("file_len 0x%llx invalid\n", file_len);
-    }
-
-    // create empty file of size file_len
-    fd = open(file_name, O_CREAT|O_EXCL|O_RDWR, 0666);
-    if (fd < 0) {
-        FATAL("open for create %s, %s\n", file_name, strerror(errno));
-    }
-    rc = ftruncate(fd, file_len);
-    if (rc < 0) {
-        FATAL("truncate %s, %s\n", file_name, strerror(errno));
-    }
-
-    // mmap the file
-    mmap_addr = mmap(NULL, file_len, PROT_READ|PROT_WRITE, MAP_SHARED, fd, 0);
-    if (mmap_addr == NULL) {
-        FATAL("mmap %s, %s\n", file_name, strerror(errno));
-    }
-
-    // set max_hash_tbl so that the hash table size is 1/32 of file_len
-    max_hash_tbl = (file_len / 32) / sizeof(node_t);
-    max_hash_tbl = round_up64(max_hash_tbl, 256);
-
-    // init hdr
-    hdr = mmap_addr;
-    hdr->magic        = MAGIC_HDR;
-    hdr->file_len     = file_len;
-    hdr->hdr_len      = sizeof(hdr_t);
-    hdr->hash_tbl_len = max_hash_tbl * sizeof(node_t);
-    hdr->data_len     = file_len - hdr->hdr_len - hdr->hash_tbl_len;
-    hdr->max_hash_tbl = max_hash_tbl;
-    init_list_head(&hdr->free_head);
-    for (i = 0; i < MAX_KEYID; i++) {
-        init_list_head(&hdr->keyid_head[i]);
-    }
-
-    // init global pointers
-    hdr        = mmap_addr;
-    hash_tbl   = mmap_addr + sizeof(hdr_t);
-    data       = hash_tbl + hdr->max_hash_tbl;
-    data_end   = data + hdr->data_len;
-    free_head  = &hdr->free_head;
-    keyid_head = hdr->keyid_head;
-
-    assert(data_end == mmap_addr + hdr->file_len);
-
-    // init hash_tbl 
-    for (i = 0; i < max_hash_tbl; i++) {
-        init_list_head(&hash_tbl[i]);
-    }
-
-    // init data by placing a free record at the begining of data
-    record_t *rec = (record_t*)data;
-    rec->magic = MAGIC_RECORD_FREE;
-    SET_REC_LEN(rec, hdr->data_len);
-    add_to_list_head(free_head, &rec->free.node);
-
-    // unmap and close
-    munmap(mmap_addr, file_len);
-    close(fd);
-
-    // xxx
-    INFO("created %s, size=%lld MB\n", file_name, file_len/MB);
-}
+// -----------------  DB INT AND CREATE   -------------------------------------------
 
 void db_init(char *file_name, bool create, uint64_t file_len)
 {
@@ -246,21 +169,95 @@ void db_init(char *file_name, bool create, uint64_t file_len)
         FATAL("mmap %s, %s\n", file_name, strerror(errno));
     }
 
-    // init global pointers
-    hdr        = mmap_addr;
-    hash_tbl   = mmap_addr + sizeof(hdr_t);
-    data       = hash_tbl + hdr->max_hash_tbl;
-    data_end   = data + hdr->data_len;
-    free_head  = &hdr->free_head;
-    keyid_head = hdr->keyid_head;
+    // init globals
+    hdr          = mmap_addr;
+    hash_tbl     = mmap_addr + sizeof(hdr_t);
+    data         = hash_tbl + hdr->max_hash_tbl;
+    data_end     = data + hdr->data_len;
+    free_head    = &hdr->free_head;
+    keyid_head   = hdr->keyid_head;
+    max_hash_tbl = hdr->max_hash_tbl;
 
+    // asserts
     assert(data_end == mmap_addr + hdr->file_len);
 
-    // xxx
+    // init reader/writer lock
     RW_INITLOCK;
 }
 
-// xxx move create here
+void db_create(char *file_name, uint64_t file_len)
+{
+    int fd, rc, i;
+    unsigned int max_ht;
+
+    // verify file_len is a multiple of PAGE_SIZE
+    if ((file_len % PAGE_SIZE) || (file_len < MIN_FILE_LEN)) {
+        FATAL("file_len 0x%llx invalid\n", file_len);
+    }
+
+    // create empty file of size file_len
+    fd = open(file_name, O_CREAT|O_EXCL|O_RDWR, 0666);
+    if (fd < 0) {
+        FATAL("open for create %s, %s\n", file_name, strerror(errno));
+    }
+    rc = ftruncate(fd, file_len);
+    if (rc < 0) {
+        FATAL("truncate %s, %s\n", file_name, strerror(errno));
+    }
+
+    // mmap the file
+    mmap_addr = mmap(NULL, file_len, PROT_READ|PROT_WRITE, MAP_SHARED, fd, 0);
+    if (mmap_addr == NULL) {
+        FATAL("mmap %s, %s\n", file_name, strerror(errno));
+    }
+
+    // set max_ht so that the hash table size is 1/32 of file_len
+    max_ht = (file_len / 32) / sizeof(node_t);
+    max_ht = round_up64(max_ht, 256);
+
+    // init hdr
+    hdr = mmap_addr;
+    hdr->magic        = MAGIC_HDR;
+    hdr->file_len     = file_len;
+    hdr->hdr_len      = sizeof(hdr_t);
+    hdr->hash_tbl_len = max_ht * sizeof(node_t);
+    hdr->data_len     = file_len - hdr->hdr_len - hdr->hash_tbl_len;
+    hdr->max_hash_tbl = max_ht;
+    init_list_head(&hdr->free_head);
+    for (i = 0; i < MAX_KEYID; i++) {
+        init_list_head(&hdr->keyid_head[i]);
+    }
+
+    // init globals
+    hdr          = mmap_addr;
+    hash_tbl     = mmap_addr + sizeof(hdr_t);
+    data         = hash_tbl + hdr->max_hash_tbl;
+    data_end     = data + hdr->data_len;
+    free_head    = &hdr->free_head;
+    keyid_head   = hdr->keyid_head;
+    max_hash_tbl = hdr->max_hash_tbl;
+
+    // asserts
+    assert(data_end == mmap_addr + hdr->file_len);
+
+    // init hash_tbl 
+    for (i = 0; i < max_ht; i++) {
+        init_list_head(&hash_tbl[i]);
+    }
+
+    // init data by placing a free record at the begining of data
+    record_t *rec = (record_t*)data;
+    rec->magic = MAGIC_RECORD_FREE;
+    SET_REC_LEN(rec, hdr->data_len);
+    add_to_list_head(free_head, &rec->free.node);
+
+    // unmap and close
+    munmap(mmap_addr, file_len);
+    close(fd);
+
+    // print message
+    INFO("created %s, size=%lld MB\n", file_name, file_len/MB);
+}
 
 // -----------------  DB ACCESS  ----------------------------------------------------
 
@@ -520,19 +517,12 @@ static record_t *alloc_record(uint64_t alloc_len)
     record_t *new_free_rec = (void*)rec + alloc_len;
     new_free_rec->magic = MAGIC_RECORD_FREE;
     SET_REC_LEN(new_free_rec, rec_len_save - alloc_len);
-#if 0 //xxx cleanup
-    add_to_list_head(free_head, &new_free_rec->free.node);
-#endif
-#if 0
-    add_to_list_tail(free_head, &new_free_rec->free.node);
-#endif
-#if 1
+
     if ((void*)new_free_rec + new_free_rec->len == data_end) {
         add_to_list_tail(free_head, &new_free_rec->free.node);
     } else {
         add_to_list_head(free_head, &new_free_rec->free.node);
     }
-#endif
 
     // call combine_free to combine this new_free_rec with adjacent free records
     combine_free(new_free_rec);
@@ -655,7 +645,7 @@ static unsigned int hash(int keyid, char *keystr)
     }
     crc = crc ^ ~0U;
 
-    unsigned int htidx = (crc % hdr->max_hash_tbl);
+    unsigned int htidx = (crc % max_hash_tbl);
     return htidx;
 }
 
@@ -742,7 +732,7 @@ unsigned int db_get_free_list_len(void)
 
 void db_reset(void)
 {
-    int i;
+    unsigned int i;
 
     RW_WRLOCK;
 
@@ -751,7 +741,7 @@ void db_reset(void)
     for (i = 0; i < MAX_KEYID; i++) {
         init_list_head(&hdr->keyid_head[i]);
     }
-    for (i = 0; i < hdr->max_hash_tbl; i++) {
+    for (i = 0; i < max_hash_tbl; i++) {
         init_list_head(&hash_tbl[i]);
     }
 

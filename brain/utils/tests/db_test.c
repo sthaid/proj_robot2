@@ -1,7 +1,15 @@
 #include <utils.h>
 
-// xxx doc usage
-//  test1, test2, set, rm, get, get_keyid, print_free_list
+// usage
+// - test1:                quick test of db functions
+// - test2:                multitheaded duration test
+// - set <keystr> <value>: call db_set
+// - get <keystr>:         call db_get
+// - get_keyid:            call db_get_keyid
+// - rm:                   call db_rm
+// - print_free_list, pfl: call db_print_free_list
+//
+// the set, get and rm commands use keyid=0
 
 //
 // defines
@@ -77,10 +85,8 @@ int main(int argc, char **argv)
             if (rc < 0) {
                 ERROR("db_get ret %d\n", rc);
             } else if (strlen(value)+1 != value_len) {
-// xxx these val_len checks are not good for the binary stuff
                 ERROR("value_len=%d should be %d\n", value_len, strlen(value)+1);
             } else {
-// xxx only print so much
                 INFO("value='%s'\n", strtrunc(value));
             }
         } else if (strcmp(cmd, "rm") == 0) {
@@ -138,9 +144,14 @@ void get_keyid_cb(int keyid, char *keystr, void *val, unsigned int val_len)
 
 char *strtrunc(char *s)
 {
-    // xxx print ...
-    static char str[33];
+    static char str[50];
+
     strncpy(str, s, 32);
+    if (str[31] != '\0') {
+        strcpy(str+32, " ...");
+    } else {
+        str[32] = '\0';
+    }
     return str;
 }
 
@@ -310,21 +321,20 @@ void *test2_thread(void *cx)
 
     memset(exp_val_tbl, 0, sizeof(exp_val_tbl));
 
-    //xxx INFO("test2_thread %d starting\n", keyid);
-    
     while (!terminate_threads) {
         // 10 db get
         for (int i = 0; i < 10; i++) {
             get_random_keystr(keystr, &keystr_idx);
             rc = db_get(keyid, keystr, &val, &val_len);
             if ((rc == 0) != (exp_val_tbl[keystr_idx].val != NULL)) {
-                ERROR("XXX\n");
+                ERROR("db_get(%d,%s), rc=%d exp_val_tbl[%d].val=%p\n", 
+                      keyid, keystr, rc, keystr_idx, exp_val_tbl[keystr_idx].val);
             } else if (rc == 0 && exp_val_tbl[keystr_idx].val_len != val_len) {
-                ERROR("XXX\n");
+                ERROR("db_get(%d,%s), rc=%d exp_val_tbl[%d].val_len=%d val_len=%d\n", 
+                      keyid, keystr, rc, keystr_idx, exp_val_tbl[keystr_idx].val_len, val_len);
             } else if (rc == 0 && memcmp(exp_val_tbl[keystr_idx].val, val, val_len) != 0) {
-                ERROR("XXX\n");
-            } else {  // okay
-                // xxx incr stat
+                ERROR("db_get(%d,%s), rc=%d exp_val_tbl[%d].val failed memcmp\n",
+                      keyid, keystr, rc, keystr_idx);
             }
             if (rc == 0) my_stats->db_get_okay++; else my_stats->db_get_notok++;
         }
@@ -334,7 +344,8 @@ void *test2_thread(void *cx)
         get_random_val(&val, &val_len);
         rc = db_set(keyid, keystr, val, val_len);
         if (rc < 0) {
-            ERROR("XXX\n");
+            ERROR("db_set(%d,%s), rc=%d val_len=%d\n",
+                  keyid, keystr, rc, val_len);
         }
         exp_val_tbl[keystr_idx].val = val;
         exp_val_tbl[keystr_idx].val_len = val_len;
@@ -344,7 +355,8 @@ void *test2_thread(void *cx)
         get_random_keystr(keystr, &keystr_idx);
         rc = db_rm(keyid, keystr);
         if ((rc == 0) != (exp_val_tbl[keystr_idx].val != NULL)) {
-            ERROR("XXX\n");
+            ERROR("db_rm(%d,%s), rc=%d exp_val_tbl[%d].val=%p\n",
+                  keyid, keystr, rc, keystr_idx, exp_val_tbl[keystr_idx].val);
         }
         if (rc == 0) {
             exp_val_tbl[keystr_idx].val = NULL;
@@ -352,8 +364,6 @@ void *test2_thread(void *cx)
         }
         if (rc == 0) my_stats->db_rm_okay++; else my_stats->db_rm_notok++;
     }
-
-    //xxx INFO("test2_thread %d terminating\n", keyid);
 
     return NULL;
 }
@@ -381,7 +391,6 @@ void get_random_val_init(void)
         return;
     }
 
-    INFO("init\n");
     for (i = 0; i < 1000; i++) {
         random_val_len[i] = random_range(100,10000);
         random_val[i] = malloc(random_val_len[i]);
@@ -390,7 +399,6 @@ void get_random_val_init(void)
         }
         random_val[i][j] = '\0';
     }
-    INFO("init done\n");
 
     initialized = true;
 }
