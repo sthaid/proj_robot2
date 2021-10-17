@@ -213,4 +213,5 @@ int db_rm(int keyid, char *keystr);
 int db_get_keyid(int keyid, void (*callback)(int keyid, char *keystr, void *val, unsigned int val_len));
 
 void db_print_free_list(void);
+unsigned int db_get_free_list_len(void);
 void db_reset(void);

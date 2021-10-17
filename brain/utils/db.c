@@ -520,7 +520,19 @@ static record_t *alloc_record(uint64_t alloc_len)
     record_t *new_free_rec = (void*)rec + alloc_len;
     new_free_rec->magic = MAGIC_RECORD_FREE;
     SET_REC_LEN(new_free_rec, rec_len_save - alloc_len);
-    add_to_list_head(free_head, &new_free_rec->free.node);  // xxx or tail?
+#if 0 //xxx cleanup
+    add_to_list_head(free_head, &new_free_rec->free.node);
+#endif
+#if 0
+    add_to_list_tail(free_head, &new_free_rec->free.node);
+#endif
+#if 1
+    if ((void*)new_free_rec + new_free_rec->len == data_end) {
+        add_to_list_tail(free_head, &new_free_rec->free.node);
+    } else {
+        add_to_list_head(free_head, &new_free_rec->free.node);
+    }
+#endif
 
     // call combine_free to combine this new_free_rec with adjacent free records
     combine_free(new_free_rec);
@@ -700,6 +712,8 @@ void db_print_free_list(void)
     record_t *rec;
     int num_entries=0;
 
+    RW_RDLOCK;
+
     INFO("FREE LIST ...\n");
     for (off = free_head->next; off != NODE_OFFSET(free_head); off = NODE(off)->next) {
         rec = CONTAINER(NODE(off), record_t, free.node);
@@ -709,11 +723,28 @@ void db_print_free_list(void)
     }
     INFO("  num_entries = %d\n", num_entries);
     INFO("\n");
+
+    RW_UNLOCK;
+}
+
+unsigned int db_get_free_list_len(void)
+{
+    int num_entries=0;
+
+    RW_RDLOCK;
+    for (uint64_t off = free_head->next; off != NODE_OFFSET(free_head); off = NODE(off)->next) {
+        num_entries++;
+    }
+    RW_UNLOCK;
+
+    return num_entries;
 }
 
 void db_reset(void)
 {
     int i;
+
+    RW_WRLOCK;
 
     // reset list heads
     init_list_head(&hdr->free_head);
@@ -729,4 +760,6 @@ void db_reset(void)
     rec->magic = MAGIC_RECORD_FREE;
     SET_REC_LEN(rec, hdr->data_len);
     add_to_list_head(free_head, &rec->free.node);
+
+    RW_UNLOCK;
 }

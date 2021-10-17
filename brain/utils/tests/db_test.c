@@ -21,6 +21,7 @@ bool sigint;
 
 void sigint_hndlr(int sig);
 void get_keyid_cb(int keyid, char *keystr, void *val, unsigned int val_len);
+char *strtrunc(char *s);
 void test1(void);
 void test2(void);
 
@@ -61,7 +62,7 @@ int main(int argc, char **argv)
             if (keystr == NULL || value == NULL) {
                 goto error;
             }
-            rc = db_set(1, keystr, value, strlen(value)+1);
+            rc = db_set(0, keystr, value, strlen(value)+1);
             if (rc < 0) {
                 ERROR("db_set ret %d\n", rc);
             }
@@ -72,20 +73,22 @@ int main(int argc, char **argv)
             if (keystr == NULL) {
                 goto error;
             }
-            rc = db_get(1, keystr, &value, &value_len);
+            rc = db_get(0, keystr, &value, &value_len);
             if (rc < 0) {
                 ERROR("db_get ret %d\n", rc);
             } else if (strlen(value)+1 != value_len) {
+// xxx these val_len checks are not good for the binary stuff
                 ERROR("value_len=%d should be %d\n", value_len, strlen(value)+1);
             } else {
-                INFO("value='%s'\n", (char*)value);
+// xxx only print so much
+                INFO("value='%s'\n", strtrunc(value));
             }
         } else if (strcmp(cmd, "rm") == 0) {
             char *keystr = arg1;
             if (keystr == NULL) {
                 goto error;
             }
-            rc = db_rm(1, keystr);
+            rc = db_rm(0, keystr);
             if (rc < 0) {
                 ERROR("db_get ret %d\n", rc);
             }
@@ -130,7 +133,15 @@ void get_keyid_cb(int keyid, char *keystr, void *val, unsigned int val_len)
     if (strlen(val)+1 != val_len) {
         sprintf(errstr, "  *** ERROR val_len=%d should be %d ***", val_len, strlen(val)+1);
     }
-    INFO("  %d:%s  = %s  %s\n", keyid, keystr, (char*)val, errstr);
+    INFO("  %d:%s  = %s  %s\n", keyid, keystr, strtrunc(val), errstr);
+}
+
+char *strtrunc(char *s)
+{
+    // xxx print ...
+    static char str[33];
+    strncpy(str, s, 32);
+    return str;
 }
 
 // -----------------  TEST1  -----------------------------------------------
@@ -195,10 +206,13 @@ struct stats_s {
     unsigned int db_rm_notok;
 } stats[MAX_TEST2_THREADS];
 
+bool terminate_threads;
+unsigned int db_set_okay_last;
+
 // prototypes
 void *test2_thread(void *cx);
 void print_stats(int secs);
-void get_random_keystr(unsigned int keyid, char *keystr, int *keystr_idx);
+void get_random_keystr(char *keystr, int *keystr_idx);
 void get_random_val_init(void);
 void get_random_val(void **val, unsigned int *val_len);
 int random_range(int min, int max);
@@ -214,6 +228,8 @@ void test2(void)
     // initialize
     get_random_val_init();
     memset(stats, 0, sizeof(stats));
+    terminate_threads = false;
+    db_set_okay_last = 0;
 
     // clear all values from the test database
     db_reset();
@@ -223,7 +239,8 @@ void test2(void)
         pthread_create(&tid[i], NULL, test2_thread, (void*)i);
     }
 
-    // wait until sigint
+    // poll until it is time to stop the test;
+    // and print stats 
     uint64_t start = time(NULL);
     while (true) {
         if (sigint) {
@@ -234,10 +251,11 @@ void test2(void)
             print_stats(time(NULL)-start);
             count = 0;
         }
-        usleep(10000);
+        usleep(100000);  // 0.1 secs
     }
 
     // join with exitting test2_threads
+    terminate_threads = true;    
     for (i = 0; i < MAX_TEST2_THREADS; i++) {
         pthread_join(tid[i], NULL);
     }
@@ -261,11 +279,15 @@ void print_stats(int secs)
         total.db_rm_notok += stats[i].db_rm_notok;
     }
     
-    INFO("%4d: db_set %d / %d    db_get %d / %d    db_rm %d / %d\n",
+    INFO("%4d: db_set %d / %d    db_get %d / %d    db_rm %d / %d    free_list_len %d    num_db_set %d\n",
          secs,
          total.db_set_okay, total.db_set_notok,
          total.db_get_okay, total.db_get_notok,
-         total.db_rm_okay, total.db_rm_notok);
+         total.db_rm_okay, total.db_rm_notok,
+         db_get_free_list_len(),
+         total.db_set_okay - db_set_okay_last);
+
+    db_set_okay_last = total.db_set_okay;
 }
 
 // - - - - - - - - - - - - - - 
@@ -288,12 +310,12 @@ void *test2_thread(void *cx)
 
     memset(exp_val_tbl, 0, sizeof(exp_val_tbl));
 
-    INFO("test2_thread %d starting\n", keyid);
+    //xxx INFO("test2_thread %d starting\n", keyid);
     
-    while (!sigint) {
+    while (!terminate_threads) {
         // 10 db get
         for (int i = 0; i < 10; i++) {
-            get_random_keystr(keyid, keystr, &keystr_idx);
+            get_random_keystr(keystr, &keystr_idx);
             rc = db_get(keyid, keystr, &val, &val_len);
             if ((rc == 0) != (exp_val_tbl[keystr_idx].val != NULL)) {
                 ERROR("XXX\n");
@@ -308,7 +330,7 @@ void *test2_thread(void *cx)
         }
 
         // 1 db set
-        get_random_keystr(keyid, keystr, &keystr_idx);
+        get_random_keystr(keystr, &keystr_idx);
         get_random_val(&val, &val_len);
         rc = db_set(keyid, keystr, val, val_len);
         if (rc < 0) {
@@ -319,7 +341,7 @@ void *test2_thread(void *cx)
         if (rc == 0) my_stats->db_set_okay++; else my_stats->db_set_notok++;
 
         // 1 db rm
-        get_random_keystr(keyid, keystr, &keystr_idx);
+        get_random_keystr(keystr, &keystr_idx);
         rc = db_rm(keyid, keystr);
         if ((rc == 0) != (exp_val_tbl[keystr_idx].val != NULL)) {
             ERROR("XXX\n");
@@ -331,42 +353,53 @@ void *test2_thread(void *cx)
         if (rc == 0) my_stats->db_rm_okay++; else my_stats->db_rm_notok++;
     }
 
-    INFO("test2_thread %d terminating\n", keyid);
+    //xxx INFO("test2_thread %d terminating\n", keyid);
 
     return NULL;
 }
 
 // - - - - - - - - - - - - - - 
 
-void get_random_keystr(unsigned int keyid, char *keystr, int *keystr_idx)
+void get_random_keystr(char *keystr, int *keystr_idx)
 {
     int idx = random_range(0,1000-1);
-    sprintf(keystr, "%d:keystr=%d", keyid, idx);
+    sprintf(keystr, "keystr=%d", idx);
     if (keystr_idx) *keystr_idx = idx;
 }
 
 // - - - - - - - - - - - - - - 
 
-unsigned char random_val_data[1000000];
+char *random_val[1000];
+unsigned int random_val_len[1000];
 
 void get_random_val_init(void)
 {
-    int *x = (int *)random_val_data;
+    static bool initialized;
+    int i,j;
 
-    if (x[1] == 1) {
-        INFO("XXX already init\n");
+    if (initialized) {
         return;
     }
 
-    for (int i = 0; i < sizeof(random_val_data)/sizeof(int); i++) {
-        x[i] = i;
+    INFO("init\n");
+    for (i = 0; i < 1000; i++) {
+        random_val_len[i] = random_range(100,10000);
+        random_val[i] = malloc(random_val_len[i]);
+        for (j = 0; j < random_val_len[i]-1; j++) {
+            random_val[i][j] = random_range('A', 'Z');
+        }
+        random_val[i][j] = '\0';
     }
+    INFO("init done\n");
+
+    initialized = true;
 }
 
 void get_random_val(void **val, unsigned int *val_len)
 {
-    *val_len = random_range(100,10000);
-    *val = random_val_data + random_range(0,900000);
+    int idx = random_range(0, 1000-1);
+    *val = random_val[idx];
+    *val_len = random_val_len[idx];
 }
 
 // - - - - - - - - - - - - - - 
