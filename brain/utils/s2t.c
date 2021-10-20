@@ -3,6 +3,8 @@
 // defines
 #define MAX_SV 1000000
 
+#define NO_LIVECAPTION   // use during development to not run livecaption
+
 // variables
 static char    * transcript;
 static pthread_t s2t_tid;
@@ -57,33 +59,10 @@ char * s2t_feed(short sound_val)
 
 // -----------------  THREAD  ---------------------------------------------------
 
+#ifndef NO_LIVECAPTION
+
 static void *s2t_thread(void *cx)
 {
-#if 0  // xxx
-    char *ts;
-
-    while (true) {
-        // wait for indication to start 
-        while (max_sv == 0) {
-            if (terminating) return NULL;
-            usleep(30000);
-        }
-
-        // provide a dummy transcript
-        sleep(1);
-        ts = malloc(100);
-        strcpy(ts, "dummy transcript");
-        INFO("TRANSCRIPT: '%s'\n", ts);
-        transcript = ts;
-
-        // wait for s2t_feed to acknowledge that it has the transcript
-        while (transcript) {
-            if (terminating) return NULL;
-            usleep(10000);
-        }
-    }
-    return NULL;
-#else
     #define MAX_TS 4096
 
     uint64_t start_time;
@@ -168,5 +147,38 @@ static void *s2t_thread(void *cx)
             usleep(10000);
         }
     }
-#endif
+
+    return NULL;
 }
+
+#else
+
+static void *s2t_thread(void *cx)
+{
+    char *ts;
+
+    while (true) {
+        // wait for indication to start 
+        while (max_sv == 0) {
+            if (terminating) return NULL;
+            usleep(30000);
+        }
+
+        // provide a dummy transcript
+        sleep(1);
+        ts = malloc(100);
+        strcpy(ts, "dummy transcript");
+        INFO("TRANSCRIPT: '%s'\n", ts);
+        transcript = ts;
+
+        // wait for s2t_feed to acknowledge that it has the transcript
+        while (transcript) {
+            if (terminating) return NULL;
+            usleep(10000);
+        }
+    }
+
+    return NULL;
+}
+
+#endif
