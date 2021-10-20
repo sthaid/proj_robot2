@@ -122,7 +122,7 @@ int wwd_feed(short sound_val)
     if (pvrc != PV_STATUS_SUCCESS) {
         FATAL("pv_porcupine_process, %s\n", pv_status_to_string_func(pvrc));
     }
-    if (keyword != -1) INFO("XXX GOT KEYWORD %d\n", keyword);
+    //xxx if (keyword != -1) INFO("XXX GOT KEYWORD %d\n", keyword);
 
     return (keyword == -1 ? 0 : (1 << keyword));
 }
