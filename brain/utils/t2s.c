@@ -1,15 +1,8 @@
 #include <utils.h>
 
-// xxx use #define for sound card
-
 //
 // defines
 //
-
-#define BEEP_DURATION_MS 200
-#define BEEP_FREQUENCY   800
-#define BEEP_AMPLITUDE   6000
-#define MAX_BEEP_DATA    (48000 * BEEP_DURATION_MS / 1000)
 
 //
 // variables
@@ -17,44 +10,24 @@
 
 static int curr_vol;
 
-static struct {
-    short *data;
-    int    max_data;
-    int    idx;
-} play;
-
-static struct {
-    short data[MAX_BEEP_DATA];
-    int   idx;
-    int   n;
-} beep;
-
 //
 // prototypes
 //
-
-static int get_play_frame(void *data_arg, void *cx);
-static int get_beep_frame(void *data_arg, void *cx);
 
 // -----------------  INIT  ------------------------------------------------
 
 void t2s_init(void)
 {
-    int i;
-
     t2s_set_volume(DEFAULT_VOLUME, false);
-
-    for (i = MAX_BEEP_DATA/4; i < MAX_BEEP_DATA*3/4; i++) {
-        beep.data[i] = BEEP_AMPLITUDE * sin(i * (2*M_PI / MAX_BEEP_DATA * BEEP_FREQUENCY));
-    }
 }
 
 // -----------------  PLAY  ------------------------------------------------
 
 void t2s_play(char *fmt, ...)
 {
-    int rc, max_chan, sample_rate;
+    int rc, max_chan, max_data, sample_rate;
     char cmd[10000], *p=cmd;
+    short *data;
     va_list ap;
 
     // make cmd string to run go pgm synthesize_text
@@ -64,7 +37,7 @@ void t2s_play(char *fmt, ...)
     va_end(ap);
     p += sprintf(p, "\"");
 
-    // run synthesize_text to convert text to wav file;
+    // run synthesize_text to convert text to wav file, output.raw
     INFO("RUN_PROG '%s'\n", cmd);
     rc = system(cmd);
     if (rc < 0) {
@@ -74,68 +47,23 @@ void t2s_play(char *fmt, ...)
     INFO("RUN_PROG done\n");
 
     // read wav file 'output.raw', that was just created by synthesize_text
-    memset(&play, 0, sizeof(play));
-    rc = sf_read_wav_file("output.raw", &play.data, &max_chan, &play.max_data, &sample_rate);
+    // xxx read this directly to shm, or just provide filename to audio.c
+    rc = sf_read_wav_file("output.raw", &data, &max_chan, &max_data, &sample_rate);
     if (rc < 0) {
         ERROR("sf_read_wav_file failed\n");
         return;
     }
-    INFO("max_data=%d  max_chan=%d  sample_rate=%d\n", play.max_data, max_chan, sample_rate);
-    assert(play.data != NULL);
-    assert(play.max_data > 0);
+    INFO("max_data=%d  max_chan=%d  sample_rate=%d\n", max_data, max_chan, sample_rate);
+    assert(data != NULL);
+    assert(max_data > 0);
     assert(max_chan == 1);
     assert(sample_rate == 24000);
 
-    // call play2 to play the contents of play.data to the USB speaker
-    pa_play2("USB", 2, 48000, PA_INT16, get_play_frame, NULL);
+    // play
+    audio_out_play(data, max_data);
 
     // free data
-    free(play.data);
-}
-
-static int get_play_frame(void *data_arg, void *cx)
-{
-    short *data = data_arg;
-
-    // xxx can run this all at 24000 by using PA_ALSA_PLUGHW=1
-    if (play.idx >= 2*play.max_data)  {
-        return -1;
-    }
-
-    data[0] = play.data[play.idx/2];
-    data[1] = play.data[play.idx/2];
-    play.idx++;
-
-    return 0;
-}
-
-// -----------------  BEEP  ------------------------------------------------
-
-void t2s_beep(int n)
-{
-    beep.n = n;
-    beep.idx = 0;
-    pa_play2("USB", 2, 48000, PA_INT16, get_beep_frame, NULL);
-}
-
-static int get_beep_frame(void *data_arg, void *cx)
-{
-    short *data = data_arg;
-
-    if (beep.n == 0) {
-        return -1;
-    }
-
-    data[0] = beep.data[beep.idx];
-    data[1] = beep.data[beep.idx];
-
-    beep.idx++;
-    if (beep.idx >= MAX_BEEP_DATA) {
-        beep.idx = 0;
-        beep.n--;
-    }
-
-    return 0;
+    free(data);
 }
 
 // -----------------  VOLUME SUPPORT  --------------------------------------
