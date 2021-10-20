@@ -181,7 +181,7 @@ double doa_get(void)
 
     // debug prints results of sound direction analysis
     // xxx also print amp history here
-    if (1) {
+    if (0) {
         double tnow = FRAME_CNT_TO_TIME(frame_cnt);
         char *prefix_str = (discard ? "DISCARD  " : "");
         INFO("%s%8.3f: ANALYZE SOUND - intvl=%0.3f ... %0.3f - analysis_dur_us = %lld\n", 
