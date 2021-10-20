@@ -95,6 +95,7 @@ static pthread_rwlock_t rwlock;
 // prototypes
 //
 
+static void create_db_file(char *file_name, uint64_t file_len);
 static record_t *find(int keyid, char *keystr, int *htidx);
 static record_t *alloc_record(uint64_t alloc_len);
 static void combine_free(record_t *rec);
@@ -138,7 +139,7 @@ void db_init(char *file_name, bool create, uint64_t file_len)
         if (!create) {
             FATAL("file %s does not exist\n", file_name);
         }
-        db_create(file_name, file_len);
+        create_db_file(file_name, file_len);
     }
 
     // open file and read hdr
@@ -185,7 +186,7 @@ void db_init(char *file_name, bool create, uint64_t file_len)
     RW_INITLOCK;
 }
 
-void db_create(char *file_name, uint64_t file_len)
+static void create_db_file(char *file_name, uint64_t file_len)
 {
     int fd, rc, i;
     unsigned int max_ht;
@@ -254,6 +255,7 @@ void db_create(char *file_name, uint64_t file_len)
     // unmap and close
     munmap(mmap_addr, file_len);
     close(fd);
+    mmap_addr = NULL;
 
     // print message
     INFO("created %s, size=%lld MB\n", file_name, file_len/MB);
