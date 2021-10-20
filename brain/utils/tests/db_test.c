@@ -45,7 +45,7 @@ int main(int argc, char **argv)
     act.sa_handler = sigint_hndlr;
     sigaction(SIGINT, &act, NULL);
     
-    logging_init(NULL, false, true);
+    log_init(NULL, false, true);
 
     db_init("db_test.dat", true, GB);
 

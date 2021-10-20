@@ -56,7 +56,7 @@ int main(int argc, char **argv)
     hndlr_t hndlr;
     int i;
 
-    logging_init(NULL,false,true);
+    log_init(NULL,false,true);
 
     rc = grammar_init("grammar_test.syntax", hlu);
     if (rc < 0) {

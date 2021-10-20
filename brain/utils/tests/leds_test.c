@@ -17,7 +17,7 @@ int main(int argc, char **argv)
     int i, wavelen, led_brightness;
 
     // use stdout for log msgs
-    logging_init(NULL,false,true);
+    log_init(NULL,false,true);
 
     // init leds led device
     leds_init();
