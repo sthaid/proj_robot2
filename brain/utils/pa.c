@@ -11,6 +11,11 @@
      (sf) == PA_UINT8    ? 1 : \
                            -1)
 
+#define MUTEX_LOCK do { pthread_mutex_lock(&mutex); } while (0)
+#define MUTEX_UNLOCK do { pthread_mutex_unlock(&mutex); } while (0)
+
+static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+
 // -----------------  INIT  ------------------------------------------------------
 
 static void exit_hndlr(void);
@@ -113,6 +118,8 @@ int pa_play2(char *output_device, int max_chan, int sample_rate, int sample_form
     PaDeviceIndex       devidx;
     play2_user_data_t   ud;
 
+    MUTEX_LOCK;
+
     // init user_data
     memset(&ud, 0, sizeof(ud));
     ud.get_frame            = get_frame;
@@ -170,13 +177,16 @@ int pa_play2(char *output_device, int max_chan, int sample_rate, int sample_form
     }
 
     // wait for audio output to complete
+    MUTEX_UNLOCK;
     while (!ud.done) {
         Pa_Sleep(10);  // 10 ms
     }
+    MUTEX_LOCK;
 
     // clean up, and return success
     Pa_StopStream(stream);
     Pa_CloseStream(stream);
+    MUTEX_UNLOCK;
     return 0;
 
     // error return path
@@ -185,6 +195,7 @@ error:
         Pa_StopStream(stream);
         Pa_CloseStream(stream);
     }
+    MUTEX_UNLOCK;
     return -1;
 }
 
@@ -294,6 +305,8 @@ int pa_record2(char *input_device, int max_chan, int sample_rate, int sample_for
     PaDeviceIndex       devidx;
     record2_user_data_t ud;
 
+    MUTEX_LOCK;
+
     // init user_data
     memset(&ud, 0, sizeof(ud));
     ud.put_frame            = put_frame;
@@ -352,13 +365,16 @@ int pa_record2(char *input_device, int max_chan, int sample_rate, int sample_for
     }
 
     // wait for audio input to complete
+    MUTEX_UNLOCK;
     while (!ud.done) {
         Pa_Sleep(10);  // 10 ms
     }
+    MUTEX_LOCK;
 
     // clean up, and return success
     Pa_StopStream(stream);
     Pa_CloseStream(stream);
+    MUTEX_UNLOCK;
     return 0;
 
     // error return path
@@ -367,6 +383,7 @@ error:
         Pa_StopStream(stream);
         Pa_CloseStream(stream);
     }
+    MUTEX_UNLOCK;
     return -1;
 }
 
@@ -389,6 +406,10 @@ static int record_stream_cb2(const void *input,
         rc = ud->put_frame(input, ud->put_frame_cx);
         input += (ud->max_chan * ud->sizeof_sample_format);
         if (rc != 0) return paComplete;
+
+        if (status_flags) {
+            WARN_INTVL(1000, "record_stream_cb2 status_flags 0x%lx\n", status_flags);
+        }
     }
     return paContinue;
 }
