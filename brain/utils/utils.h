@@ -201,7 +201,6 @@ int sf_read_wav_file(char *filename, short **data, int *max_chan, int *max_data,
 
 // -------- db.c --------
 
-void db_create(char *file_name, uint64_t file_len);
 void db_init(char *file_name, bool create, uint64_t file_len);
 
 int db_get(int keyid, char *keystr, void **val, unsigned int *val_len);
