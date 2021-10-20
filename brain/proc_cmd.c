@@ -79,9 +79,9 @@ static void *cmd_thread(void *cx)
         INFO("match=%d, args=  '%s'  '%s'  '%s'\n", match, args[0], args[1], args[2]);
         if (match) {
             proc(args);
-            if (cancel) t2s_beep(6);
+            if (cancel) audio_out_beep(6);
         } else {
-            t2s_beep(3);
+            audio_out_beep(3);
         }
 
         // done with this cmd
