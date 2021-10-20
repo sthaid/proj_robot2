@@ -1,11 +1,18 @@
 #include <common.h>
 
 //
+// variables
+//
+
+//
 // prototypes
 //
 
 static void sig_hndlr(int sig);
-static int recv_mic_data(const void *frame_arg, void *cx);
+
+static void * process_mic_data_thread(void *cx);
+static int process_mic_data(short *frame);
+
 static void set_leds(unsigned int color, int brightness, double doa);
 static void convert_angle_to_led_num(double angle, int *led_a, int *led_b);
 
@@ -13,10 +20,7 @@ static void convert_angle_to_led_num(double angle, int *led_a, int *led_b);
 
 int main(int argc, char **argv)
 {
-    int rc;
-
-    // init logging
-    logging_init(NULL, false);
+    pthread_t tid;
 
     // register for SIGINT and SIGTERM
     static struct sigaction act;
@@ -24,37 +28,41 @@ int main(int argc, char **argv)
     sigaction(SIGINT, &act, NULL);
     sigaction(SIGTERM, &act, NULL);
 
+    // init logging
+    log_init(NULL, false, false);
+
     // call init routines
+    // xxx db_init madvise
+    // xxx audio_init madvise
     INFO("INITIALIZING\n")
     misc_init();
-    pa_init();
     wwd_init();
     t2s_init();
     s2t_init();
     doa_init();
     leds_init();
     sf_init();
-    proc_cmd_init();  // this calls grammar_init
+    proc_cmd_init();
+    audio_init();
 
-    // set leds blue
-    set_leds(LED_BLUE, 50, -1);
+    // xxx remember madvise,   for both mmap regions
 
-    // call portaudio util to start acquiring mic data;
-    // - recv_mic_data callback will be called repeatedly with the mic data;
-    // - pa_record2 blocks until recv_mic_data returns non-zero
+    // xxx this should be handled in audio_init
+    // create thread to process the mic data
+    // xxx create and join in the audio routines
+    pthread_create(&tid, NULL, process_mic_data_thread, NULL);
+
+    // program is running
     INFO("RUNNING\n");
+    set_leds(LED_BLUE, 50, -1);
     t2s_play("program running");
-    rc =  pa_record2("seeed-4mic-voicecard",
-                     4,                   // max_chan
-                     48000,               // sample_rate
-                     PA_INT16,            // 16 bit signed data
-                     recv_mic_data,       // callback
-                     NULL,                // cx passed to recv_mic_data
-                     0);                  // discard_samples count
-    if (rc < 0) {
-        ERROR("pa_record2\n");
-    }
 
+    // wait for end_pgm
+    // xxx t2s_play 
+    while (!end_program) {
+        usleep(100000);
+    }
+    
     // program is terminating
     INFO("TERMINATING\n")
     t2s_play("program terminating");
@@ -67,25 +75,40 @@ static void sig_hndlr(int sig)
     end_program = true;
 }
 
+// xxx add end_prgoram api
+
 // -----------------  XXXXXXXXXXXX  ----------------------------------------------
 
-// called at sample rate 48000
-static int recv_mic_data(const void *frame_arg, void *cx)
+// xxx move to audio.c
+static void * process_mic_data_thread(void *cx)  // xxx join
+{
+    int curr_fidx;
+    int last_fidx = 0;
+
+    while (true) {
+        curr_fidx = shm->fidx;
+        while (last_fidx != curr_fidx) {
+            process_mic_data(shm->frames[last_fidx]);
+            last_fidx = (last_fidx + 1) % 48000;
+        }
+
+        usleep(1000);
+    }
+
+    return NULL;
+}
+
+static int process_mic_data(short *frame)
 {
     #define STATE_WAITING_FOR_WAKE_WORD  0
     #define STATE_RECEIVING_CMD          1
     #define STATE_PROCESSING_CMD         2
     #define STATE_DONE_WITH_CMD          3
 
-    const short *frame = frame_arg;
-
     static int    state = STATE_WAITING_FOR_WAKE_WORD;
     static double doa;
 
-    // check if this program is terminating
-    if (end_program) {
-        return -1;
-    }
+    // sample rate is 48000
 
     // supply the frame for doa analysis, frame is 4 shorts
     doa_feed(frame);
