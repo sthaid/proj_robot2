@@ -15,6 +15,7 @@
 #include <signal.h>
 #include <assert.h>
 #include <ctype.h>
+//xxx #include <sched.h>
 
 #include <sys/types.h>
 #include <sys/wait.h>
@@ -22,58 +23,54 @@
 #include <sys/ioctl.h>
 #include <sys/mman.h>
 
-
 // XXX re-order
 
-// -------- logging  ------
+// -------- logging.c  ------
 
-#define MAX_VERBOSE 4
-bool log_verbose[MAX_VERBOSE];
-bool log_brief;
-FILE *log_fp;
+#define INFO(fmt, args...) log_msg("INFO", fmt, ## args);
+#define WARN(fmt, args...) log_msg("WARN", fmt, ## args);
+#define ERROR(fmt, args...) log_msg("ERROR", fmt, ## args);
 
-static inline void logging_init(char *filename, bool append, bool brief)
-{
-    log_brief = brief;
-
-    if (filename == NULL) {
-        log_fp = stdout;
-    } else {
-        log_fp = fopen(filename, append ? "a" : "w");
-        if (log_fp == NULL) {
-            printf("FATAL: failed to open log file %s, %s\n", filename, strerror(errno));
-            exit(1);
-        }
-    }
-   setlinebuf(log_fp);
-}
-
-#define PRINT_COMMON(lvl, fmt, args...) \
+#define INFO_INTVL(ms, fmt, args...) \
     do { \
-        char _s[100]; \
-        if (log_fp == NULL) { \
-            printf("ERROR: log_fp is not set\n"); \
-            exit(1); \
+        static uint64_t last; \
+        uint64_t now = microsec_timer(); \
+        if (now - last > 1000*ms) { \
+            log_msg("INFO", fmt, ## args); \
+            last = now; \
         } \
-        if (!log_brief) { \
-            fprintf(log_fp, "%s " lvl ": " fmt, time2str(time(NULL),_s), ## args); \
-        } else if (strcmp(lvl, "INFO") != 0) { \
-            fprintf(log_fp, lvl ": " fmt, ## args); \
-        } else { \
-            fprintf(log_fp, fmt, ## args); \
+    } while (0)
+#define WARN_INTVL(ms, fmt, args...) \
+    do { \
+        static uint64_t last; \
+        uint64_t now = microsec_timer(); \
+        if (now - last > 1000*ms) { \
+            log_msg("WARN", fmt, ## args); \
+            last = now; \
+        } \
+    } while (0)
+#define ERROR_INTVL(ms, fmt, args...) \
+    do { \
+        static uint64_t last; \
+        uint64_t now = microsec_timer(); \
+        if (now - last > 1000*ms) { \
+            log_msg("ERROR", fmt, ## args); \
+            last = now; \
         } \
     } while (0)
 
-#define INFO(fmt, args...) PRINT_COMMON("INFO", fmt, ## args);
-#define WARN(fmt, args...) PRINT_COMMON("WARN", fmt, ## args);
-#define ERROR(fmt, args...) PRINT_COMMON("ERROR", fmt, ## args);
+#define VERBOSE0(fmt, args...) do { if (log_verbose[0]) log_msg("VERBOSE0", fmt, ## args); } while (0)
+#define VERBOSE1(fmt, args...) do { if (log_verbose[1]) log_msg("VERBOSE1", fmt, ## args); } while (0)
+#define VERBOSE2(fmt, args...) do { if (log_verbose[2]) log_msg("VERBOSE2", fmt, ## args); } while (0)
+#define VERBOSE3(fmt, args...) do { if (log_verbose[3]) log_msg("VERBOSE3", fmt, ## args); } while (0)
 
-#define VERBOSE0(fmt, args...) do { if (log_verbose[0]) PRINT_COMMON("VERBOSE0", fmt, ## args); } while (0)
-#define VERBOSE1(fmt, args...) do { if (log_verbose[1]) PRINT_COMMON("VERBOSE1", fmt, ## args); } while (0)
-#define VERBOSE2(fmt, args...) do { if (log_verbose[2]) PRINT_COMMON("VERBOSE2", fmt, ## args); } while (0)
-#define VERBOSE3(fmt, args...) do { if (log_verbose[3]) PRINT_COMMON("VERBOSE3", fmt, ## args); } while (0)
+#define FATAL(fmt, args...) do { log_msg("FATAL", fmt, ## args); exit(1); } while (0)
 
-#define FATAL(fmt, args...) do { PRINT_COMMON("FATAL", fmt, ## args); exit(1); } while (0)
+#define MAX_VERBOSE 4
+bool log_verbose[MAX_VERBOSE];
+
+void log_init(char *filename, bool append, bool brief);
+void log_msg(char *lvl, char *fmt, ...) __attribute__ ((format (printf, 2, 3)));
 
 // -------- misc.c --------
 
@@ -215,3 +212,26 @@ int db_get_keyid(int keyid, void (*callback)(int keyid, char *keystr, void *val,
 void db_print_free_list(void);
 unsigned int db_get_free_list_len(void);
 void db_reset(void);
+
+// -------- audio.c --------
+
+#define AUDIO_SHM "/audio_shm"
+
+typedef struct {
+    short frames[48000][4];
+    int fidx;
+
+    bool execute;
+    int  mode;
+    int  beep_count;
+
+    short data[60*24000];
+    int max_data;
+} audio_shm_t;
+
+audio_shm_t *shm;
+
+void audio_init(void);
+void audio_out_beep(int beep_count);
+void audio_out_play(short *data, int max_data);
+
