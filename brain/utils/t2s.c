@@ -1,19 +1,5 @@
 #include <utils.h>
 
-//
-// defines
-//
-
-//
-// variables
-//
-
-static int curr_vol;
-
-//
-// prototypes
-//
-
 // -----------------  INIT  ------------------------------------------------
 
 void t2s_init(void)
@@ -25,9 +11,8 @@ void t2s_init(void)
 
 void t2s_play(char *fmt, ...)
 {
-    int rc, max_chan, max_data, sample_rate;
+    int rc;
     char cmd[10000], *p=cmd;
-    short *data;
     va_list ap;
 
     // make cmd string to run go pgm synthesize_text
@@ -46,27 +31,13 @@ void t2s_play(char *fmt, ...)
     }
     INFO("RUN_PROG done\n");
 
-    // read wav file 'output.raw', that was just created by synthesize_text
-    // xxx read this directly to shm, or just provide filename to audio.c
-    rc = sf_read_wav_file("output.raw", &data, &max_chan, &max_data, &sample_rate);
-    if (rc < 0) {
-        ERROR("sf_read_wav_file failed\n");
-        return;
-    }
-    INFO("max_data=%d  max_chan=%d  sample_rate=%d\n", max_data, max_chan, sample_rate);
-    assert(data != NULL);
-    assert(max_data > 0);
-    assert(max_chan == 1);
-    assert(sample_rate == 24000);
-
     // play
-    audio_out_play(data, max_data);
-
-    // free data
-    free(data);
+    audio_out_play_wav("output.raw"); // xxx use output.wav
 }
 
 // -----------------  VOLUME SUPPORT  --------------------------------------
+
+static int curr_vol;
 
 void t2s_set_volume(int percent, bool relative)
 {

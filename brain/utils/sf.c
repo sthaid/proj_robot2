@@ -95,3 +95,41 @@ int sf_read_wav_file(char *filename, short **data, int *max_chan, int *max_data,
     *sample_rate = sfinfo.samplerate;
     return 0;
 }
+
+// caller must supply a sufficiently large data buffer
+int sf_read_wav_file2(char *filename, short *data, int *max_chan, int *max_data, int *sample_rate)
+{
+    SNDFILE *file;
+    SF_INFO  sfinfo;
+    int      cnt, items;
+
+    // preset return values
+    *max_chan = 0;
+    *max_data = 0;
+    *sample_rate = 0;
+
+    // open wav file and get info
+    memset(&sfinfo, 0, sizeof (sfinfo));
+    file = sf_open(filename, SFM_READ, &sfinfo);
+    if (file == NULL) {
+        ERROR("sf_open '%s'\n", filename);
+        return -1;
+    }
+
+    // read the wav file data
+    items = sfinfo.frames * sfinfo.channels;
+    cnt = sf_read_short(file, data, items);
+    if (cnt != items) {
+        ERROR("sf_read_short, cnt=%d items=%d\n", cnt, items);
+        sf_close(file);
+    }
+
+    // close file
+    sf_close(file);
+
+    // return values
+    *max_chan    = sfinfo.channels;
+    *max_data    = items;
+    *sample_rate = sfinfo.samplerate;
+    return 0;
+}

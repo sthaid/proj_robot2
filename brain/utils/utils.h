@@ -15,7 +15,6 @@
 #include <signal.h>
 #include <assert.h>
 #include <ctype.h>
-//xxx #include <sched.h>
 
 #include <sys/types.h>
 #include <sys/wait.h>
@@ -23,7 +22,10 @@
 #include <sys/ioctl.h>
 #include <sys/mman.h>
 
-// XXX re-order
+#define PAGE_SIZE  (sysconf(_SC_PAGE_SIZE))
+
+// xxx may need to add hdr file includes
+// xxx re-order, cleanup
 
 // -------- logging.c  ------
 
@@ -198,6 +200,7 @@ void sf_init(void);
 
 int sf_write_wav_file(char *filename, short *data, int max_chan, int max_data, int sample_rate);
 int sf_read_wav_file(char *filename, short **data, int *max_chan, int *max_data, int *sample_rate);
+int sf_read_wav_file2(char *filename, short *data, int *max_chan, int *max_data, int *sample_rate);
 
 // -------- db.c --------
 
@@ -228,9 +231,8 @@ typedef struct {
     int max_data;
 } audio_shm_t;
 
-audio_shm_t *shm;
+void audio_init(int (*proc_mic_data)(short *frame));
 
-void audio_init(void);
 void audio_out_beep(int beep_count);
-void audio_out_play(short *data, int max_data);
-
+void audio_out_play_data(short *data, int max_data);
+void audio_out_play_wav(char *file_name);

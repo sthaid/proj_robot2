@@ -113,6 +113,7 @@ void doa_feed(const short * frame)
 //             v
 //            180
 
+// return -1 on error, otherise doa angle
 double doa_get(void)
 {
     int           max_cca_idx, max_ccb_idx;
