@@ -10,10 +10,6 @@
 // defines
 //
 
-#define MB        0x100000
-#define GB        (1024 * MB)
-#define PAGE_SIZE 4096
-
 #define MIN_FILE_LEN MB
 
 #define RECORD_BOUNDARY 32
@@ -120,14 +116,14 @@ static void remove_from_list(node_t *node);
 // static asserts
 //
 
-static_assert(sizeof(hdr_t) == PAGE_SIZE, "");
+static_assert(sizeof(hdr_t) == 4096, "");
 static_assert(sizeof(record_t) == 64, "");
 
 // -----------------  DB INT AND CREATE   -------------------------------------------
 
 void db_init(char *file_name, bool create, uint64_t file_len)
 {
-    int fd;
+    int fd, rc;
     hdr_t Hdr;
     struct stat buf;
 
@@ -168,6 +164,13 @@ void db_init(char *file_name, bool create, uint64_t file_len)
     mmap_addr = mmap(NULL, Hdr.file_len, PROT_READ|PROT_WRITE, MAP_SHARED, fd, 0);
     if (mmap_addr == NULL) {
         FATAL("mmap %s, %s\n", file_name, strerror(errno));
+    }
+
+    // don't fork mmap'ed memory;
+    // this seems a good idea, but did not reduce the fork/exec time
+    rc = madvise(mmap_addr, Hdr.file_len, MADV_DONTFORK);
+    if (rc < 0) {
+        FATAL("madvice(%p,%lld), %s\n", mmap_addr, Hdr.file_len, strerror(errno));
     }
 
     // init globals

@@ -4,7 +4,7 @@ LDFLAGS  =  -lpthread -lm -ldl -lwiringPi -lsndfile -lrt
 
 TARGET   = brain
 SOURCES  = brain.c proc_cmd.c \
-           utils/audio.c utils/doa.c utils/grammar.c utils/leds.c utils/logging.c \
+           utils/audio.c utils/db.c utils/doa.c utils/grammar.c utils/leds.c utils/logging.c \
            utils/misc.c utils/sf.c utils/s2t.c utils/t2s.c utils/wwd.c
 
 OBJ := $(SOURCES:.c=.o)

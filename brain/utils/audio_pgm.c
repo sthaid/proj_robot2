@@ -1,27 +1,23 @@
-// XXX move to utils
-//  - add 2 Makefiles
 #define _GNU_SOURCE  // xxx should this be in common, is thee another way?
                      // xxx or always use _GN_SOURCCE
 
-#include <utils.h>  // xxx maybe this pgm should be in utils
+#include <utils.h>
 
-//static audio_shm_t *shm;
+// variables
+static audio_shm_t *shm;
 static bool end_program;
 
+// prototypes
 static void sig_hndlr(int sig);
+static void audio_out_init(void);
 static int recv_mic_data(const void *frame, void *cx);
 static void set_affinity_and_realtime(void);
 
-static void audio_out_init(void);
-
-// ----------------------------------------------------------------------------
+// -----------------  MAIN  ---------------------------------------------------
 
 int main(int argc, char **argv)
 {
     int rc, fd;
-
-    // init logging
-    log_init(NULL, false, false);
 
     // register for SIGINT and SIGTERM
     static struct sigaction act;
@@ -29,37 +25,30 @@ int main(int argc, char **argv)
     sigaction(SIGINT, &act, NULL);
     sigaction(SIGTERM, &act, NULL);
 
-    // xxx
+    // init logging
+    log_init(NULL, false, false);
+    INFO("AUDIO INITIALIZING\n");
+
+    // open and map AUDIO_SHM
     fd = shm_open(AUDIO_SHM, O_RDWR, 0666);
     if (fd < 0) {
-        FATAL("shm_open %s, %s\n", AUDIO_SHM, strerror(errno));
+        FATAL("audio shm_open %s, %s\n", AUDIO_SHM, strerror(errno));
     }
-
     shm = mmap(NULL, sizeof(audio_shm_t), PROT_READ|PROT_WRITE, MAP_SHARED, fd, 0);
     if (shm == NULL) {
-        FATAL("mmap %s, %s\n", AUDIO_SHM, strerror(errno));
+        FATAL("audio mmap %s, %s\n", AUDIO_SHM, strerror(errno));
     }
-
-    INFO("shm %p\n", shm);
     
-    // xxx
+    // init utils used by this program
     misc_init();
     pa_init();
 
-    INFO("audio running\n");
-
+    // initialize audio output capability
     audio_out_init();
-#if 0
-    sleep(2);
-    audio_out_beep(shm, 3);
-    sleep(2);
-    audio_out_beep(shm, 3);
-    sleep(2);
-    audio_out_beep(shm, 3);
-    sleep(2);
-#endif
 
-    // xxx
+    // call pa_record2 to start receiving the 4 channel respeaker mic data;
+    // the recv_mic_data callback routine is called with mic data frames
+    INFO("AUDIO RUNNING\n");
     rc =  pa_record2("seeed-4mic-voicecard",
                      4,                   // max_chan
                      48000,               // sample_rate
@@ -68,11 +57,11 @@ int main(int argc, char **argv)
                      NULL,                // cx passed to recv_mic_data
                      0);                  // discard_samples count
     if (rc < 0) {
-        ERROR("pa_record2\n");
+        ERROR("error pa_record2\n");
     }
 
     // terminate
-    INFO("audio terminating\n");
+    INFO("AUDIO TERMINATING\n");
     return 0;
 }
 
@@ -81,7 +70,7 @@ static void sig_hndlr(int sig)
     end_program = true;
 }
 
-// ----------------------------------------------------------------------------
+// -----------------  AUDIO OUTPUT  -------------------------------------------
 
 #define BEEP_DURATION_MS 200
 #define BEEP_FREQUENCY   800
@@ -92,6 +81,8 @@ static short beep_data[MAX_BEEP_DATA];
 
 static void *audio_out_thread(void *cx);
 static int audio_out_get_frame(void *data_arg, void *cx);
+
+// - - - - - - - - - - - 
 
 static void audio_out_init(void)
 {
@@ -123,9 +114,7 @@ static void *audio_out_thread(void *cx)
     return NULL;
 }
 
-// xxx could try sleepin in here to avoid pa_play2 being invoked for every audio out, or just
-//     provide 0 data values instead;  would need to handle terminating
-// xxx can run this at 24000 by using PA_ALSA_PLUGHW=1
+// xxx could run this at sample_rate=24000 by setting PA_ALSA_PLUGHW=1 env var
 static int audio_out_get_frame(void *data_arg, void *cx)
 {
     short *data = data_arg;
@@ -164,7 +153,7 @@ static int audio_out_get_frame(void *data_arg, void *cx)
     return -1;
 }
 
-// ----------------------------------------------------------------------------
+// -----------------  AUDIO INPUT FROM RESPEAKER 4 CHAN MIC  ------------------
 
 static int recv_mic_data(const void *frame, void *cx)
 {
@@ -183,7 +172,7 @@ static int recv_mic_data(const void *frame, void *cx)
         return -1;
     }
 
-    // store frame in array, to be processed by the process_mic_data_thread
+    // store frame in array, to be processed by the proc_mic_data_thread, in brain.c
     memcpy(shm->frames[shm->fidx+cnt], frame, sizeof(shm->frames[0]));
     cnt++;
 
@@ -198,21 +187,20 @@ static int recv_mic_data(const void *frame, void *cx)
     return 0;
 }
 
-
 static void set_affinity_and_realtime(void)
 {
     struct sched_param param;
     cpu_set_t cpu_set;
     int rc;
 
-    INFO("setting realtime and affinity\n");
+    INFO("audio setting realtime and affinity\n");
 
     // set affinity to cpu 3
     CPU_ZERO(&cpu_set);
     CPU_SET(3, &cpu_set);
     rc = sched_setaffinity(0,sizeof(cpu_set_t),&cpu_set);
     if (rc < 0) {
-        FATAL("sched_setaffinity, %s\n", strerror(errno));
+        FATAL("audio sched_setaffinity, %s\n", strerror(errno));
     }
 
     // set realtime priority
@@ -220,7 +208,6 @@ static void set_affinity_and_realtime(void)
     param.sched_priority = 95;
     rc = sched_setscheduler(0, SCHED_FIFO, &param);
     if (rc < 0) {
-        FATAL("sched_setscheduler, %s\n", strerror(errno));
+        FATAL("audio sched_setscheduler, %s\n", strerror(errno));
     }
 }
-

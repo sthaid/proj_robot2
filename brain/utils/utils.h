@@ -22,10 +22,11 @@
 #include <sys/ioctl.h>
 #include <sys/mman.h>
 
+#define MB 0x100000LL
+#define GB (1024 * MB)
 #define PAGE_SIZE  (sysconf(_SC_PAGE_SIZE))
 
 // xxx may need to add hdr file includes
-// xxx re-order, cleanup
 
 // -------- logging.c  ------
 
@@ -119,6 +120,14 @@ int pa_find_device(char *name);
 void pa_print_device_info(int idx);
 void pa_print_device_info_all(void);
 
+// -------- sf.c --------
+
+void sf_init(void);
+
+int sf_write_wav_file(char *filename, short *data, int max_chan, int max_data, int sample_rate);
+int sf_read_wav_file(char *filename, short **data, int *max_chan, int *max_data, int *sample_rate);
+int sf_read_wav_file2(char *filename, short *data, int *max_chan, int *max_data, int *sample_rate);
+
 // -------- leds.c --------
 
 // notes:
@@ -148,6 +157,12 @@ void leds_stage_rotate(int mode);
 
 void leds_commit(void);
 
+// -------- s2t.c --------
+
+void s2t_init(void);
+
+char *s2t_feed(short sound_val);
+
 // -------- t2s.c --------
 
 #define DEFAULT_VOLUME 20
@@ -156,7 +171,6 @@ void leds_commit(void);
 void t2s_init(void);
 
 void t2s_play(char *fmt, ...) __attribute__((format(printf, 1, 2)));
-void t2s_beep(int n);
 void t2s_set_volume(int percent, bool relative);
 int t2s_get_volume(void);
 
@@ -173,13 +187,8 @@ int wwd_feed(short sound_val);
 
 void doa_init(void);
 
-void doa_feed(const short * frame);
+void doa_feed(const short *frame);
 double doa_get(void);
-
-// -------- s2t.c --------
-
-void s2t_init(void);
-char * s2t_feed(short sound_val);
 
 // -------- grammar.c --------
 
@@ -192,15 +201,8 @@ typedef struct {
 } hndlr_lookup_t;
 
 int grammar_init(char *filename, hndlr_lookup_t *hlu);
+
 bool grammar_match(char *cmd, hndlr_t *proc, args_t args);
-
-// -------- sf.c --------
-
-void sf_init(void);
-
-int sf_write_wav_file(char *filename, short *data, int max_chan, int max_data, int sample_rate);
-int sf_read_wav_file(char *filename, short **data, int *max_chan, int *max_data, int *sample_rate);
-int sf_read_wav_file2(char *filename, short *data, int *max_chan, int *max_data, int *sample_rate);
 
 // -------- db.c --------
 
@@ -220,15 +222,14 @@ void db_reset(void);
 #define AUDIO_SHM "/audio_shm"
 
 typedef struct {
+    // audio input ...
     short frames[48000][4];
-    int fidx;
-
-    bool execute;
-    int  mode;
-    int  beep_count;
-
+    int   fidx;
+    // audio output ...
+    int   beep_count;
     short data[60*24000];
-    int max_data;
+    int   max_data;
+    bool  execute;
 } audio_shm_t;
 
 void audio_init(int (*proc_mic_data)(short *frame));

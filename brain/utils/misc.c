@@ -4,7 +4,7 @@
 
 void misc_init(void)
 {
-    // nothing needed
+    assert(PAGE_SIZE == 4096);
 }
 
 // -----------------  TIME  ---------------------------------------------

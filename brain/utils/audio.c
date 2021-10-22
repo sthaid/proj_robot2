@@ -17,10 +17,8 @@ void audio_init(int (*proc_mic_data)(short *frame))
     // if audio pgm is already running, then error
     rc = system("pgrep -x audio");
     if (rc == 0) {
-        // xxx maybe kill it here if it is
         FATAL("audio pgm is already running\n");
     }
-    INFO("audio pgm is not running\n");
 
     // create and map audio_shm; 
     // open with O_TRUNC so it will be zeroed
@@ -35,6 +33,12 @@ void audio_init(int (*proc_mic_data)(short *frame))
     }
     assert(((uintptr_t)shm & (PAGE_SIZE-1)) == 0);
 
+    // don't fork the mmap'ed memory
+    rc = madvise(shm, sizeof(audio_shm_t), MADV_DONTFORK);
+    if (rc < 0) {
+        FATAL("audio madvice(%p,%zd), %s\n", shm, sizeof(audio_shm_t), strerror(errno));
+    }
+
     // start the audio pgm;
     // run as root because it sets realtime priority
     rc = system("sudo ./audio &");
@@ -42,15 +46,6 @@ void audio_init(int (*proc_mic_data)(short *frame))
         FATAL("start audio pgm, %s\n", strerror(errno));
     }
     INFO("audio pgm started\n");
-
-#if 0
-    // xxx temp, del
-    sleep(1);
-    for (int i = 0; i < 10; i++) {
-        INFO("%d\n", shm->fidx);
-        usleep(100000);
-    }
-#endif
 
     // create the proc_mic_data_thread
     pthread_create(&proc_mic_data_tid, NULL, proc_mic_data_thread, proc_mic_data);
@@ -61,21 +56,11 @@ void audio_init(int (*proc_mic_data)(short *frame))
 
 static void audio_exit(void)
 {
-    static bool called = false;
-
-    // if already called then return
-    if (called) {
-        return;
-    }
-    called = true;
-
     // wait for proc_mic_data thread to exit
     pthread_join(proc_mic_data_tid, NULL);
 
     // stop audio pgm
-    INFO("*** KILL AUDIO\n");
     system("sudo killall -SIGTERM audio");
-    INFO("*** AFTER KILL AUDIO\n");
 }
 
 // -----------------  PROC_MIC_DATA_THREAD  ---------------------------------

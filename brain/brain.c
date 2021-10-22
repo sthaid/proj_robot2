@@ -1,6 +1,4 @@
 // xxx add end_prgoram api
-// xxx db_init madvise
-// xxx audio_init madvise
 
 #include <common.h>
 
@@ -39,6 +37,7 @@ int main(int argc, char **argv)
     leds_init();
     sf_init();
     proc_cmd_init();
+    db_init("db.dat", true, GB);
     audio_init(proc_mic_data);
 
     // program is running
