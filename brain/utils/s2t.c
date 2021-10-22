@@ -3,7 +3,7 @@
 // defines
 #define MAX_SV 1000000
 
-#define NO_LIVECAPTION   // use during development to not run livecaption
+//#define NO_LIVECAPTION   // use during development to not run livecaption
 
 // variables
 static char    * transcript;

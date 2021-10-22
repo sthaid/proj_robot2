@@ -171,6 +171,7 @@ char *s2t_feed(short sound_val);
 void t2s_init(void);
 
 void t2s_play(char *fmt, ...) __attribute__((format(printf, 1, 2)));
+void t2s_play_nodb(char *fmt, ...) __attribute__((format(printf, 1, 2)));
 void t2s_set_volume(int percent, bool relative);
 int t2s_get_volume(void);
 
@@ -206,6 +207,8 @@ bool grammar_match(char *cmd, hndlr_t *proc, args_t args);
 
 // -------- db.c --------
 
+#define KEYID_T2S 1
+
 void db_init(char *file_name, bool create, uint64_t file_len);
 
 int db_get(int keyid, char *keystr, void **val, unsigned int *val_len);
@@ -236,4 +239,4 @@ void audio_init(int (*proc_mic_data)(short *frame));
 
 void audio_out_beep(int beep_count);
 void audio_out_play_data(short *data, int max_data);
-void audio_out_play_wav(char *file_name);
+void audio_out_play_wav(char *file_name, short **data, int *max_data);

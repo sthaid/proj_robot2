@@ -187,6 +187,7 @@ static int recv_mic_data(const void *frame, void *cx)
     return 0;
 }
 
+// xxx creator can do this, once the tid is known
 static void set_affinity_and_realtime(void)
 {
     struct sched_param param;

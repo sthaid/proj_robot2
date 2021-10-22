@@ -121,7 +121,7 @@ void audio_out_play_data(short *data, int max_data)
     __sync_synchronize();
 }
 
-void audio_out_play_wav(char *file_name)
+void audio_out_play_wav(char *file_name, short **data, int *max_data)
 {
     int max_chan, sample_rate, rc;
     
@@ -135,11 +135,19 @@ void audio_out_play_wav(char *file_name)
         return;
     }
     INFO("max_data=%d  max_chan=%d  sample_rate=%d\n", shm->max_data, max_chan, sample_rate);
-    assert(shm->data != NULL);
     assert(shm->max_data > 0);
     assert(max_chan == 1);
     assert(sample_rate == 24000);
 
+    // if caller wants copy of data then provide to caller
+    // xxx nice to do this after execute, but possibly risky
+    if (data) {
+        *data = malloc(shm->max_data * sizeof(short));
+        memcpy(*data, shm->data, shm->max_data * sizeof(short));
+        *max_data = shm->max_data;
+    }
+
+    // xxx comments
     __sync_synchronize();
     shm->execute = true;
     __sync_synchronize();
