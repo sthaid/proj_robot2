@@ -304,6 +304,7 @@ int db_set(int keyid, char *keystr, void *val, unsigned int val_len)
 
     RW_WRLOCK;
 
+// xxx and val_len
     // check keyid arg
     if (keyid < 0 || keyid >= MAX_KEYID) {
         ERROR("invalid keyid %d\n", keyid);
@@ -757,4 +758,49 @@ void db_reset(void)
     add_to_list_head(free_head, &rec->free.node);
 
     RW_UNLOCK;
+}
+
+// - - - - -
+
+// xxx use recursive lock
+
+static int last_keyid_dumped;
+
+static void dump_cb(int keyid, char *keystr, void *val, unsigned int val_len);
+static char *val_str(void *val_arg, unsigned int val_len);
+
+void db_dump(void)
+{
+    last_keyid_dumped = -1;
+    for (int keyid = 0; keyid < MAX_KEYID; keyid++) {
+        db_get_keyid(keyid, dump_cb);
+    }
+
+    INFO("\n");
+    db_print_free_list();
+}
+
+static void dump_cb(int keyid, char *keystr, void *val, unsigned int val_len)
+{
+    if (keyid > last_keyid_dumped) {
+        INFO("KEYID = %d\n", keyid);
+        last_keyid_dumped = keyid;
+    }
+    INFO("  %-32s = %s\n", keystr, val_str(val, val_len));
+}
+
+static char *val_str(void *val_arg, unsigned int val_len)
+{
+    static char val_str[50];
+    char *val = val_arg;
+
+    assert(val_len > 0);
+    if (val_len > sizeof(val_str)) val_len = sizeof(val_str);
+
+    for (int i = 0; i < val_len; i++) {
+        val_str[i] = (isprint(val[i]) ? val[i] : '.');
+    }
+    val_str[val_len-1] = '\0';
+
+    return val_str;
 }

@@ -219,6 +219,7 @@ int db_get_keyid(int keyid, void (*callback)(int keyid, char *keystr, void *val,
 void db_print_free_list(void);
 unsigned int db_get_free_list_len(void);
 void db_reset(void);
+void db_dump(void);
 
 // -------- audio.c --------
 
