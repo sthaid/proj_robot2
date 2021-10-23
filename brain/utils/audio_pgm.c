@@ -1,23 +1,23 @@
-#define _GNU_SOURCE  // xxx should this be in common, is thee another way?
-                     // xxx or always use _GN_SOURCCE
-
+#define _GNU_SOURCE  // needed for sched_setaffinity
 #include <utils.h>
 
 // variables
 static audio_shm_t *shm;
 static bool end_program;
+static pthread_t recv_mic_data_tid;
 
 // prototypes
 static void sig_hndlr(int sig);
 static void audio_out_init(void);
 static int recv_mic_data(const void *frame, void *cx);
-static void set_affinity_and_realtime(void);
+static void *recv_mic_data_setup_thread(void *cx);
 
 // -----------------  MAIN  ---------------------------------------------------
 
 int main(int argc, char **argv)
 {
     int rc, fd;
+    pthread_t tid;
 
     // register for SIGINT and SIGTERM
     static struct sigaction act;
@@ -49,6 +49,7 @@ int main(int argc, char **argv)
     // call pa_record2 to start receiving the 4 channel respeaker mic data;
     // the recv_mic_data callback routine is called with mic data frames
     INFO("AUDIO RUNNING\n");
+    pthread_create(&tid, NULL, recv_mic_data_setup_thread, NULL);
     rc =  pa_record2("seeed-4mic-voicecard",
                      4,                   // max_chan
                      48000,               // sample_rate
@@ -67,6 +68,7 @@ int main(int argc, char **argv)
 
 static void sig_hndlr(int sig)
 {
+    INFO("audio got %s\n", sig == SIGTERM ? "SIGTERM" : "SIGINT");
     end_program = true;
 }
 
@@ -75,7 +77,7 @@ static void sig_hndlr(int sig)
 #define BEEP_DURATION_MS 200
 #define BEEP_FREQUENCY   800
 #define BEEP_AMPLITUDE   6000
-#define MAX_BEEP_DATA    (48000 * BEEP_DURATION_MS / 1000)
+#define MAX_BEEP_DATA    (24000 * BEEP_DURATION_MS / 1000)
 
 static short beep_data[MAX_BEEP_DATA];
 
@@ -101,11 +103,11 @@ static void *audio_out_thread(void *cx)
     while (true) {
         // wait
         while (shm->execute == false) {
-            usleep(10000); // xxx or shorten
+            usleep(2000);
         }
 
         // play
-        pa_play2("USB", 2, 48000, PA_INT16, audio_out_get_frame, NULL);
+        pa_play2("USB", 2, 24000, PA_INT16, audio_out_get_frame, NULL);
 
         // done
         shm->execute = false;
@@ -114,7 +116,6 @@ static void *audio_out_thread(void *cx)
     return NULL;
 }
 
-// xxx could run this at sample_rate=24000 by setting PA_ALSA_PLUGHW=1 env var
 static int audio_out_get_frame(void *data_arg, void *cx)
 {
     short *data = data_arg;
@@ -139,8 +140,8 @@ static int audio_out_get_frame(void *data_arg, void *cx)
     if (shm->max_data > 0) {
         static int idx;
 
-        data[0] = shm->data[idx/2];
-        data[1] = shm->data[idx/2];
+        data[0] = shm->data[idx];
+        data[1] = shm->data[idx];
         idx++;
 
         if (idx >= shm->max_data*2) {
@@ -158,12 +159,10 @@ static int audio_out_get_frame(void *data_arg, void *cx)
 static int recv_mic_data(const void *frame, void *cx)
 {
     static int cnt;
-    static bool first_call = true;
 
-    // on first call set affinity and realtime
-    if (first_call) {
-        set_affinity_and_realtime();
-        first_call = false;
+    // get this thread id, for use by recv_mic_data_setup_thread
+    if (recv_mic_data_tid == 0) {
+        recv_mic_data_tid = pthread_self();
     }
 
     // check if this program is terminating; if so,
@@ -187,28 +186,43 @@ static int recv_mic_data(const void *frame, void *cx)
     return 0;
 }
 
-// xxx creator can do this, once the tid is known
-static void set_affinity_and_realtime(void)
+static void *recv_mic_data_setup_thread(void *cx)
 {
+    while (recv_mic_data_tid == 0) {
+        usleep(1000);
+    }
+
     struct sched_param param;
     cpu_set_t cpu_set;
     int rc;
 
-    INFO("audio setting realtime and affinity\n");
+    INFO("audio setting recv_mic_data realtime & affinity\n");
 
     // set affinity to cpu 3
+    // notes: 
+    // - to isolate a cpu
+    //     add isolcpus=3 to /boot/cmdline, and reboot
+    // - to verify cpu has been isolated
+    //     cat /sys/devices/system/cpu/isolated
+    //     cat /sys/devices/system/cpu/present
     CPU_ZERO(&cpu_set);
     CPU_SET(3, &cpu_set);
-    rc = sched_setaffinity(0,sizeof(cpu_set_t),&cpu_set);
+    rc = pthread_setaffinity_np(recv_mic_data_tid,sizeof(cpu_set_t),&cpu_set);
     if (rc < 0) {
         FATAL("audio sched_setaffinity, %s\n", strerror(errno));
     }
 
     // set realtime priority
+    // notes:
+    // - to verify
+    //      ps -eLo rtprio,comm  | grep audio
     memset(&param, 0, sizeof(param));
     param.sched_priority = 95;
-    rc = sched_setscheduler(0, SCHED_FIFO, &param);
+    rc = pthread_setschedparam(recv_mic_data_tid, SCHED_FIFO, &param);
     if (rc < 0) {
         FATAL("audio sched_setscheduler, %s\n", strerror(errno));
     }
+
+    // terminate thread
+    return NULL;
 }

@@ -22,11 +22,11 @@
 #include <sys/ioctl.h>
 #include <sys/mman.h>
 
+#include <wiringPi.h>
+
 #define MB 0x100000LL
 #define GB (1024 * MB)
 #define PAGE_SIZE  (sysconf(_SC_PAGE_SIZE))
-
-// xxx may need to add hdr file includes
 
 // -------- logging.c  ------
 

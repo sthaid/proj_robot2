@@ -2,8 +2,10 @@
 
 // defines
 #define MAX_SV 1000000
+#define TIMEOUT_SECS 10
 
-//#define NO_LIVECAPTION   // use during development to not run livecaption
+// use during development to not run livecaption
+//#define NO_LIVECAPTION
 
 // variables
 static char    * transcript;
@@ -36,7 +38,6 @@ static void s2t_exit(void)
     pthread_join(s2t_tid, NULL);
 
     // be extra sure that the livecaption program is not running
-    // xxx confirm livecaption is in 'ps'
     system("killall livecaption");
 }
 
@@ -119,9 +120,8 @@ static void *s2t_thread(void *cx)
                 break;
             }
 
-            // timeout if there is not a result from livecaption in 10 secs
-            // xxx make this an arg
-            if (microsec_timer() - start_time > 10000000) {
+            // check for timeout receiving a result from livecaption
+            if (microsec_timer() - start_time > (TIMEOUT_SECS * 1000000LL)) {
                 WARN("timedout waiting for transcript from livecaption\n");
                 break;
             }
@@ -136,7 +136,6 @@ static void *s2t_thread(void *cx)
         transcript = ts;
 
         // close fds and call waitpid
-        // xxx how long does this take
         close(fd_to_lc);
         close(fd_from_lc);
         waitpid(lc_pid, NULL, 0);

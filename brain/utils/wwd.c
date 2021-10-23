@@ -18,9 +18,9 @@ static const char *keyword_paths[] = {
     "./devel/repos/Porcupine/resources/keyword_files/raspberry-pi/porcupine_raspberry-pi.ppn",
     "./devel/repos/Porcupine/resources/keyword_files/raspberry-pi/terminator_raspberry-pi.ppn",
             };
-static const float sensitivities[] = { // xxx what is this?
-    0.8,
-    0.8,
+static const float sensitivities[] = {
+    0.5,
+    0.5,
             };
 
 #define MAX_KEYWORD_PATHS (sizeof(keyword_paths) / sizeof(keyword_paths[0]))
@@ -122,7 +122,7 @@ int wwd_feed(short sound_val)
     if (pvrc != PV_STATUS_SUCCESS) {
         FATAL("pv_porcupine_process, %s\n", pv_status_to_string_func(pvrc));
     }
-    //xxx if (keyword != -1) INFO("XXX GOT KEYWORD %d\n", keyword);
+    // if (keyword != -1) INFO("GOT KEYWORD %d\n", keyword);
 
     return (keyword == -1 ? 0 : (1 << keyword));
 }

@@ -40,7 +40,6 @@ int sf_write_wav_file(char *filename, short *data, int max_chan, int max_data, i
 
     // write the file
     cnt = sf_write_short(file, data, max_data);
-    INFO("XXX cnt %d\n", cnt);
     if (cnt != max_data) {
         ERROR("sf_write_short, cnt=%d items=%d\n", cnt, max_data);
         sf_close(file);
@@ -76,13 +75,14 @@ int sf_read_wav_file(char *filename, short **data, int *max_chan, int *max_data,
 
     // allocate memory for the data
     items = sfinfo.frames * sfinfo.channels;
-    d = calloc(items, sizeof(short));
+    d = malloc(items*sizeof(short));
 
     // read the wav file data
     cnt = sf_read_short(file, d, items);
     if (cnt != items) {
         ERROR("sf_read_short, cnt=%d items=%d\n", cnt, items);
         sf_close(file);
+        return -1;
     }
 
     // close file
@@ -96,7 +96,7 @@ int sf_read_wav_file(char *filename, short **data, int *max_chan, int *max_data,
     return 0;
 }
 
-// caller must supply a sufficiently large data buffer
+// on input max_data is the total number of shorts in caller's data buffer
 int sf_read_wav_file2(char *filename, short *data, int *max_chan, int *max_data, int *sample_rate)
 {
     SNDFILE *file;
@@ -116,8 +116,13 @@ int sf_read_wav_file2(char *filename, short *data, int *max_chan, int *max_data,
         return -1;
     }
 
-    // read the wav file data
+    // limit number of items being read to not overflow caller's buffer
     items = sfinfo.frames * sfinfo.channels;
+    if (items > *max_data) {
+        items = *max_data;
+    }
+
+    // read the wav file data
     cnt = sf_read_short(file, data, items);
     if (cnt != items) {
         ERROR("sf_read_short, cnt=%d items=%d\n", cnt, items);

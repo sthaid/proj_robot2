@@ -17,7 +17,6 @@ static void substitute(char *s, char *current, char *replace);
 static int check_syntax(char *s);
 static hndlr_t lookup_hndlr(char *name, hndlr_lookup_t *hlu);
 
-// xxx should this be fatal 
 int grammar_init(char *filename, hndlr_lookup_t *hlu)
 {
     #define MAX_DEF 100
@@ -35,9 +34,9 @@ int grammar_init(char *filename, hndlr_lookup_t *hlu)
     int      max_def;
     int      line_num;
 
-    // xxx memory leaks in here
+    // xxx some memory leaks in here
 
-    // init 
+    // init local vars
     fp = NULL;
     max_def_save = 0;
     proc = NULL;
@@ -46,12 +45,13 @@ int grammar_init(char *filename, hndlr_lookup_t *hlu)
     max_def = 0;
     line_num = 0;
 
+    // init global vars
     max_grammar = 0;
 
     // open
     fp = fopen(filename, "r");
     if (fp == NULL) {
-        ERROR("failed to open %s, %s\n", filename, strerror(errno));
+        FATAL("failed to open %s, %s\n", filename, strerror(errno));
         return -1;
     }
 
@@ -75,7 +75,7 @@ int grammar_init(char *filename, hndlr_lookup_t *hlu)
             char *name, *value="", *p;
             name = s+7;
             if (name[0] == '\0') {
-                ERROR("line %d: '%s'\n", line_num, s);
+                FATAL("line %d: '%s'\n", line_num, s);
                 goto error;
             }
             if ((p = strchr(name, ' '))) {
@@ -89,20 +89,20 @@ int grammar_init(char *filename, hndlr_lookup_t *hlu)
         // HNDLR line
         } else if (strncmp(s, "HNDLR ", 6) == 0) {
             if (proc) {
-                ERROR("line %d: '%s'\n", line_num, s);
+                FATAL("line %d: '%s'\n", line_num, s);
                 goto error;
             }
             max_def_save = max_def;
             proc = lookup_hndlr(s+6, hlu);
             if (proc == NULL) {
-                ERROR("line %d: '%s'\n", line_num, s);
+                FATAL("line %d: '%s'\n", line_num, s);
                 goto error;
             }
 
         // END line
         } else if (strcmp(s, "END") == 0) {
             if (proc == NULL) {
-                ERROR("line %d: '%s'\n", line_num, s);
+                FATAL("line %d: '%s'\n", line_num, s);
                 goto error;
             }
 
@@ -116,7 +116,7 @@ int grammar_init(char *filename, hndlr_lookup_t *hlu)
         // grammar syntax line
         } else {
             if (proc == NULL) {
-                ERROR("line %d: '%s'\n", line_num, s);
+                FATAL("line %d: '%s'\n", line_num, s);
                 goto error;
             }
 
@@ -134,7 +134,7 @@ int grammar_init(char *filename, hndlr_lookup_t *hlu)
             substitute(s, " >", ">");
 
             if (check_syntax(s) == -1) {
-                ERROR("line %d: '%s'\n", line_num, s);
+                FATAL("line %d: '%s'\n", line_num, s);
                 goto error;
             }
 
@@ -365,7 +365,7 @@ static int match(char *syntax, char *cmd, args_t args)
             *p = save;
         }
 
-        // xxx
+        // xxx comment
         if (is_arg != -1) {
             memcpy(args[is_arg], cmd, match_len);
             args[is_arg][match_len] = '\0';

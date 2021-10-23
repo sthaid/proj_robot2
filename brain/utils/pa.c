@@ -1,6 +1,6 @@
 #include <utils.h>
 
-#include <portaudio.h>  // xxx review includes
+#include <portaudio.h>
 
 #define SIZEOF_SAMPLE_FORMAT(sf) \
     ((sf) == PA_FLOAT32  ? 4 : \
@@ -470,7 +470,7 @@ void pa_print_device_info(PaDeviceIndex idx)
     INFO("  defaultLowOutputLatency    = %0.3f\n", di->defaultLowOutputLatency);
     INFO("  defaultHighInputLatency    = %0.3f\n", di->defaultHighInputLatency);
     INFO("  defaultHighOutputLatency   = %0.3f\n", di->defaultHighOutputLatency);
-    INFO("  defaultSampleRate          = %0.0f\n", di->defaultSampleRate);  // XXX get all rates
+    INFO("  defaultSampleRate          = %0.0f\n", di->defaultSampleRate);
     INFO("\n");
 }
 

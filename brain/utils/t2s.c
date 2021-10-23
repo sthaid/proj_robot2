@@ -1,4 +1,3 @@
-// xxx add tool to dump the db
 #include <utils.h>
 
 static int cnt_db;
@@ -63,7 +62,7 @@ void t2s_play(char *fmt, ...)
     //   run synthesize_text to convert text to wav file, output.raw
     //   play the wav file that was provided by the call above to synthesize_text
     //   save synthesize_text result in db
-    //   
+    // endif
     if (db_get(KEYID_T2S, text, &val, &val_len) == 0) {
         audio_out_play_data((short*)val, val_len/sizeof(short));
         cnt_db++;

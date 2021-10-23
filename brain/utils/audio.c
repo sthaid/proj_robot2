@@ -3,6 +3,7 @@
 // variables
 static pthread_t proc_mic_data_tid;
 static audio_shm_t *shm;
+static bool audio_exitting;
 
 // prototypes
 static void audio_exit(void);
@@ -41,7 +42,7 @@ void audio_init(int (*proc_mic_data)(short *frame))
 
     // start the audio pgm;
     // run as root because it sets realtime priority
-    rc = system("sudo ./audio &");
+    rc = system("sudo PA_ALSA_PLUGHW=1 ./audio &");
     if (rc < 0) {
         FATAL("start audio pgm, %s\n", strerror(errno));
     }
@@ -57,6 +58,7 @@ void audio_init(int (*proc_mic_data)(short *frame))
 static void audio_exit(void)
 {
     // wait for proc_mic_data thread to exit
+    audio_exitting = true;
     pthread_join(proc_mic_data_tid, NULL);
 
     // stop audio pgm
@@ -71,10 +73,8 @@ static void * proc_mic_data_thread(void *cx)
     int last_fidx = 0;
     int (*proc_mic_data)(short *frame) = cx;
 
-    extern bool end_program; //xxx
-
     while (true) {
-        if (end_program) {
+        if (audio_exitting) {
             break;
         }
 
@@ -125,29 +125,31 @@ void audio_out_play_wav(char *file_name, short **data, int *max_data)
 {
     int max_chan, sample_rate, rc;
     
+    // wait for in progress audio output to complete
     while (shm->execute) {
         usleep(1000);
     }
 
+    // read the wav file directly into shm->data
+    shm->max_data = sizeof(shm->data)/sizeof(short);
     rc = sf_read_wav_file2(file_name, shm->data, &max_chan, &shm->max_data, &sample_rate);
     if (rc < 0) {
         ERROR("sf_read_wav_file failed\n");
         return;
     }
     INFO("max_data=%d  max_chan=%d  sample_rate=%d\n", shm->max_data, max_chan, sample_rate);
-    assert(shm->max_data > 0);
+    assert(shm->max_data > 0 && shm->max_data <= sizeof(shm->data)/sizeof(short));
     assert(max_chan == 1);
     assert(sample_rate == 24000);
 
     // if caller wants copy of data then provide to caller
-    // xxx nice to do this after execute, but possibly risky
     if (data) {
         *data = malloc(shm->max_data * sizeof(short));
         memcpy(*data, shm->data, shm->max_data * sizeof(short));
         *max_data = shm->max_data;
     }
 
-    // xxx comments
+    // set shm->execute, this will cause audio_pgm to play the shm->data
     __sync_synchronize();
     shm->execute = true;
     __sync_synchronize();

@@ -1,9 +1,7 @@
 #include <utils.h>
 
-//xxx comments
-
 // The deviation of the max cross correlation from center is
-// limitted by the speed of sound, the distance between the mics, and
+// determined by the speed of sound, the distance between the mics, and
 // the sample_rate. Using:
 //
 // Assuming mic pairs used are 0,2 an 
@@ -58,7 +56,6 @@
 #define FRAME_CNT_TO_TIME(fc)   ((double)(fc) / SAMPLE_RATE)
 
 // access data array
-// xxx check this
 #define DATA(_chan,_offset) \
     ( data [ _chan ] [ data_idx+(_offset) >= 0 ? data_idx+(_offset) : data_idx+(_offset)+MAX_FRAME ] )
 
@@ -66,7 +63,7 @@
 // variables
 //
 
-// xxx these can be floats
+// xxx maybe these can be floats
 static double   data[MAX_CHAN][MAX_FRAME];
 static int      data_idx;
 
@@ -91,7 +88,6 @@ void doa_feed(const short * frame)
     frame_cnt++;
 
     // for each mic channel, copy the input frame to data arrays
-    // xxx try to avoid the multiply
     for (int chan = 0; chan < MAX_CHAN; chan++) {
         DATA(chan,0) = frame[chan] * (1./32767);
     }
@@ -139,12 +135,6 @@ double doa_get(void)
     max_ccb = max_doubles(ccb, 2*N+1, &max_ccb_idx);
     max_ccb_idx -= N;
 
-    // xxx comment
-    discard = false;
-    //if (max_cca < 10 || max_ccb < 10) {
-    //  discard = true;
-    //}
-
     // Instead of using the max_cca/b_idx that is obtained above; this code
     // attempts to find a better value by fitting a 2nd degree polynomial 
     // (a parabola) using the max value, and the 2 values on either side of the max.
@@ -169,9 +159,11 @@ double doa_get(void)
         ccb_x = (max_ccb_idx <= -N ? -N : N);
     }
 
-    // xxx
-    double xxx;
-    xxx = sqrt(cca_x * cca_x + ccb_x * ccb_x);
+    // for now the doa result is never discarded,
+    // possibly consider discarding if
+    // - max_cca < MIN || max_ccb < MIN
+    // - cca_x*cca_x + ccb_x*ccb_x < MIN
+    discard = false;
 
     // determine the direction of sound arrival angle
     angle = atan2(ccb_x, cca_x) * (180/M_PI);
@@ -180,8 +172,7 @@ double doa_get(void)
     // determine the duration of the analysis
     analysis_dur_us = microsec_timer() - start_us;
 
-    // debug prints results of sound direction analysis
-    // xxx also print amp history here
+    // debug prints
     if (0) {
         double tnow = FRAME_CNT_TO_TIME(frame_cnt);
         char *prefix_str = (discard ? "DISCARD  " : "");
@@ -201,8 +192,8 @@ double doa_get(void)
         }
         INFO("%s       LARGEST AT %-10.3f                 LARGEST AT %-10.3f\n", 
               prefix_str, cca_x, ccb_x);
-        INFO("%s       DOA = %0.1f degs    XXX = %0.1f\n", 
-              prefix_str, angle, xxx);
+        INFO("%s       DOA = %0.1f degs\n", 
+              prefix_str, angle);
     }
 
     // return angle

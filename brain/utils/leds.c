@@ -38,9 +38,6 @@ static int tx_buff_size;
 void leds_init(void)
 {
     // this enables Vcc for the Respeaker LEDs
-    if (wiringPiSetupGpio() == -1) {
-        FATAL("wiringPiSetupGpio failed\n");
-    }
     pinMode (5, OUTPUT);
     digitalWrite(5, 1);
 
@@ -70,7 +67,7 @@ void leds_init(void)
     leds_commit();
 }
 
-// -----------------  XXX  ---------------------------------------------------------------
+// -----------------  LEDS API  ----------------------------------------------------------
 
 void leds_stage_led(int num, unsigned int rgb, int led_brightness)
 {
@@ -137,12 +134,15 @@ void leds_stage_rotate(int mode)
 
 void leds_commit(void)
 {
-    int rc;
-    int all_brightness = 31;
+    int rc, num;
+    int all_brightness;
 
-// xxx if all off use 0
+    for (num = 0; num < MAX_LED; num++) {
+        if (*(unsigned int*)&tx->led[num] != 0) break;
+    }
+    all_brightness = (num < MAX_LED ? 31 : 0);
 
-    for (int num = 0; num < MAX_LED; num++) {
+    for (num = 0; num < MAX_LED; num++) {
         struct led_s *x = &tx->led[num];
         x->start_and_brightness = 0xe0 | all_brightness;
     }

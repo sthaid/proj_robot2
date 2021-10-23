@@ -1,10 +1,11 @@
-// xxx add end_prgoram api
-
 #include <common.h>
 
 //
 // variables
 //
+
+static bool end_program;
+static bool end_program_by_signal;
 
 //
 // prototypes
@@ -29,6 +30,9 @@ int main(int argc, char **argv)
 
     // call init routines
     INFO("INITIALIZING\n")
+    if (wiringPiSetupGpio() != 0) {
+        FATAL("wiringPiSetupGpio failed\n");
+    }
     misc_init();
     wwd_init();
     t2s_init();
@@ -53,14 +57,21 @@ int main(int argc, char **argv)
     // program is terminating
     INFO("TERMINATING\n")
     t2s_play("program terminating");
+    if (!end_program_by_signal) sleep(2);
     set_leds(LED_OFF, 0, -1);
 
     return 0;
 }
 
-static void sig_hndlr(int sig)
+void brain_end_program(void)
 {
     end_program = true;
+}
+
+static void sig_hndlr(int sig)
+{
+    end_program_by_signal = true;
+    brain_end_program();
 }
 
 // -----------------  PROCESS MIC DATA FRAME  ------------------------------------
@@ -102,6 +113,7 @@ static int proc_mic_data(short *frame)
         char *transcript = s2t_feed(sound_val);
         if (transcript) {
             if (strcmp(transcript, "TIMEDOUT") == 0) {
+                audio_out_beep(3);
                 free(transcript);
                 state = STATE_DONE_WITH_CMD;
                 break;

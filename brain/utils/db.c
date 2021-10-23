@@ -1,10 +1,6 @@
-// xxx tbd later
-// - msync
-//
-// xxx tbd maybe later
-// - make list utils inline funcs
-
 #include <utils.h>
+
+// xxx msync?
 
 //
 // defines
@@ -304,7 +300,13 @@ int db_set(int keyid, char *keystr, void *val, unsigned int val_len)
 
     RW_WRLOCK;
 
-// xxx and val_len
+    // check val_len
+    if (val_len == 0) {
+        ERROR("invalid val_len %d\n", val_len);
+        RW_UNLOCK;
+        return -1;
+    }
+
     // check keyid arg
     if (keyid < 0 || keyid >= MAX_KEYID) {
         ERROR("invalid keyid %d\n", keyid);
@@ -702,6 +704,8 @@ static void remove_from_list(node_t *node)
 
 // -----------------  DEBUG / TEST UTILS  -------------------------------------------
 
+// ---- free list ----
+
 void db_print_free_list(void)
 {
     uint64_t off;
@@ -736,6 +740,8 @@ unsigned int db_get_free_list_len(void)
     return num_entries;
 }
 
+// ---- db reset ----
+
 void db_reset(void)
 {
     unsigned int i;
@@ -760,17 +766,16 @@ void db_reset(void)
     RW_UNLOCK;
 }
 
-// - - - - -
-
-// xxx use recursive lock
+// ---- db dump ----
 
 static int last_keyid_dumped;
-
 static void dump_cb(int keyid, char *keystr, void *val, unsigned int val_len);
 static char *val_str(void *val_arg, unsigned int val_len);
 
 void db_dump(void)
 {
+    RW_RDLOCK;
+
     last_keyid_dumped = -1;
     for (int keyid = 0; keyid < MAX_KEYID; keyid++) {
         db_get_keyid(keyid, dump_cb);
@@ -778,6 +783,8 @@ void db_dump(void)
 
     INFO("\n");
     db_print_free_list();
+
+    RW_UNLOCK;
 }
 
 static void dump_cb(int keyid, char *keystr, void *val, unsigned int val_len)

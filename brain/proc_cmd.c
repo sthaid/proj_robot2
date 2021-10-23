@@ -13,7 +13,7 @@ static bool cancel;
 
 static void *cmd_thread(void *cx);
 static int getnum(char *s, int default_value);
-static bool strmatch(char *s, ...);  // xxx utils
+static bool strmatch(char *s, ...);
 
 //
 // handlers
@@ -131,9 +131,8 @@ static void hndlr_sleep(args_t args)
 
 static void hndlr_end_program(args_t args)
 {
-    end_program = true;
+    brain_end_program();
 }
-
 
 // -----------------  SUPPORT  ----------------------------------------------
 
