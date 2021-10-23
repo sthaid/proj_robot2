@@ -786,12 +786,12 @@ static void dump_cb(int keyid, char *keystr, void *val, unsigned int val_len)
         INFO("KEYID = %d\n", keyid);
         last_keyid_dumped = keyid;
     }
-    INFO("  %-32s = %s\n", keystr, val_str(val, val_len));
+    INFO("  %-32s = %s  len=%d\n", keystr, val_str(val,val_len), val_len);
 }
 
 static char *val_str(void *val_arg, unsigned int val_len)
 {
-    static char val_str[50];
+    static char val_str[40];
     char *val = val_arg;
 
     assert(val_len > 0);
