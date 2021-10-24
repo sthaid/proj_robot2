@@ -15,15 +15,19 @@ void t2s_init(void)
 
 void t2s_play_nodb(char *fmt, ...)
 {
-    char cmd[10000], *p=cmd;
+    char cmd[10000], *p=cmd, *text;
     va_list ap;
 
     // make cmd string to run go pgm synthesize_text
     p += sprintf(p, "./go/synthesize_text --text \"");
+    text = p-1;
     va_start(ap, fmt);
     p += vsprintf(p, fmt, ap);
     va_end(ap);
     p += sprintf(p, "\"");
+
+    // debug print the text
+    INFO("playing %s\n", text);
 
     // run synthesize_text to convert text to wav file, output.raw
     if (system(cmd) < 0) {
@@ -55,6 +59,9 @@ void t2s_play(char *fmt, ...)
     p += vsprintf(p, fmt, ap);
     va_end(ap);
     p += sprintf(p, "\"");
+
+    // debug print the text
+    INFO("playing %s\n", text);
 
     // if requested text is available in database then 
     //   play the buffer from db to audio_out_play_data

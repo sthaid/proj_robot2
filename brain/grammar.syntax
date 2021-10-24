@@ -16,24 +16,30 @@ sleep 0:NUMBER
 END
 
 HNDLR end_program
-end program
+<and end> program
 END
+
+HNDLR time
+what [is the] time [is it]
+END
+
+DEFINE INFO <name  age  (favorite color)>
+
+HNDLR set_info
+my 0:INFO is 1:(WORD [WORD])
+END
+
+HNDLR get_info
+what is my 0:INFO
+END
+
 
 
 EXIT
 
 HNDLR rotate
-DEFAULT_ARG1 360
-DEFAULT_ARG2 clockwise
-DEFINE AMOUNT    <(NUMBER degrees)  (halfway around)  (all [of] the way around)>
-DEFINE DIRECTION <clockwise  counter-clockwise counterclockwise>
+DEFINE AMOUNT <(NUMBER degrees)  (halfway around)  (all [of] the way around)>
+DEFINE DIRECTION <clockwise  counter-clockwise  counterclockwise>
 <rotate turn> 0:[AMOUNT] 1:[DIRECTION]
 <rotate turn> 1:[DIRECTION] 0:[AMOUNT]
-END
-
-HNDLR test
-DEFAULT_ARG1 none
-#test 0:WORD
-#test 0:[WORD] 1:[WORD] 2:[WORD] 3:[WORD]
-test 0:([WORD] [WORD] [WORD] [WORD] [WORD] [WORD])
 END

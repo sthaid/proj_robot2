@@ -23,6 +23,9 @@ static void hndlr_set_volume(args_t args);
 static void hndlr_get_volume(args_t args);
 static void hndlr_sleep(args_t args);
 static void hndlr_end_program(args_t args);
+static void hndlr_time(args_t args);
+static void hndlr_set_info(args_t args);
+static void hndlr_get_info(args_t args);
 
 #define HNDLR(name) { #name, hndlr_##name }
 
@@ -31,6 +34,9 @@ static hndlr_lookup_t hndlr_lookup_tbl[] = {
     HNDLR(get_volume),
     HNDLR(sleep),
     HNDLR(end_program),
+    HNDLR(time),
+    HNDLR(set_info),
+    HNDLR(get_info),
     { NULL, NULL }
                 };
 
@@ -76,7 +82,7 @@ static void *cmd_thread(void *cx)
 
         // check if cmd matches known grammar, and call hndlr proc
         bool match = grammar_match(cmd, &proc, args);
-        INFO("match=%d, args=  '%s'  '%s'  '%s'\n", match, args[0], args[1], args[2]);
+        INFO("match=%d, args=  '%s'  '%s'  '%s'  '%s'\n", match, args[0], args[1], args[2], args[3]);
         if (match) {
             proc(args);
             if (cancel) audio_out_beep(6);
@@ -132,6 +138,38 @@ static void hndlr_sleep(args_t args)
 static void hndlr_end_program(args_t args)
 {
     brain_end_program();
+}
+
+static void hndlr_time(args_t args)
+{
+    struct tm *tm;
+    time_t t = time(NULL);
+
+    tm = localtime(&t);
+    t2s_play_nodb("the time is %d:%d", tm->tm_hour, tm->tm_min);
+}
+
+static void hndlr_set_info(args_t args)
+{
+    char *info_id = args[0];
+    char *info_val = args[1];
+    INFO("XXX '%s' = '%s'\n", info_id, info_val);
+
+    t2s_play("your %s is %s, got it!", info_id, info_val);
+    db_set(KEYID_INFO, info_id, info_val, strlen(info_val)+1);
+}
+
+static void hndlr_get_info(args_t args)
+{
+    char *info_id = args[0];
+    char *info_val;
+    unsigned int info_val_len;
+
+    if (db_get(KEYID_INFO, args[0], (void**)&info_val, &info_val_len) < 0) {
+        t2s_play("I don't know your %s", info_id);
+    } else {
+        t2s_play("your %s is %s", info_id, info_val);
+    }
 }
 
 // -----------------  SUPPORT  ----------------------------------------------
