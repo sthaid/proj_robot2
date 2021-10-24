@@ -42,7 +42,7 @@ void audio_init(int (*proc_mic_data)(short *frame))
 
     // start the audio pgm;
     // run as root because it sets realtime priority
-    rc = system("sudo PA_ALSA_PLUGHW=1 ./audio &");
+    rc = system("sudo PA_ALSA_PLUGHW=1 ./audio 2>audio.stderr &");
     if (rc < 0) {
         FATAL("start audio pgm, %s\n", strerror(errno));
     }

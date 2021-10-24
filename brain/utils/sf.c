@@ -102,6 +102,7 @@ int sf_read_wav_file2(char *filename, short *data, int *max_chan, int *max_data,
     SNDFILE *file;
     SF_INFO  sfinfo;
     int      cnt, items;
+    int      max_data_orig = *max_data;
 
     // preset return values
     *max_chan = 0;
@@ -118,8 +119,8 @@ int sf_read_wav_file2(char *filename, short *data, int *max_chan, int *max_data,
 
     // limit number of items being read to not overflow caller's buffer
     items = sfinfo.frames * sfinfo.channels;
-    if (items > *max_data) {
-        items = *max_data;
+    if (items > max_data_orig) {
+        items = max_data_orig;
     }
 
     // read the wav file data

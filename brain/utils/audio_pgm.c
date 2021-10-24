@@ -61,6 +61,12 @@ int main(int argc, char **argv)
         ERROR("error pa_record2\n");
     }
 
+    // wait for audio output to complete
+    usleep(100000);
+    while (shm->execute) {
+        usleep(10000);
+    }
+
     // terminate
     INFO("AUDIO TERMINATING\n");
     return 0;
@@ -144,7 +150,7 @@ static int audio_out_get_frame(void *data_arg, void *cx)
         data[1] = shm->data[idx];
         idx++;
 
-        if (idx >= shm->max_data*2) {
+        if (idx >= shm->max_data) {
             idx = 0;
             shm->max_data = 0;
         }
