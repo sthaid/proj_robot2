@@ -29,6 +29,63 @@ char *time2str(time_t t, char *s)
     return s;
 }
 
+// -----------------  NETWORKING  ---------------------------------------
+
+int getsockaddr(char * node, int port, struct sockaddr_in * ret_addr)
+{
+    struct addrinfo   hints;
+    struct addrinfo * result;
+    char              port_str[20];
+    int               ret;
+
+    sprintf(port_str, "%d", port);
+
+    bzero(&hints, sizeof(hints));
+    hints.ai_family   = AF_INET;
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_protocol = 0;
+    hints.ai_flags    = AI_NUMERICSERV;
+
+    ret = getaddrinfo(node, port_str, &hints, &result);
+    if (ret != 0) {
+        ERROR("failed to get address of %s, %s\n", node, gai_strerror(ret));
+        return -1;
+    }
+    if (result->ai_addrlen != sizeof(*ret_addr)) {
+        ERROR("getaddrinfo result addrlen=%d, expected=%d\n",
+            (int)result->ai_addrlen, (int)sizeof(*ret_addr));
+        return -1;
+    }
+
+    *ret_addr = *(struct sockaddr_in*)result->ai_addr;
+    freeaddrinfo(result);
+    return 0;
+}
+
+char * sock_addr_to_str(char * s, int slen, struct sockaddr * addr)
+{
+    char addr_str[100];
+    int port;
+
+    if (addr->sa_family == AF_INET) {
+        inet_ntop(AF_INET,
+                  &((struct sockaddr_in*)addr)->sin_addr,
+                  addr_str, sizeof(addr_str));
+        port = ((struct sockaddr_in*)addr)->sin_port;
+    } else if (addr->sa_family == AF_INET6) {
+        inet_ntop(AF_INET6,
+                  &((struct sockaddr_in6*)addr)->sin6_addr,
+                 addr_str, sizeof(addr_str));
+        port = ((struct sockaddr_in6*)addr)->sin6_port;
+    } else {
+        snprintf(s,slen,"Invalid AddrFamily %d", addr->sa_family);
+        return s;
+    }
+
+    snprintf(s,slen,"%s:%d",addr_str,htons(port));
+    return s;
+}
+
 // -----------------  WAVELEN TO RGB  -----------------------------------
 
 // ported from http://www.noah.org/wiki/Wavelength_to_RGB_in_Python

@@ -40,9 +40,11 @@ int main(int argc, char **argv)
     doa_init();
     leds_init();
     sf_init();
-    proc_cmd_init();
     db_init("db.dat", true, GB);
     audio_init(proc_mic_data);
+
+    proc_cmd_init();
+    body_intfc_init();
 
     // program is running
     INFO("RUNNING\n");

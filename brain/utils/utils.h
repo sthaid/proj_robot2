@@ -21,6 +21,9 @@
 #include <sys/stat.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
+#include <sys/socket.h>
+#include <netdb.h>
+#include <arpa/inet.h>
 
 #include <wiringPi.h>
 
@@ -81,6 +84,9 @@ void misc_init(void);
 
 uint64_t microsec_timer(void);
 char *time2str(time_t t, char *s);
+
+int getsockaddr(char * node, int port, struct sockaddr_in * ret_addr);
+char * sock_addr_to_str(char * s, int slen, struct sockaddr * addr);
 
 unsigned int wavelen_to_rgb(double wavelength);
 
