@@ -1,0 +1,14 @@
+CC       = gcc
+CFLAGS   = -g -O2 -Wall -Iutils
+LDFLAGS  =  -lpthread -lportaudio -lrt -lm
+
+TARGET   = audio
+SOURCES  = utils/audio_pgm.c utils/pa.c utils/logging.c utils/misc.c
+
+OBJ := $(SOURCES:.c=.o)
+
+$(TARGET): $(OBJ)
+	$(CC) -o $@ $(OBJ) $(LDFLAGS)
+
+clean:
+	rm -f $(TARGET) $(OBJ)

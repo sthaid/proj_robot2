@@ -1,0 +1,49 @@
+HNDLR set_volume
+0:<increase decrease> volume [by] [1:PERCENT]
+volume 0:<increase decrease up down> [by] [1:PERCENT]
+0:set volume [to] 1:PERCENT
+0:reset volume
+END
+
+HNDLR get_volume
+get volume
+query volume
+what is <the your> volume
+END
+
+HNDLR sleep
+sleep 0:NUMBER
+END
+
+HNDLR end_program
+<and end> program
+END
+
+HNDLR time
+what [is the] time [is it]
+END
+
+DEFINE INFO <name  age  (favorite color)>
+
+HNDLR set_info
+my 0:INFO is 1:(WORD [WORD])
+END
+
+HNDLR get_info
+what is my 0:INFO
+END
+
+HNDLR drive_fwd
+[drive] forward [for] 0:NUMBER feet
+END
+
+
+
+EXIT
+
+HNDLR rotate
+DEFINE AMOUNT <(NUMBER degrees)  (halfway around)  (all [of] the way around)>
+DEFINE DIRECTION <clockwise  counter-clockwise  counterclockwise>
+<rotate turn> 0:[AMOUNT] 1:[DIRECTION]
+<rotate turn> 1:[DIRECTION] 0:[AMOUNT]
+END

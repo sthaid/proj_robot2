@@ -22,6 +22,7 @@
 
 static struct msg_drive_proc_s * drive_proc_msg;
 static int                       emer_stop_thread_state;
+static char                      emer_stop_reason[200];
 static mc_status_t             * mcs;
 
 //
@@ -82,7 +83,8 @@ void drive_run(struct msg_drive_proc_s *drive_proc_msg_arg)
     static struct msg_drive_proc_s static_drive_proc_msg;
 
     if (drive_proc_msg != NULL) {
-        ERROR("drive_proc is currently running\n");
+        ERROR("drive is busy\n");
+        send_drive_proc_complete_msg(drive_proc_msg_arg->unique_id, false, "drive is busy");
         return;
     }
 
@@ -95,11 +97,6 @@ void drive_emer_stop(void)
 {
     ERROR("emergency stop\n");
     mc_disable_all();
-}
-
-bool drive_emer_stop_occurred(void)
-{
-    return EMER_STOP_OCCURRED;
 }
 
 // -----------------  ROUTINES CALLED FROM DRIVE_PROCS.C  -------------------
@@ -971,7 +968,7 @@ static void drive_straight_cal_tbl_init_default(void)
 static void *drive_thread(void *cx)
 {
     struct sched_param param;
-    int rc;
+    int rc, unique_id;
 
     // set realtime priority
     memset(&param, 0, sizeof(param));
@@ -987,6 +984,10 @@ static void *drive_thread(void *cx)
             usleep(10000);  // 10 ms
         }
 
+        // make copy of unique_id, and clear emer_stop_reason
+        unique_id = drive_proc_msg->unique_id;
+        emer_stop_reason[0] = '\0';
+
         // reset encoders, and imu rotatation
         encoder_count_reset(0);
         encoder_count_reset(1);
@@ -996,8 +997,9 @@ static void *drive_thread(void *cx)
         // enable emer_stop_thread, and
         // wait for 15 ms to allow time for the enables to take affect
         if (mc_enable_all() < 0) {
-            drive_proc_msg = NULL;
-            continue;
+            strcpy(emer_stop_reason, "failed to enable motors");
+            rc = -1;
+            goto done;
         }
         encoder_enable(0);
         encoder_enable(1);
@@ -1008,7 +1010,7 @@ static void *drive_thread(void *cx)
         usleep(15000);  // 15 ms
 
         // call the drive proc
-        drive_proc(drive_proc_msg);
+        rc = drive_proc(drive_proc_msg);
 
         // disable emer_stop_thread, and
         // disable motor-ctlr and sensors
@@ -1021,7 +1023,13 @@ static void *drive_thread(void *cx)
         imu_set_accel_rot_ctrl(false);
 
         // clear drive_proc_msg
-        drive_proc_msg = NULL;
+done:   drive_proc_msg = NULL;
+
+        // send drive proc complete msg
+        if (rc == -1 && emer_stop_reason[0] == '\0') {
+            strcpy(emer_stop_reason, "unknown error");
+        }
+        send_drive_proc_complete_msg(unique_id, rc==0, emer_stop_reason);
     }
 
     return NULL;
@@ -1034,15 +1042,15 @@ static bool     stop_button_pressed;
 
 static void *emer_stop_thread(void *cx)
 {
-    int enc_left_errs, enc_right_errs;
-    bool prox_front, prox_rear;
+    int encoder_errs;
     double accel;
     struct sched_param param;
     int rc;
 
     #define DO_EMER_STOP(fmt, args...) \
         do { \
-            ERROR(fmt, ## args); \
+            sprintf(emer_stop_reason, fmt, ## args); \
+            ERROR("%s\n", emer_stop_reason); \
             mc_disable_all(); \
             emer_stop_thread_state = EMER_STOP_THREAD_DISABLED; \
             goto emer_stopped; \
@@ -1066,25 +1074,29 @@ emer_stopped:
         }
 
         if (mcs->state == MC_STATE_DISABLED) {
-            DO_EMER_STOP("mc-disabled\n");
+            DO_EMER_STOP("motors have been disabled\n");
         }
 
         if (stop_button_pressed) {
-            DO_EMER_STOP("stop-button\n");
+            DO_EMER_STOP("stop button\n");
         }
 
-        enc_left_errs = enc_right_errs = 0;
-        if ((enc_left_errs = encoder_get_errors(0)) || (enc_right_errs = encoder_get_errors(1))) {
-            DO_EMER_STOP("enc-errors-%d-%d\n", enc_left_errs, enc_right_errs);
+        if ((encoder_errs = encoder_get_errors(0))) {
+            DO_EMER_STOP("left wheel encoder has %d errors", encoder_errs);
+        }
+        if ((encoder_errs = encoder_get_errors(1))) {
+            DO_EMER_STOP("right wheel encoder has %d errors", encoder_errs);
         }
 
-        prox_front = prox_rear = false;
-        if ((prox_front = proximity_check(0,NULL)) || (prox_rear = proximity_check(1,NULL))) {
-            DO_EMER_STOP("proximity-%d-%d\n", prox_front, prox_rear);
+        if (proximity_check(0,NULL)) {
+            DO_EMER_STOP("front proximity alert");
+        }
+        if (proximity_check(1,NULL)) {
+            DO_EMER_STOP("rear proximity alert");
         }
 
         if (imu_check_accel_alert(&accel)) {
-            DO_EMER_STOP("accel=%0.1f\n", accel);
+            DO_EMER_STOP("acceleration %0.1f g\n", accel);
         }
 
         for (int id = 0; id < 2; id++) {
@@ -1102,7 +1114,8 @@ emer_stopped:
             if (enc_low_speed_start_time[id] != 0 &&
                 microsec_timer() - enc_low_speed_start_time[id] > 1000000)   // 1 sec
             {
-                DO_EMER_STOP("enc=%d mtr_mph=%0.1f enc_mph=%0.1f\n", id, mtr_mph, enc_mph);
+                DO_EMER_STOP("%s encoder speed %0.1f does not match motor speed %0.1f",
+                             id == 0 ? "left" : "right", enc_mph, mtr_mph);
             }
         }
 

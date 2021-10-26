@@ -57,7 +57,7 @@ static int getsockaddr(char * node, int port, struct sockaddr_in * ret_addr);
 static char *sock_addr_to_str(char * s, int slen, struct sockaddr * addr);
 
 static void *msg_receive_thread(void *cx);
-static void send_msg(int id, void *data, int data_len);
+static void send_msg(msg_t *msg);
 
 static void update_display(int maxy, int maxx);
 static int input_handler(int input_char);
@@ -79,7 +79,7 @@ static WINDOW  * curses_window;
 static void curses_init(void);
 static void curses_exit(void);
 static void curses_runtime(void (*update_display)(int maxy, int maxx), int (*input_handler)(int input_char),
-		           void (*other_handler)(void));
+                           void (*other_handler)(void));
 
 // -----------------  MAIN & INITIALIZE & UTILS  ---------------------------------
 
@@ -135,7 +135,7 @@ static void initialize(void)
     // set 3 second recv timeout
     rc = setsockopt(sfd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
     if (rc < 0) {
-	fatal("failed to set SO_RCVTIMEO, %s\n", strerror(errno));
+        fatal("failed to set SO_RCVTIMEO, %s\n", strerror(errno));
     }
 
     // create thread to receive and process msgs from body pgm
@@ -145,7 +145,7 @@ static void initialize(void)
 static void sig_hndlr(int sig)
 {
     if (sig == SIGINT) {
-	sigint = true;
+        sigint = true;
     }
 }
 
@@ -293,27 +293,9 @@ static void *msg_receive_thread(void *cx)
     int   rc;
 
     while (true) {
-        // receive the msg.hdr
-        rc = recv(sfd, &msg, sizeof(struct msg_hdr_s), MSG_WAITALL);
-        if (rc != sizeof(struct msg_hdr_s)) {
-            if (rc == 0) {
-                fatal("connection closed by peer");
-            } else {
-                fatal("recv msg hdr rc=%d, %s", rc, strerror(errno));
-            }
-        }
-
-        // validate the msg.hdr
-        if (msg.hdr.magic != MSG_MAGIC ||
-            msg.hdr.len < sizeof(struct msg_hdr_s) ||
-            msg.hdr.len > sizeof(msg_t))
-        {
-            fatal("invalid msg magic 0x%x or len %d", msg.hdr.magic, msg.hdr.len);
-        }
-
-        // receive the remainder of the msg
-        rc = recv(sfd, (void*)&msg+sizeof(struct msg_hdr_s), msg.hdr.len-sizeof(struct msg_hdr_s), MSG_WAITALL);
-        if (rc != msg.hdr.len-sizeof(struct msg_hdr_s)) {
+        // receive the msg
+        rc = recv(sfd, &msg, sizeof(msg_t), MSG_WAITALL);
+        if (rc != sizeof(msg_t)) {
             if (rc == 0) {
                 fatal("connection closed by peer");
             } else {
@@ -322,7 +304,7 @@ static void *msg_receive_thread(void *cx)
         }
 
         // process the msg
-        switch (msg.hdr.id) {
+        switch (msg.id) {
         case MSG_ID_STATUS:
             body_status = msg.status;
             break;
@@ -330,8 +312,10 @@ static void *msg_receive_thread(void *cx)
             safe_strcpy(logmsg_strs[logmsg_strs_count%MAX_LOGMSG_STRS], msg.logmsg.str);
             __sync_fetch_and_add(&logmsg_strs_count, 1);
             break;
+        case MSG_ID_DRIVE_PROC_COMPLETE:
+            break;
         default:
-            fatal("unsupported msg id %d", msg.hdr.id);
+            fatal("unsupported msg id %d", msg.id);
             break;
         }
     }
@@ -341,32 +325,13 @@ static void *msg_receive_thread(void *cx)
 
 // -----------------  SEND MSG ---------------------------------------------------
 
-static void send_msg(int id, void *data, int data_len)
+static void send_msg(msg_t *msg)
 {
-    msg_t msg;
     int rc;
 
-    // validate data_len
-    if ((data == NULL && data_len != 0) ||
-        (data != NULL && (data_len <= 0 || data_len > sizeof(msg_t)-sizeof(struct msg_hdr_s))))
-    {
-        fatal("data=%p data_len=%d", data, data_len);
-    }
-
-    // init msg_hdr
-    msg.hdr.magic = MSG_MAGIC;
-    msg.hdr.len   = sizeof(struct msg_hdr_s) + data_len;
-    msg.hdr.id    = id;
-    msg.hdr.pad   = 0;
-
-    // copy data to msg, following the hdr
-    if (data) {
-        memcpy((void*)&msg+sizeof(struct msg_hdr_s), data, data_len);
-    }
-
     // send the msg
-    rc = send(sfd, &msg, msg.hdr.len, MSG_NOSIGNAL);   
-    if (rc != msg.hdr.len) {
+    rc = send(sfd, msg, sizeof(msg_t), MSG_NOSIGNAL);   
+    if (rc != sizeof(msg_t)) {
         if (rc == 0) {
             fatal("connection closed by peer");
         } else {
@@ -502,16 +467,16 @@ static void update_display(int maxy, int maxx)
         bool is_warn_str = (strstr(str, "WARN") != NULL);
         bool is_body_test_str = (strstr(str, "BODY_TEST") != NULL);
         if (is_error_str || is_warn_str) {
-	    attron(COLOR_PAIR(COLOR_PAIR_RED));
-	} else if (is_body_test_str) {
-	    attron(COLOR_PAIR(COLOR_PAIR_CYAN));
-	}
+            attron(COLOR_PAIR(COLOR_PAIR_RED));
+        } else if (is_body_test_str) {
+            attron(COLOR_PAIR(COLOR_PAIR_CYAN));
+        }
         mvprintw(19+i, 0, "%s", str);
         if (is_error_str || is_warn_str) {
-	    attroff(COLOR_PAIR(COLOR_PAIR_RED));
-	} else if (is_body_test_str) {
-	    attroff(COLOR_PAIR(COLOR_PAIR_CYAN));
-	}
+            attroff(COLOR_PAIR(COLOR_PAIR_RED));
+        } else if (is_body_test_str) {
+            attroff(COLOR_PAIR(COLOR_PAIR_CYAN));
+        }
     }
 
     // display cmdline
@@ -547,30 +512,35 @@ static int process_cmdline(void)
     double arg[4];
     char   cmd[100];
     int    proc_id = 0;
+    msg_t  msg;
 
     static char last_cmdline[100];
+    static int  unique_id;
 
     if (strcmp(cmdline, "r") == 0) {
-	strcpy(cmdline, last_cmdline);
+        strcpy(cmdline, last_cmdline);
     }
 
     cmd[0] = '\0';
     memset(arg, 0, sizeof(arg));
     sscanf(cmdline, "%s %lf %lf %lf %lf", cmd, &arg[0], &arg[1], &arg[2], &arg[3]); 
     if (cmd[0] == '\0') {
-	blank_line();
+        blank_line();
         return 0;
     }
 
     info("CMD: %s", cmdline);
 
+    memset(&msg, 0, sizeof(msg_t));
     if (strcmp(cmd, "q") == 0) {
         return -1;  // terminate pgm
     } else if (strcmp(cmd, "mc_debug") == 0) {
-        struct msg_mc_debug_ctl_s x = { arg[0] };
-        send_msg(MSG_ID_MC_DEBUG_CTL, &x, sizeof(x));
+        msg.id = MSG_ID_MC_DEBUG_CTL;
+        msg.mc_debug_ctl.enable = arg[0];
+        send_msg(&msg);
     } else if (strcmp(cmd, "log_mark") == 0) {
-        send_msg(MSG_ID_LOG_MARK, NULL, 0);
+        msg.id = MSG_ID_LOG_MARK;
+        send_msg(&msg);
     } else if ( (strcmp(cmd, "scal") == 0 && (proc_id =   1))  ||
                 (strcmp(cmd, "mcal") == 0 && (proc_id =   2))  ||
                 (strcmp(cmd, "fwd")  == 0 && (proc_id =  11))  ||
@@ -589,8 +559,14 @@ static int process_cmdline(void)
                 (strcmp(cmd, "tst9") == 0 && (proc_id = 109)) 
                         )
     {
-        struct msg_drive_proc_s x = { proc_id, {arg[0], arg[1], arg[2], arg[3]} };
-        send_msg(MSG_ID_DRIVE_PROC, &x, sizeof(x));
+        msg.id = MSG_ID_DRIVE_PROC;
+        msg.drive_proc.unique_id = ++unique_id;
+        msg.drive_proc.proc_id = proc_id;
+        msg.drive_proc.arg[0] = arg[0];
+        msg.drive_proc.arg[1] = arg[1];
+        msg.drive_proc.arg[2] = arg[2];
+        msg.drive_proc.arg[3] = arg[3];
+        send_msg(&msg);
     } else {
         error("invalid cmd: %s", cmdline);
     }
@@ -602,10 +578,12 @@ static int process_cmdline(void)
 
 static void other_handler(void)
 {
+    static msg_t msg = {MSG_ID_DRIVE_EMER_STOP};
+
     if (sigint) {
-	sigint = false;
-	error("ctrl-c");
-	send_msg(MSG_ID_DRIVE_EMER_STOP, NULL, 0);
+        sigint = false;
+        error("ctrl-c");
+        send_msg(&msg);
     }
 }
 
@@ -637,7 +615,7 @@ static void curses_exit(void)
 }
 
 static void curses_runtime(void (*update_display)(int maxy, int maxx), int (*input_handler)(int input_char),
-		           void (*other_handler)(void))
+                           void (*other_handler)(void))
 {
     int input_char, maxy, maxx;
     int maxy_last=0, maxx_last=0;
@@ -679,10 +657,10 @@ static void curses_runtime(void (*update_display)(int maxy, int maxx), int (*inp
             return;
         }
 
-	// if other_handler is provided then call it
-	if (other_handler) {
-	    other_handler();
-	}
+        // if other_handler is provided then call it
+        if (other_handler) {
+            other_handler();
+        }
 
         // if need to sleep is indicated then do so
         if (sleep_us) {

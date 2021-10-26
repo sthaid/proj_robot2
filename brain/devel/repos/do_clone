@@ -1,0 +1,12 @@
+#!/bin/bash
+
+git clone https://github.com/respeaker/seeed-voicecard.git
+git clone https://github.com/respeaker/4mics_hat.git
+git clone https://github.com/introlab/odas.git
+git clone git@github.com:introlab/odas_web.git
+git clone git@github.com:Picovoice/picovoice.git
+git clone git@github.com:PortAudio/portaudio.git
+git clone https://github.com/libsndfile/libsndfile 
+git clone https://github.com/GoogleCloudPlatform/golang-samples.git
+git clone https://github.com/Picovoice/Porcupine
+git clone https://github.com/zserge/jsmn

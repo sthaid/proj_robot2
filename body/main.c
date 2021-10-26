@@ -4,15 +4,8 @@
 // defines
 //
 
-#define MAX_LOGMSG_STRS      50
-#define MAX_LOGMSG_STR_SIZE  100
-
-// dest must be a char array, and not a char *
-#define safe_strcpy(dest, src) \
-    do { \
-        strncpy(dest, src, sizeof(dest)-1); \
-        (dest)[sizeof(dest)-1] = '\0'; \
-    } while (0)
+#define MUTEX_LOCK do { pthread_mutex_lock(&mutex); } while (0)
+#define MUTEX_UNLOCK do { pthread_mutex_unlock(&mutex); } while (0)
 
 //
 // typedefs
@@ -22,9 +15,8 @@
 // variables
 //
 
-static char logmsg_strs[MAX_LOGMSG_STRS][MAX_LOGMSG_STR_SIZE];
-static int  logmsg_strs_count;
-
+static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+static int sockfd = -1;
 static bool sigint, sigterm;
 
 //
@@ -36,10 +28,13 @@ static void sig_hndlr(int signum);
 static void logmsg_cb(char *str);
 
 static void server(void);
-static void *server_thread(void *cx);
-static int send_msg(int sockfd, int id, void *data, int data_len);
-static struct msg_status_s * generate_msg_status(void);
+static int recv_msg(msg_t *msg);
 static void process_received_msg(msg_t *msg);
+
+static void *send_status_msg_thread(void *cx);
+static void generate_status_msg(msg_t *msg);
+static void send_logmsg(char *str);
+static void send_msg(msg_t *msg);
 
 // -----------------  MAIN AND INIT ROUTINES  ------------------------------
 
@@ -68,7 +63,7 @@ int main(int argc, char **argv)
 
 static void initialize(void)
 {
-    //pthread_t tid;
+    pthread_t tid;
 
     #define CALL(routine,args) \
         do { \
@@ -78,6 +73,13 @@ static void initialize(void)
                 exit(1); \
             } \
         } while (0)
+
+    // register SIGTERM and SIGINT
+    struct sigaction act;
+    memset(&act, 0, sizeof(act));
+    act.sa_handler = sig_hndlr;
+    sigaction(SIGINT, &act, NULL);
+    sigaction(SIGTERM, &act, NULL);
 
     // register logmsg callback
     logmsg_register_cb(logmsg_cb);
@@ -100,12 +102,8 @@ static void initialize(void)
     CALL(oled_ctlr_init, ());
     CALL(drive_init, ());
 
-    // register SIGTERM
-    struct sigaction act;
-    memset(&act, 0, sizeof(act));
-    act.sa_handler = sig_hndlr;
-    sigaction(SIGINT, &act, NULL);
-    sigaction(SIGTERM, &act, NULL);
+    // create send_status_msg_thread
+    pthread_create(&tid, NULL, send_status_msg_thread, NULL);
 }
 
 static void sig_hndlr(int signum)
@@ -116,21 +114,18 @@ static void sig_hndlr(int signum)
 
 static void logmsg_cb(char *str)
 {
-    safe_strcpy(logmsg_strs[logmsg_strs_count%MAX_LOGMSG_STRS], str);
-    __sync_fetch_and_add(&logmsg_strs_count,1);
+    send_logmsg(str);
 }
 
-// -----------------  SERVER  ----------------------------------------------
+// -----------------  ACCEPT CONN, RECV & PROCESS MSGS  --------------------
 
 static void server(void)
 {
     struct sockaddr_in server_address;
-    int32_t            listen_sockfd;
-    int32_t            ret;
-    pthread_t          thread;
-    pthread_attr_t     attr;
-    int32_t            optval;
-    char               s[200];
+    int                listen_sockfd;
+    int                ret;
+    int                optval;
+    char               client[200];
 
     // create socket
     listen_sockfd = socket(AF_INET, SOCK_STREAM, 0);
@@ -154,251 +149,81 @@ static void server(void)
     // listen 
     listen(listen_sockfd, 2);
 
-    // init thread attributes to make thread detached
-    pthread_attr_init(&attr);
-    pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
-
-    // loop, accepting connection, and create thread to service the client
-    INFO("server: accepting connections\n");
-    while (1) {
-        int                sockfd;
-        socklen_t          len;
+    // accept connection
+accept_connection:
+    while (true) {
+        socklen_t len;
         struct sockaddr_in address;
 
-        // accept connection
         len = sizeof(address);
         sockfd = accept(listen_sockfd, (struct sockaddr *) &address, &len);
         if (sockfd == -1) {
-            if (sigint || sigterm) {
-                break;
-            }
+            if (sigint || sigterm) return;
             ERROR("accept, %s\n", strerror(errno));
             continue;
         }
-
-        // create thread
-        INFO("accepted connection from %s\n", sock_addr_to_str(s,sizeof(s),(struct sockaddr *)&address));
-        pthread_create(&thread, &attr, server_thread, (void*)(uintptr_t)sockfd);
-    }
-}
-
-static void * server_thread(void * cx)
-{
-    int      sockfd = (uintptr_t)cx;
-    msg_t    recv_msg;
-    uint64_t time_last_send = microsec_timer();
-    uint64_t time_now;
-    int      rc;
-    int      recvd_len = 0;
-    int      logmsg_strs_sent_count;
-
-    // init logmsg_strs_sent_count, so that the most recent 10 logmsg strs 
-    // will be sent to the client
-    logmsg_strs_sent_count = logmsg_strs_count - 10;
-    if (logmsg_strs_sent_count < 0) {
-        logmsg_strs_sent_count = 0;
+        INFO("accepted connection from %s\n", sock_addr_to_str(client,sizeof(client),(struct sockaddr *)&address));
+        break;
     }
 
+    // recv and process messages
     while (true) {
-        // perform non-blocking recv of msg, this is accomplished by
-        // first receiving the hdr (which includes the msg len), and then
-        // receiving the rest of the msg; and
-        // when the msg is recieved, call process_received_msg
-        if (recvd_len < sizeof(struct msg_hdr_s)) {
-            // call recv to recieve the msg hdr
-            rc = recv(sockfd, (void*)&recv_msg+recvd_len, sizeof(struct msg_hdr_s)-recvd_len, MSG_DONTWAIT);
-        } else {
-            // sanity check the msg_hdr magic and len fields, 
-            // if invalid then terminate connection
-            if (recv_msg.hdr.magic != MSG_MAGIC || 
-                recv_msg.hdr.len < sizeof(struct msg_hdr_s) || 
-                recv_msg.hdr.len > sizeof(recv_msg)) 
-            {
-                ERROR("invalid msg magic 0x%x or len %d\n", recv_msg.hdr.magic, recv_msg.hdr.len);
-                goto term;
-            }
-            // call recv to receive the remainder of the msg
-            rc = recv(sockfd, (void*)&recv_msg+recvd_len, recv_msg.hdr.len-recvd_len, MSG_DONTWAIT);
-        }
-        if (rc > 0) {
-            recvd_len += rc;
-            if (recvd_len >= sizeof(struct msg_hdr_s) && recvd_len == recv_msg.hdr.len) {
-                process_received_msg(&recv_msg);
-                memset(&recv_msg, 0, recvd_len);
-                recvd_len = 0;
-            }
-        } else if (rc == 0) {
-            // terminate connection
-            INFO("connection terminated by peer\n");
-            goto term;
-        } else if (errno != EWOULDBLOCK && errno != EAGAIN) {
-            // errno is unexpected, print msg and terminate connection
-            ERROR("recv failed, %s\n", strerror(errno));
-            goto term;
+        msg_t msg;
+
+        if (recv_msg(&msg) < 0) {
+            break;
         }
 
-        // if it has been 100 ms since last sending status msg then do so now
-        time_now = microsec_timer();
-        if (time_now - time_last_send > 100000) {
-            if (send_msg(sockfd, MSG_ID_STATUS, generate_msg_status(),
-                         sizeof(struct msg_status_s)) < 0) {
-                goto term;
-            }
-            time_last_send = time_now;
-        }
-
-        // if there are logmsg_strs that need to be sent, then do so
-        while (logmsg_strs_sent_count < logmsg_strs_count) {
-            char *str = logmsg_strs[logmsg_strs_sent_count % MAX_LOGMSG_STRS];
-            if (send_msg(sockfd, MSG_ID_LOGMSG, str, strlen(str)+1) < 0) {
-                goto term;
-            }
-            logmsg_strs_sent_count++;
-        }
-
-        // short sleep 
-        usleep(25000);  // 25 ms
+        process_received_msg(&msg);
     }
 
-term:
-    drive_emer_stop();
+    // print disconnected and close sockfd
+    INFO("disconnecting from %s\n", client);
+    MUTEX_LOCK;
     close(sockfd);
-    return NULL;
+    sockfd = -1;
+    MUTEX_UNLOCK;
+
+    // if program is terminating then return otherwise accept connection
+    if (sigint || sigterm) {
+        return;
+    } else {
+        goto accept_connection;
+    }
 }
 
-static int send_msg(int sockfd, int id, void *data, int data_len)
+static int recv_msg(msg_t *msg)
 {
-    msg_t msg;
     int rc;
 
-    // validate data_len
-    if ((data == NULL && data_len != 0) ||
-        (data != NULL && (data_len <= 0 || data_len > sizeof(msg_t)-sizeof(struct msg_hdr_s))))
-    {
-        FATAL("BUG data=%p data_len=%d", data, data_len);
-    }
-
-    // init the msg.hdr fields
-    msg.hdr.magic = MSG_MAGIC;
-    msg.hdr.len   = sizeof(struct msg_hdr_s) + data_len;
-    msg.hdr.id    = id;
-    msg.hdr.pad   = 0;
-
-    // copy data to msg, following the hdr
-    if (data) {
-        memcpy((void*)&msg+sizeof(struct msg_hdr_s), data, data_len);
-    }
-
-    // send the msg
-    rc = send(sockfd, &msg, msg.hdr.len, MSG_NOSIGNAL);
-    if (rc != msg.hdr.len) {
+    // receive the msg
+    rc = recv(sockfd, msg, sizeof(msg_t), MSG_WAITALL);
+    if (rc != sizeof(msg_t)) {
         if (rc == 0) {
-            ERROR("connection terminated by peer\n");
+            ERROR("connection closed by peer\n");
         } else {
-            ERROR("send rc=%d len=%d, %s\n", rc, msg.hdr.len, strerror(errno));
+            ERROR("recv msg rc=%d, %s\n", rc, strerror(errno));
         }
         return -1;
     }
 
-    // msg has queued to be sent, return success
+    // validate the msg->id
+    if (msg->id != MSG_ID_DRIVE_EMER_STOP &&
+        msg->id != MSG_ID_DRIVE_PROC &&
+        msg->id != MSG_ID_MC_DEBUG_CTL &&
+        msg->id != MSG_ID_LOG_MARK)
+    {
+        ERROR("invalid msg id 0x%x\n", msg->id);
+        return -1;
+    }
+
+    // success
     return 0;
 }
 
-// -  -  -  -  -  -   SERVER - GENERATE_MSG_STATUS - -  -  -  -  -  -  -  - 
-
-static struct msg_status_s * generate_msg_status(void)
-{
-    mc_status_t *mcs = mc_get_status();
-    int id;
-    double val;
-
-    static struct msg_status_s x;
-    static int accel_alert_count;
-    static double accel_alert_last_value;
-
-    memset(&x, 0, sizeof(x));
-
-    // voltage and current
-    x.voltage              = mcs->voltage;
-    x.electronics_current  = current_get(0);
-    x.motors_current       = mcs->motors_current;
-    x.total_current        = x.electronics_current + x.motors_current;
-
-    // motors and encoders
-    x.mc_state              = mcs->state;
-    safe_strcpy(x.mc_state_str, MC_STATE_STR(x.mc_state));
-    x.mc_debug_mode_enabled = mcs->debug_mode_enabled;
-    x.mc_target_speed[0]    = mcs->target_speed[0];
-    x.mc_target_speed[1]    = mcs->target_speed[1];
-    x.enc_poll_intvl_us     = encoder_get_poll_intvl_us();
-    for (id = 0; id < 2; id++) {
-        x.enc[id].enabled  = encoder_get_enabled(id);
-        x.enc[id].position = encoder_get_count(id);
-        x.enc[id].speed    = encoder_get_speed(id);
-        x.enc[id].errors   = encoder_get_errors(id);
-    }
-    if (x.mc_debug_mode_enabled) {
-        // these are only valid when mc_debug_mode_enabled
-        for (id = 0; id < 2; id++) {
-            struct debug_mode_mtr_vars_s *y = &mcs->debug_mode_mtr_vars[id];
-            x.mc[id].error_status  = y->error_status;
-            x.mc[id].target_speed  = y->target_speed;
-            x.mc[id].current_speed = y->current_speed;
-            x.mc[id].max_accel     = y->max_accel;
-            x.mc[id].max_decel     = y->max_decel;
-            x.mc[id].input_voltage = y->input_voltage;
-            x.mc[id].current       = y->current;
-        }
-    }
-
-    // proxmity sensors
-    x.prox_sig_limit      = proximity_get_sig_limit();
-    x.prox_poll_intvl_us  = proximity_get_poll_intvl_us();
-    for (id = 0; id < 2; id++) {
-        x.prox[id].enabled = proximity_get_enabled(id);
-        x.prox[id].alert   = proximity_check(id, &x.prox[id].sig);
-    }
-
-    // imu
-    if (imu_check_accel_alert(&val)) {
-        accel_alert_count++;
-        accel_alert_last_value = val;
-    }
-    x.mag_heading            = imu_get_magnetometer();
-    x.rotation               = imu_get_rotation();
-    x.accel_rot_enabled      = imu_get_accel_rot_ctrl();
-    x.accel_alert_count      = accel_alert_count;
-    x.accel_alert_last_value = accel_alert_last_value;
-    x.accel_alert_limit      = imu_get_accel_alert_limit();
-
-    // environment
-    x.temperature_degc = env_get_temperature_degc();
-    x.pressure_pascal  = env_get_pressure_pascal();
-    x.temperature_degf = env_get_temperature_degf();
-    x.pressure_inhg    = env_get_pressure_inhg();
-
-    // buttons
-    for (id = 0; id < 2; id++) {
-        x.button[id].pressed = button_is_pressed(id);
-    }
-
-    // oled
-    if (sizeof(x.oled_strs) != sizeof(oled_strs_t)) {
-        FATAL("BUG: sizeof(x.oled_strs)=%zd sizeof(oled_strs_t)=%zd\n",
-              sizeof(x.oled_strs), sizeof(oled_strs_t));
-    }
-    memcpy(x.oled_strs, oled_get_strs(), sizeof(oled_strs_t));
-
-    return &x;
-}
-
-// -  -  -  -  -  -   SERVER - PROCESSS RECVD NSGS    -  -  -  -  -  -  -  - 
-
 static void process_received_msg(msg_t *msg)
 {
-    //INFO("RECVD magic=0x%x  len=%d  id=%d\n", msg->hdr.magic, msg->hdr.len, msg->hdr.id);
-
-    switch (msg->hdr.id) {
+    switch (msg->id) {
     case MSG_ID_DRIVE_EMER_STOP:
         drive_emer_stop();
         break;
@@ -412,7 +237,160 @@ static void process_received_msg(msg_t *msg)
         INFO("------------------------------------------------\n");
         break;
     default:
-        ERROR("received invalid msg id %d\n", msg->hdr.id);
+        FATAL("received invalid msg id %d\n", msg->id);
         break;
     }
+}
+
+// -----------------  SEND STATUS MSG THREAD  ------------------------------
+
+static void *send_status_msg_thread(void *cx)
+{
+    msg_t msg;
+
+    while (true) {
+        if (sockfd != -1) {
+            generate_status_msg(&msg);
+            send_msg(&msg);
+        }
+
+        usleep(500000);
+    }
+
+    return NULL;
+}
+
+static void generate_status_msg(msg_t *msg)
+{
+    mc_status_t *mcs = mc_get_status();
+    int id;
+    double val;
+    struct msg_status_s *x = &msg->status;
+
+    static int accel_alert_count;
+    static double accel_alert_last_value;
+
+    // set msg id
+    memset(msg, 0, sizeof(msg_t));
+    msg->id = MSG_ID_STATUS;
+
+    // voltage and current
+    x->voltage              = mcs->voltage;
+    x->electronics_current  = current_get(0);
+    x->motors_current       = mcs->motors_current;
+    x->total_current        = x->electronics_current + x->motors_current;
+
+    // motors and encoders
+    x->mc_state              = mcs->state;
+    safe_strncpy(x->mc_state_str, MC_STATE_STR(x->mc_state));
+    x->mc_debug_mode_enabled = mcs->debug_mode_enabled;
+    x->mc_target_speed[0]    = mcs->target_speed[0];
+    x->mc_target_speed[1]    = mcs->target_speed[1];
+    x->enc_poll_intvl_us     = encoder_get_poll_intvl_us();
+    for (id = 0; id < 2; id++) {
+        x->enc[id].enabled  = encoder_get_enabled(id);
+        x->enc[id].position = encoder_get_count(id);
+        x->enc[id].speed    = encoder_get_speed(id);
+        x->enc[id].errors   = encoder_get_errors(id);
+    }
+    if (x->mc_debug_mode_enabled) {
+        // these are only valid when mc_debug_mode_enabled
+        for (id = 0; id < 2; id++) {
+            struct debug_mode_mtr_vars_s *y = &mcs->debug_mode_mtr_vars[id];
+            x->mc[id].error_status  = y->error_status;
+            x->mc[id].target_speed  = y->target_speed;
+            x->mc[id].current_speed = y->current_speed;
+            x->mc[id].max_accel     = y->max_accel;
+            x->mc[id].max_decel     = y->max_decel;
+            x->mc[id].input_voltage = y->input_voltage;
+            x->mc[id].current       = y->current;
+        }
+    }
+
+    // proxmity sensors
+    x->prox_sig_limit      = proximity_get_sig_limit();
+    x->prox_poll_intvl_us  = proximity_get_poll_intvl_us();
+    for (id = 0; id < 2; id++) {
+        x->prox[id].enabled = proximity_get_enabled(id);
+        x->prox[id].alert   = proximity_check(id, &x->prox[id].sig);
+    }
+
+    // imu
+    if (imu_check_accel_alert(&val)) {
+        accel_alert_count++;
+        accel_alert_last_value = val;
+    }
+    x->mag_heading            = imu_get_magnetometer();
+    x->rotation               = imu_get_rotation();
+    x->accel_rot_enabled      = imu_get_accel_rot_ctrl();
+    x->accel_alert_count      = accel_alert_count;
+    x->accel_alert_last_value = accel_alert_last_value;
+    x->accel_alert_limit      = imu_get_accel_alert_limit();
+
+    // environment
+    x->temperature_degc = env_get_temperature_degc();
+    x->pressure_pascal  = env_get_pressure_pascal();
+    x->temperature_degf = env_get_temperature_degf();
+    x->pressure_inhg    = env_get_pressure_inhg();
+
+    // buttons
+    for (id = 0; id < 2; id++) {
+        x->button[id].pressed = button_is_pressed(id);
+    }
+
+    // oled
+    if (sizeof(x->oled_strs) != sizeof(oled_strs_t)) {
+        FATAL("BUG: sizeof(x->oled_strs)=%zd sizeof(oled_strs_t)=%zd\n",
+              sizeof(x->oled_strs), sizeof(oled_strs_t));
+    }
+    memcpy(x->oled_strs, oled_get_strs(), sizeof(oled_strs_t));
+}
+
+// -----------------  SEND MSG PROCS  --------------------------------------
+
+static void send_logmsg(char *str)
+{
+    msg_t msg;
+
+    msg.id = MSG_ID_LOGMSG;
+    safe_strncpy(msg.logmsg.str, str);
+    send_msg(&msg);
+}
+
+void send_drive_proc_complete_msg(int unique_id, bool succ, char *failure_reason)
+{
+    msg_t msg;
+
+    msg.id = MSG_ID_DRIVE_PROC_COMPLETE;
+    msg.drive_proc_complete.unique_id = unique_id;
+    msg.drive_proc_complete.succ = succ;
+    safe_strncpy(msg.drive_proc_complete.failure_reason, failure_reason);
+    send_msg(&msg);
+}
+
+static void send_msg(msg_t *msg)
+{
+    int rc;
+
+    // if client not connected then return
+    MUTEX_LOCK;
+    if (sockfd == -1) {
+        MUTEX_UNLOCK;
+        return;
+    }
+
+    // send the msg
+    rc = send(sockfd, msg, sizeof(msg_t), MSG_NOSIGNAL);
+    if (rc != sizeof(msg_t)) {
+        if (rc == 0) {
+            ERROR("connection terminated by peer\n");
+        } else {
+            ERROR("send rc=%d sizeof(msg_t)=%zd, %s\n", rc, sizeof(msg_t), strerror(errno));
+        }
+        MUTEX_UNLOCK;
+        return;
+    }
+
+    // unlock mutex
+    MUTEX_UNLOCK;
 }

@@ -1,0 +1,19 @@
+#!/bin/bash
+
+if [ `arch` = armv7l ]; then
+  OUTDEV=sysdefault:CARD=Device
+else
+  OUTDEV=default
+fi
+
+echo $* > hello.txt
+./synthesize_file --text hello.txt
+if [ `which play` ]; then
+  echo "using play"
+  play output.raw
+else
+  echo "using aplay"
+  /usr/bin/aplay  -D $OUTDEV -t raw -r 24000 -c 1 -f S16_LE output.raw
+fi
+rm hello.txt output.raw
+

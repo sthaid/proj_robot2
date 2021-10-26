@@ -117,7 +117,7 @@ int drive_proc(struct msg_drive_proc_s *dpm)
         }
         break; }
     case 107: {
-        // tst6 [cycles] [fudge] - repeating square, corner turn radius = 0
+        // tst7 [cycles] [fudge] - repeating square, corner turn radius = 0
         double cycles = GET_ARG(0, 3);   // default cycles = 3
         double fudge  = GET_ARG(1, 0);
         double corner_radius = 0;

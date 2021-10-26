@@ -1,88 +1,84 @@
+----------------------- ----------------------- -----------------------
+-----------------------          TODO           -----------------------
+----------------------- ----------------------- -----------------------
+
+review and cleanup this file
+is my speaker mono
+run the s2t and t2s test pgms on the rpi
+run the s2t and t2s test pgms on linux
+
+continue tst3,  demo in tst3,  example, respond to "What time is it?"
+- add process_speech routine
+
+brain:
+- when voltage gets low:
+  - beep and shutdown the body
+- power saving
+  - shutdown body when not in use
+
+body
+- review threads, make a list of there frequencies
+- shut down motors on high current for 1 second
+- test accelerometer sensitivity for emer stop
+- check where timer_get is used, and minimize use
+- review all usleep and nanosleep for consistent and correct durations
+- include code version on oled, this could be build date/time 05/13
+- body_test 
+  - auto reconnect
+  - command recall
+- devel tests, do these all build and work
+
+misc:
+- update readme.md in proj_robot2
+- dbg
+  - safe_memcpy
+  - don't use memcpy in RW_MMIO
+  - funcs, startup should get BCM base address, and use in timer test
+- run the rt_gpio test pgms and check data on scope
+
+backup all projects periodically, run do_backup
+
+xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+xxxxxxxxxxxxxxxxxxxx  DOC BEGINS HERE  xxxxxxxxxxxxxxxxxxxxxx
+xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
 ===========================
-TITLE: INTRO - TODO
+TABLE OF CONTENTS
 ===========================
 
-https://www.raspberrypi.org/documentation/linux/usage/systemd.md
-Type=simple
-ExecStart
-ExecStop
-  or 
-KillSignal
+TITLE: INTRO - ROBOT CAPABILITY IDEAS
 
-StandardInput=null
-StandardOutput=file:/path
+TITLE: PARTS - SUPPLIERS
+TITLE: PARTS - ROBOT CHASIS
+TITLE: PARTS - MECHANICAL / MOTORS
+TITLE: PARTS - ELECTRONICS
+TITLE: PARTS - POWER SUPPLY
 
-front wheel,
-- make 1 inch spacer, and mount to spacer
+TITLE: SENSORS - SUMMARY
+TITLE: SENSORS - QUADRATURE ENCODER
+TITLE: SENSORS - I2C IMPLEMENTATION
+TITLE: SENSORS - NON I2C
 
-gpio init should always init the outputs and relay disabled
+TITLE: MOTOR_CTLR - POLOLU SIMPLE MOTOR CONTROLLER
+TITLE: MOTOR_CTLR - MOTOR SETUP
 
-dbg
-- make a backup script, to google drive
-- safe_memcpy
-- don't use memcpy in RW_MMIO
-- funcs, startup should get BCM base address, and use in timer test
+TITLE: RPI - HARDWARE INFO
+TITLE: RPI - INSTALL
+TITLE: RPI - GPIO
+TITLE: RPI - REAL TIME PERFORMANCE TIPS
+TITLE: RPI - GENERAL TIPS
 
-run the rt_gpio test pgms and check data on scope
+TITLE: MISC - GIT TIPS
+TITLE: MISC - WIRING
+TITLE: MISC - SYSTEM TESTS
 
-===========================
-TITLE: INFO - SAVE THIS STUFF
-===========================
+TITLE: RESPEAKER - GETTING STARTED
+TITLE: RESPEAKER - NOTES
+TITLE: RESPEAKER - APA102 LEDS C LANGUAGE DEMO PGM
+TITLE: RESPEAKER - SOUND DIRECTION OF ARRIVAL DEVEL
 
-how to crimp ---
- - video  https://www.youtube.com/watch?v=jET1QTP1B7c
-
-power saving ideas
-- idle program when robot is not moving
-- switch off the top rpi (OR bottom)
-- https://www.raspberrypi.org/forums/viewtopic.php?t=257144
-- How to save Power on your Raspberry Pi
-    Switch OFF USB/LAN IC.
-    Turn OFF HDMI.
-    Throttle CPU.
-    Disable Wi-Fi & Bluetooth.
-    Disable on-board LEDs
-- https://mlagerberg.gitbooks.io/raspberry-pi/content/5.1-power-consumption.html
-- my measurement, idle and with relay disabled
-  0.23 amps on the 12volt supply at 12.1 v
-
-f connectors type yellow (#10 or #12), and crimp tool ---
-- f1 = 3/16  <== I have     4.75 mm
-- f2 = 1/4 inch             6.35 mm
-- my wire is #12
-
-misc for later
-- consider FATAL in all init routines
-- review all tests
-- work on mc
-- review use of printf
-   - cat tests use printf instead of INFO
-   - devices/encoder using printf, and mc.c
-
-alarm conditions to shut down motors
-- high accel
-- proximity alert
-- high motor current
-- motor-ctlr error condiiton
-- wheels turning too slowly  ?
-
-set a led or the oled display when pgm is online,
-  and show activity, rotating indicator
-
-Mini External USB Stereo Speaker
-   PRODUCT ID: 3369
-
-button
-  Grove - Button SKU 101020003
-  Grove - Dual Button
-     SKU 111020103
-
-tune proximity sensor
-- adjust software sensitivity, make this a param
-- not totally sure they are that much different, but ...
-   - the prox sensor on right is 20"
-                     on left is 24"
-
+TITLE: SPEECH TO TEXT
+TITLE: TEXT TO SPEECH
 
 ===========================
 TITLE: INTRO - ROBOT CAPABILITY IDEAS
@@ -150,12 +146,19 @@ TITLE: PARTS - MECHANICAL / MOTORS
 ===========================
 
 2 motors with quadrature encoders
+ - First Motor
    - 25D metal gearmotor
    - Pololu item #: 4843
    - voltage                    12 V
    - no-load performance        500 RPM  300 mA
    - stall extrapolation        6 kg⋅cm (85 oz⋅in), 5.6 A 
    - encoder: 980  counts per rev
+ - Replacement 
+   - https://www.pololu.com/product/4845
+   - Pololu item #:  4845
+   - 47:1
+   - Pololu Metal Gearmotors » 25D Metal Gearmotors » 12V High-Power (HP) 25D mm Gearmotors »
+     47:1 Metal Gearmotor 25Dx67L mm HP 12V with 48 CPR Encoder
 
 2 motor controllers,  either usb or i2c
    product   https://www.pololu.com/product/1362`0
@@ -175,7 +178,7 @@ TITLE: PARTS - ELECTRONICS
 
 2 Raspberry Pi model 4
     https://www.amazon.com/gp/product/B0899VXM8F/ref=ox_sc_act_title_2?smid=A3I5MJJ49RUSVZ&psc=1
-OLED Arduino
+
 2 MicroSd card
    https://www.amazon.com/gp/product/B07YFG7T8F/ref=ppx_yo_dt_b_search_asin_title?ie=UTF8&psc=1#
 
@@ -227,12 +230,11 @@ GPIO HAT, saw on Amazon
 GROVE HAT, bought 2nd one on Amazon
    https://www.amazon.com/gp/product/B07LD8C51J/ref=ppx_yo_dt_b_asin_title_o00_s00?ie=UTF8&psc=1
 
-Speaker                                          USE WHAT I HAVE
+Speaker
 
-servo motor                                      LATER
-
-Camera, mounted on pan servo                     LATER
-  also zoom
+Camera, 
+  mounted on pan servo
+  zoom capable
 
 ===========================
 TITLE: PARTS - POWER SUPPLY
@@ -510,8 +512,8 @@ DSD TECH 2 PCS IIC OLED Display 0.91 Inch for Arduino ARM
     - cd u8g2/csrc
     - gcc -c -g -Wall *.c
     - ar cr libu8g2.a *.o
-    - mkdir ~/proj/proj_robot/util//u8g2
-    - cp *.h libu8g2.a ~/proj/proj_robot/util//u8g2
+    - mkdir ~/proj/proj_robot2/common/devices/i2c/u8g2
+    - cp *.h libu8g2.a ~/proj/proj_robot2/common/devices/i2c/u8g2
     - add a copyright file in this new directory too
   - step 2
     - add code to util_sensors.c, by porting from 
@@ -525,6 +527,14 @@ DSD TECH 2 PCS IIC OLED Display 0.91 Inch for Arduino ARM
         r = restricted, chars 32 to 127 only
   - step 3
     - add test code to test/sensors/sensors.c
+
+- connections to grove i2c cable 
+               --------------------
+      WHITE   -|                  |
+      YELLOW  -|      TOP         | 
+      RED     -|                  |
+      BLACK   -|                  |
+               --------------------
 
 - - - - - - - - - - - - - - - - - - - - - 
 
@@ -622,7 +632,7 @@ Grove - 10A DC Current Sensor (ACS725)
 - The Grove - 10A DC Current Sensor (ACS725) can measure the DC current up to 10A and has a 
   base sensitivity of 264mV/A. This sensor do not support AC current.
 - Refer to Grove Python Code:  grove_current_sensor.py
-- Sensitivity	264mV/A(Typ.)
+- Sensitivity   264mV/A(Typ.)
 - current measuring pins,  5 top left  low side
                            6 top right, high side
 
@@ -632,6 +642,10 @@ Grove - latching relay
   https://www.mouser.com/datasheet/2/744/Seeed_103020010-1217533.pdf
   Grove - 2-Coil Latching Relay
      https://www.mouser.com/ProductDetail/Seeed-Studio/103020010?qs=1%252B9yuXKSi8C7XcS%2FsSDTng%3D%3D
+
+Grove - button(s)
+  Grove - Button SKU 101020003
+  Grove - Dual Button SKU 111020103
 
 ===========================
 TITLE: MOTOR_CTLR - POLOLU SIMPLE MOTOR CONTROLLER
@@ -802,19 +816,25 @@ Motor
 - Start Speed  :  0
 - Max Accel    :  10       = 0 to full speed in 320 ms
 - Max Deccel   :  10
-- Brake Dur    :  1000  ms = 1sec
-
+- Brake Dur    :  0
 - Current      :  5.0
 - Measure Current Offset Cal with Motor Voltage Off
 
 Advanced
-- Low Vin Shutoff    9.5
-- Low Vin Startup   10.5
+- Low Vin Shutoff   11.0
+- Low Vin Startup   12.0
 - High Vin Shutoff  15
 - Learn with Vin set to approx 12V
 
 Advanced / Miscellaneous
 - Command Timeout  2.0 secs
+
+USB Cables
+----------
+- usb-a to micro-b
+- usb cable lengths needed
+       25 cm  =  10 inch
+       40 cm  =  16 inch   1.5 ft okay
 
 ===========================
 TITLE: RPI - HARDWARE INFO
@@ -834,15 +854,15 @@ TITLE: RPI - INSTALL
 
 Download OS 
 - https://www.raspberrypi.org/software/operating-systems/
-- Raspberry Pi OS Lite
-    Release date: January 11th 2021
-    Kernel version: 5.4
-    Size: 438MB
-    Show SHA256 file integrity hash: d49d6fab1b8e533f7efc40416e98ec16019b9c034bc89c59b83d0921c2aefeef
+- Raspberry Pi OS Lite  OR
+- Raspberry Pi OS with desktop
 
 Use dd to copy the .img file to micro-sd card
 
-Run rasp-config to set:
+Login 
+- username/password:  pi  raspberry
+
+Run raspi-config to set:
 - system options -> wireless lan
 - system options -> hostname
 - interfaces     -> ssh enable
@@ -867,13 +887,12 @@ configure system
 - EDITOR=vi visudo
        haid    ALL=(ALL) NOPASSWD: ALL
 - apt install git vim cscope ctags apt-file libreadline-dev tkcvs raspberrypi-kernel-headers
-- OPTIONAL: apt install evince eog
 - apt-file update
 
 configure my account
 - on home
     cd ~/.ssh
-    host=robot-ctlr
+    host=robot-brain
     ssh $host mkdir .ssh
     scp id_rsa.pub $host:.ssh/authorized_keys
     scp config id_rsa id_rsa.pub  $host:.ssh
@@ -886,12 +905,24 @@ configure my account
         alias ls='ls -l --color=always --group-directories-first --human-readable'
         alias cscope='/usr/bin/cscope -d'
         alias cscope_init='rm -f cscope.out tags; /usr/bin/cscope -bR; ctags -R'
-        alias pr='cd ~/proj/proj_robot'
+        alias pr='cd ~/proj/proj_robot2'
         alias pdbg='cd ~/proj/proj_dbg'
         HISTCONTROL=""
         export EDITOR=vim
         export GIT_EXTERNAL_DIFF=~/bin/git_external_diff
         export LC_COLLATE=C
+
+        alias pdbg='cd ~/proj/proj_dbg'
+        alias pr='cd ~/proj/proj_robot2'
+        alias prbo='cd ~/proj/proj_robot2/body'
+        alias prbt='cd ~/proj/proj_robot2/body_test'
+        alias prbr='cd ~/proj/proj_robot2/brain'
+        alias pa='cd ~/proj/proj_robot2/brain/devel/portaudio'
+        alias activate_env='source ~/env/bin/activate'
+        alias st='speaker-test -D sysdefault:CARD=Device -f 500 -t sine'
+        alias arecord='arecord -D sysdefault:CARD=seeed4micvoicec'
+        alias aplay='aplay -D sysdefault:CARD=Device'
+
   * .vimrc
         source /usr/share/vim/vim81/defaults.vim
         " tabs
@@ -915,8 +946,8 @@ configure my account
   * make git directories
         mkdir proj
         cd proj
-        git clone haid@home:proj/private_git_repos/proj_dbg.git
-        git clone git@github.com:sthaid/proj_robot.git
+        git clone haid@home:proj/private_git_repos/proj_dbg
+        git clone git@github.com:sthaid/proj_robot2
   * build and install dbg
   * bin/run_dbg
         #!/bin/bash
@@ -935,6 +966,47 @@ configure my account
         git config --global user.name "Steven Haid"
         git config --global user.email stevenhaid@gmail.com
         git config -l
+
+--- optional ---
+
+optional: groups
+   sudo usermod -aG i2c,spi,gpio,audio haid
+   logout, and login and verify 'groups'
+
+optional: raspi-config
+- Interface options
+  - Enable SPI 
+  - Enable I2C 
+
+optional: seeed-voicecard
+  cd ~/proj/proj_robot2/brain/devel/repos
+  ./do_clone
+  cd seeed-voicecard
+  sudo ./install.sh  --compat-kernel option
+  sudo reboot
+
+optional: additional packages
+   apt install -y libsdl2-dev libsdl2-ttf-dev
+   apt install -y libjpeg-dev libpng-dev
+   apt install -y fonts-freefont-ttf 
+
+   apt install -y audacity
+   apt install -y portaudio19-dev
+   apt install -y libsndfile1-dev
+
+   apt install -y i2c-tools
+   apt install -y libi2c-dev
+   apt install -y glibc-docs
+
+   apt install -y python-virtualenv
+   apt install -y python-dev
+   apt install -y python2.7
+   apt install -y python-pip
+   apt install -y python3-pip
+
+optional: desktop
+  Preferences -> System -> Disable Autologin
+  terminal font size, and colors
 
 ===========================
 TITLE: RPI - GPIO
@@ -1098,16 +1170,16 @@ c beautifier
     -kr    Use Kernighan & Ritchie coding style
     -nut   Use spaces instead of tabs
 
-===========================
-TITLE: RPI - HAT CONNECTIONS
-===========================
+systemd
+- man systemd.service   exec   kill   unit   target
+- pkg-config systemd --variable=systemdsystemconfdir
+    ANSWER:  /etc/systemd/system
 
-test config gpio connections
-- relay    5
-- encoder  16, 17
+pthread man pages
+- apt install glibc-docs
 
-test config Seeed HAT Analog connections
-- analog   0
+vim tab removal
+  :retab
 
 ===========================
 TITLE: MISC - GIT TIPS
@@ -1142,7 +1214,7 @@ Create a private repo
     git push -u origin master
 
 ===========================
-TITLE: MISC - WIRING SPECS
+TITLE: MISC - WIRING
 ===========================
 
 Ampacity
@@ -1155,3 +1227,720 @@ Ampacity
 Connector Pitch
   2.54 mm  rpi hdr, and most others, except
   2.00 mm  grove connector
+
+how to crimp
+  video  https://www.youtube.com/watch?v=jET1QTP1B7c
+
+F connectors type yellow (#10 or #12)
+- f1 = 3/16  <== I have     4.75 mm
+- f2 = 1/4 inch             6.35 mm
+
+===========================
+TITLE: MISC - SYSTEM TESTS
+===========================
+
+Component Tests
+- motors & encoders    
+- proximity sensors
+- imu: gyro, accel, magnetometer                 
+- imu: pressure and temerature
+- current sensor       
+- oled                 
+- buttons              
+
+===========================
+TITLE: RESPEAKER - GETTING STARTED
+===========================
+
+This section follows the instructions from here:
+https://wiki.seeedstudio.com/ReSpeaker_4_Mic_Array_for_Raspberry_Pi/
+
+Build and Install Driver
+------------------------
+Steps:
+  sudo apt-get update
+  sudo apt-get upgrade
+  cd ~/proj/proj_robot2/brain/devel/repos/seeed-voicecard
+  sudo ./install.sh    # may need to use --compat-kernel option, but first don't try that
+  reboot
+
+Notes
+- after reboot kernel is now 5.4.51-v7l+
+- related directories and files
+    /var/log/seeed-voicecard.log
+    /usr/src/seeed-voicecard-0.3
+    /var/lib/dkms/seeed-voicecard/0.3/
+    /var/lib/dkms/seeed-voicecard/0.3/5.4.51-v7l+/armv7l/module
+       snd-soc-ac108.ko
+       snd-soc-seeed-voicecard.ko
+       snd-soc-wm8960.ko
+- lsmod shows these 3 modules are loaded
+
+Raspi-Config
+------------
+sudo raspi-config
+- System Options -> Audio 
+  - Enable Headphones   (did not work, the HDMI device remained selected)
+- Interface options
+  - Enable SPI 
+  - Enable I2C 
+
+Test I2c
+--------
+- Verify /dev/i2c-* exists
+- sudo apt install i2c-tools
+- add user to i2c group:  
+   sudo usermod -aG i2c haid
+   logout and back in
+   groups
+- i2cdetect -y 1
+- power down and plugin i2c device, (used temp sensor MCP9808_temp)
+- run test pgm to verify device     (cd ~/proj/proj_robot2/devel/tests/zz_other/i2c; make MCP9808_temp)
+
+Test Respeaker APA102 LEDs
+--------------------------
+Setup Steps
+  sudo usermod -aG gpio haid
+  sudo usermod -aG spi haid
+  logout and back in for these to take affect, then run 'groups' to verify
+
+  sudo apt install python-dev
+  sudo apt install python-virtualenv           # install python virtualenv tool
+  virtualenv --system-site-packages ~/env      # create a virtual python environment
+  source ~/env/bin/activate                    # activate the virtual environment
+  pip install numpy
+  pip install spidev gpiozero                  # install spidev and gpiozero
+
+  cd ~/proj/proj_robot2/brain/respeaker
+  git clone https://github.com/respeaker/4mics_hat.git
+  cd 4mics_hat
+  python pixels_demo.py
+
+Run Demo
+  source ~/env/bin/activate
+  cd ~/proj/proj_robot2/brain/respeaker/4mics_hat
+  python pixels_demo.py
+        brain/devel/leds/apa102_test
+        brain/devel/leds/save/
+        brain/devel/picovoice/picovoice_demo_mic
+        brain/devel/picovoice/save/
+        brain/devel/repos/4mics_hat/
+        brain/devel/repos/odas/
+        brain/devel/repos/picovoice/
+        brain/devel/repos/seeed-voicecard/
+        brain/save/
+
+Notes:
+- use 'deactivate' to exit python env
+
+ALSA  - Advanced Linux Sound Architecture
+-----------------------------------------
+Notes:
+- ALSA  = Advanced Linux Sound Architecture
+- PCM   = Pulse Code Moduleation
+- PGA   = Programable Gain Amplifier
+- some settings are in ~/.asoundrc
+
+Setup
+- sudo usermod -aG audio haid
+- sudo apt install audacity
+
+Changing default audio card (if needed), alternatively unplug hdmi display
+- aplay -l    # lists the PLAYBACK cards
+- vi /usr/share/alsa/alsa.conf
+     defaults.ctl.card 0    # may need to change these to 1 to default to headphones,
+     defaults.pcm.card 0    #  and get audacity output to work; or unplug HDMI device
+
+Programs
+- arecord       - command-line sound recorder for ALSA soundcard driver
+- aplay         - command-line sound player for ALSA soundcard driver
+- speaker-test -  command-line speaker test tone generator for ALSA
+- amixer        - command-line mixer for ALSA soundcard driver
+- alsamixer     - soundcard mixer for ALSA soundcard driver, with ncurses interface
+- alsactl       - advanced controls for ALSA soundcard driver
+
+Examples:
+- aplay -L   # List all PCMs defined
+- aplay -l   # List all soundcards and digital audio devices
+- arecord -L
+- arecord -l
+
+- speaker-test -D sysdefault:CARD=Headphones -f 500 -t sine
+- speaker-test -D sysdefault:CARD=Device -f 500 -t sine
+- speaker-test -f 500 -t sine
+
+- arecord -D ac108 -f S32_LE -r 16000 -c 4 hello.wav
+- arecord -D ac108 hello.wav
+- aplay -D sysdefault:CARD=Headphones  hello.wav 
+- aplay -D sysdefault:CARD=Device  hello.wav 
+- aplay hello.wav
+
+- alsamixer
+- alsactl --file=ac108_asound.state store
+
+- # these work on my Rasperry PI with Respeaker and USB speakers
+- arecord -D sysdefault:CARD=seeed4micvoicec -c 4 -r 48000 hello.wav
+- aplay -D sysdefault:CARD=Device  hello.wav 
+
+audacity
+- set mic  to ac108 4
+- set spkr to upmix  (may need to first change default audio card, or unplug hdmi display)
+
+Extract Voice
+-------------
+Notes:
+- http://www.portaudio.com/#:~:text=PortAudio%20is%20a%20free%2C%20cross,Unix%20(OSS%2FALSA).
+
+  PortAudio is a free, cross-platform, open-source, audio I/O library.  
+  It lets you write simple audio programs in 'C' or C++ that will compile and run on 
+  many platforms including Windows, Macintosh OS X, and Unix (OSS/ALSA). 
+  It is intended to promote the exchange of audio software between developers on different platforms. 
+  Many applications use PortAudio for Audio I/O.  
+
+Steps
+  sudo apt install portaudio19-dev
+  source ~/env/bin/activate
+  pip install pyaudio
+  # create get_index.py - see https://wiki.seeedstudio.com/ReSpeaker_4_Mic_Array_for_Raspberry_Pi/
+  python get_index.py
+  # create record.py  - see https://wiki.seeedstudio.com/ReSpeaker_4_Mic_Array_for_Raspberry_Pi/
+  python record.py     
+  aplay output.wav
+
+Real-time Sound Source Localization and Tracking
+------------------------------------------------
+Notes:
+- ODAS stands for "Open embeddeD Audition System"
+- Papers
+    https://arxiv.org/pdf/1812.00115.pdf
+    https://arxiv.org/pdf/2103.03954v1.pdf
+
+Steps on Raspberry Pi
+  sudo apt-get install libfftw3-dev libconfig-dev libasound2-dev libgconf-2-4
+  sudo apt-get install cmake
+
+  cd /home/haid/proj/proj_robot2/brain/devel/repos/odas
+  mkdir build
+  cd build
+  cmake ..
+  make
+
+  vi config/odaslive/respeaker_4_mic_array.cfg
+   - change 127.0.0.1 to IP addr where ODAS Studio will be run
+   - change 'card = 1' to 'card = X', if needed; run arecord -l to determine card number
+  bin/odaslive -c config/odaslive/respeaker_4_mic_array.cfg
+
+  (** but first the ODAS Studio needs to be running **)
+
+Steps on Desktop System to install ODAS Studio
+  Installation Instructions are here:  https://github.com/introlab/odas_web/tree/v0.3
+    1. Install Node.js v12
+    2. Clone the repository
+    3. Run npm install in the cloned repository base folder (it contains main.js)
+
+  1. Install Node.js v12
+       reference: https://computingforgeeks.com/how-to-install-nodejs-on-ubuntu-debian-linux-mint/
+   
+       sudo apt update
+       sudo apt -y upgrade
+       sudo apt -y install curl dirmngr apt-transport-https lsb-release ca-certificates
+       curl -sL https://deb.nodesource.com/setup_12.x | sudo -E bash -
+       sudo apt -y install nodejs
+       sudo apt -y  install gcc g++ make
+   
+       node --version    # v12.22.1
+       npm --version     # 6.14.12
+   
+       create hello.js ...
+           const http = require('http');
+           const hostname = '127.0.0.1';
+           const port = 3000;
+           const server = http.createServer((req, res) => {
+             res.statusCode = 200;
+             res.setHeader('Content-Type', 'text/plain');
+             res.end('Hello, World!\n');
+           });
+           server.listen(port, hostname, () => {
+             console.log(`Server running at http://${hostname}:${port}/`);
+           });
+   
+       node hello.js    # Server running at http://127.0.0.1:3000/
+       open link, should see "hello world" 
+
+  2. Clone the repository
+       git clone git@github.com:introlab/odas_web.git
+
+  3. Run npm install in the cloned repository base folder (it contains main.js)
+       sudo apt install python2.7
+       cd odas_web
+       # npm install fails due to a build error on Ubuntu 20.04, workaround
+       # vi packages.json   
+       #   change "grpc": "^1.21.1",
+       #   to     "grpc": "latest",
+       # refer to: https://docs.npmjs.com/cli/v7/configuring-npm/package-json#dependencies
+       PYTHON=/usr/bin/python2.7 npm install     # takes 5 minutes on my desktop
+
+Steps on Desktop System to run ODAS Studio
+  cd odas_web
+  npm start
+
+  # now, on the Raspberry Pi run
+  #   bin/odaslive -c config/odaslive/respeaker_4_mic_array.cfg
+  # using the modified respeaker_4_mic_array.cfg as described earlier
+
+  One way to test this is to use:
+     speaker-test -D sysdefault:CARD=Device -f 300 -t sine
+  and move the speaker around.
+
+Observations
+- I was not able to find an API for the ODAS core.
+- The ODAS core crashed a few times.
+- Using ODAS is probably not suitable for obtaining sound direction for my robot project.
+
+Enabling Voice Recognition at Edge with Picovoice
+-------------------------------------------------
+https://wiki.seeedstudio.com/ReSpeaker_4_Mic_Array_for_Raspberry_Pi/#enabling-voice-recognition-at-edge-with-picovoice
+
+Notes:
+- Picovoice enables enterprises to innovate and differentiate rapidly with private voice AI. 
+  Build a unified AI strategy around your brand and products with our speech recognition 
+  and Natural-language understanding (NLU) technologies.
+- Seeed has partnered with Picovice to bring Speech Recognition solution on the edge using 
+  ReSpeaker 4 Mic for developers.
+- Picovoice is an end-to-end platform for building voice products on your terms. 
+  It enables creating voice experiences similar to Alexa and Google. But it entirely 
+  runs 100% on-device. There are advantages of Picovoice:
+  - Private: Everything is processed offline. Intrinsically HIPAA and GDPR compliant.
+  - Reliable: Runs without needing constant connectivity.
+  - Zero Latency: Edge-first architecture eliminates unpredictable network delay.
+  - Accurate: Resilient to noise and reverberation. It outperforms cloud-based alternatives by wide margins.
+  - Cross-Platform: Design once, deploy anywhere. Build using familiar languages and frameworks.
+
+Picovoice Demo
+- setup
+  - sudo apt install python3-pip
+  - sudo pip3 install pyaudio
+  - sudo pip3 install pvrespeakerdemo
+- picovoice_respeaker_demo
+- demo voice commands (wake word = picovoice)
+  - picovoice, turn on the lights
+  - picovoice, turn off the lights
+  - picovoice, set the lights to orange
+- demo built on Picovoice SDK
+    https://github.com/Picovoice/picovoice
+- demo source code
+    https://github.com/Picovoice/picovoice/tree/master/demo/respeaker
+
+Multi Wake Word Demo
+- setup 
+  - sudo pip3 install ppnrespeakerdemo
+- run 'porcupine_respeaker_demo'
+- wake words to colors ...
+    alexa
+    bumblebee
+    computer
+    hey google
+    hey siri
+    jarvis
+    picovoice
+    porcupine
+    terminator
+- source code;
+    https://github.com/Picovoice/porcupine/tree/master/demo/respeaker
+
+Demo Files are install here:
+  /usr/local/bin/porcupine_respeaker_demo      EXECUTABLE DEMO PGM
+  /usr/local/lib/python3.7/dist-packages/pvporcupine
+  /usr/local/lib/python3.7/dist-packages/picovoice
+
+Picovice Account
+----------------
+https://wiki.seeedstudio.com/ReSpeaker_4_Mic_Array_for_Raspberry_Pi/#enabling-voice-recognition-at-edge-with-picovoice
+https://picovoice.ai/                                      HOME Page
+https://picovoice.ai/docs/                                 Docs
+https://picovoice.ai/docs/quick-start/console-rhino/         Rhino
+https://picovoice.ai/docs/tips/syntax-cheat-sheet/           Syntax Cheat Sheet
+https://picovoice.ai/docs/api/picovoice-microcontroller/     C language API
+
+https://console.picovoice.ai/                              Console
+https://console.picovoice.ai/rhn                             Rhino Speech to intent
+
+https://github.com/Picovoice/picovoice                     SDK and Demos
+
+Steps to build Picovoice Speech to Intent Rhino model (aka Context)
+- Go to Picovoice Console / Rhino
+- Create Context
+- Select the Context
+- Make Intents and Slots
+- Export yaml
+- Train the model, for Raspberry Pi
+- Select models & Download
+- Unzip and copy the rhn file to the Raspberry Pi, proj/proj_robot2/brain/devel/picovoice/rhino
+
+===========================
+TITLE: RESPEAKER - NOTES
+===========================
+
+Raspberry Pi Notes
+------------------
+- The Raspberry Pi 4 uses a Broadcom BCM2711 SoC with a 1.5 GHz 64-bit 
+  quad-core ARM Cortex-A72 processor, with 1 MB shared L2 cache.
+
+Python Notes
+------------
+- Using virtualenv for python3
+   virtualenv --system-site-packages --python=python3 ~/env3
+   source ~/env3/bin/activate
+
+- Python 2 vs 3 
+  https://www.guru99.com/python-2-vs-python-3.html
+  KEY DIFFERENCE
+  - Python 3 syntax is simpler and easily understandable whereas Python 2 syntax 
+    is comparatively difficult to understand.
+  - Python 3 default storing of strings is Unicode whereas Python 2 stores need 
+    to define Unicode string value with "u."
+  - Python 3 value of variables never changes whereas in Python 2 value of the 
+    global variable will be changed while using it inside for-loop.
+  - Python 3 exceptions should be enclosed in parenthesis while Python 2 
+    exceptions should be enclosed in notations.
+  - Python 3 rules of ordering comparisons are simplified whereas Python 2 rules 
+    of ordering comparison are complex.
+  - Python 3 offers Range() function to perform iterations whereas, In Python 2, 
+    the xrange() is used for iterations.
+
+Sound Notes
+-----------
+- speed of sound is 343 meters/sec  OR 767 miles/hour
+
+Respeaker audio channels
+------------------------
+    ------------------
+    |1              2|
+    |                |
+    |                |           
+    |                |
+    |   RESPEAKER    |
+    |                |
+    |0              3|
+    ------------------
+
+===================================================
+TITLE: RESPEAKER - APA102 LEDS C LANGUAGE DEMO PGM
+===================================================
+
+Notes:
+- port from proj_robot2/brain/devel/repos/4mics_hat/apa102.py
+- gpio5 must be ouput and set to 1 to enable Vcc
+- SPI Interface must be enabled in raspi-config
+- linux API
+  - /usr/include/linux/spi/spidev.h
+  - /dev/spidev0.1     bus.dev
+  - simply open the device and write to it
+
+My C language demo program: ~/proj/proj_robot2/brain/devel/leds
+
+===================================================
+TITLE: RESPEAKER - DIRECTION OF ARRIVAL (DOA) DEVEL
+===================================================
+
+Seeedstudio algorithms are here
+  https://wiki.seeedstudio.com/ReSpeaker_4_Mic_Array_for_Raspberry_Pi/
+Search for "Algorithms"
+
+However, I decided to write my own, to begin learning how to work with the Linux sound APIs.
+
+Install
+  sudo apt install portaudio19-dev
+  sudo apt install libsndfile1-dev
+
+Portaudio references
+  http://portaudio.com/docs/v19-doxydocs/index.html              MAIN PAGE
+  https://github.com/PortAudio/portaudio/wiki                    WIKI
+  http://portaudio.com/docs/v19-doxydocs/portaudio_8h.html       API REFERENCE
+  http://www.portaudio.com/docs/v19-doxydocs/compile_linux.html  BUILDING PORTAUDIO FOR LINUX
+  https://github.com/PortAudio/portaudio/                        GIT REPO
+  https://github.com/PortAudio/portaudio/tree/master/examples    EXAMPLES
+
+Libsndfile references
+  http://www.mega-nerd.com/libsndfile/                           MAIN PAGE
+  https://github.com/libsndfile/libsndfile                       GIT REPO
+  file:///usr/share/doc/libsndfile1-dev/html                     DOC FOLDER
+  file:///usr/share/doc/libsndfile1-dev/html/index.html          DOC MAIN
+  file:///usr/share/doc/libsndfile1-dev/html/api.html            DOC API
+  file:///usr/share/doc/libsndfile1-dev/examples                 EXAMPLES
+
+Building portaudio_examples
+  cd ~/proj/proj_robot2/brain/devel/portaudio/portaudio_examples
+  mkdir build
+  cd build
+  cmake ..
+  make
+
+Building libsndfile_examples
+  cd ~/proj/proj_robot2/brain/devel/portaudio/libsndfile_examples
+  make
+
+My Test Programs   ~/proj/proj_robot2/brain/devel/portaudio
+- devs: 
+    Similar to portaudio_examples/pa_devs.
+    This program lists the available sound devices and their characteristics.
+- gen:
+    Creates wav file of tone, or sweep tone, or white noise.
+    And plays the sound.
+- record:
+    Gets sound data from microphone, and writes wav file.
+- plot 
+    Plots the channels from a wav file.
+- filters 
+    Experiments with audio filters, and FFT.
+    Uses libfftw3   (sudo apt install libfftw3-dev).
+- analyze
+    Analyze mic data from Respeaker, and determine sound DOA (direction of arrival).
+    Indicate DOA on Respeaker LEDs.
+    Uses polynomial fit software, ported from here:
+       https://www.bragitoff.com/2018/06/polynomial-fitting-c-program/
+
+===============================================
+TITLE: SPEECH TO TEXT
+===============================================
+
+Investigating alternatives to Picovoice ...
+
+---------------------------------
+Web Search for Speech Recognition
+---------------------------------
+
+https://www.softwaretestinghelp.com/voice-recognition-software/
+  Best Voice Recognition Software Reviews
+
+  Comparison Of The Best Speech Recognition Software
+  #1) Dragon Professional
+  #2) Dragon Anywhere
+  #3) Google Now
+  #4) Google Cloud Speech API
+  #5) Google Docs Voice Typing
+  #6) Siri
+  #7) Amazon Lex
+  #8) Microsoft Bing Speech API
+  #9) Cortana
+  #10) Voice Finger
+
+---------------------------------
+Try the "Google Cloud Speech-to-Text API", using curl
+---------------------------------
+
+Get Started - https://cloud.google.com/speech-to-text/
+    Go to console -> Tutorials and Documentation / Learn More
+    https://cloud.google.com/speech-to-text/docs/quickstart-protocol?hl=en_US&_ga=2.53966824.1510569921.1625616128-1180409028.1625616128
+    Summary is here. Some additional details are further below.
+
+        Set up a project
+
+        Click to:
+        - Create or select a project.
+        - Enable the Speech-to-Text API for that project.
+        - Create a service account.
+        - Download a private key as JSON.
+            (You can view and manage these resources at any time in the Cloud Console.)
+
+        Set the environment variable GOOGLE_APPLICATION_CREDENTIALS to the path of the JSON file.
+        that contains your service account key.
+
+        Install and initialize the Cloud SDK.
+
+        create json file containing, called sync-request.json
+            {
+              "config": {
+                "encoding":"FLAC",
+                "sampleRateHertz": 16000,
+                "languageCode": "en-US",
+                "enableWordTimeOffsets": false
+              },
+              "audio": {
+                "uri":"gs://cloud-samples-tests/speech/brooklyn.flac"
+              }
+            }
+
+        curl -s -H "Content-Type: application/json" \
+            -H "Authorization: Bearer "$(gcloud auth application-default print-access-token) \
+            https://speech.googleapis.com/v1/speech:recognize \
+            -d @sync-request.json
+
+Play the brooklyn.flac audio file 
+    https://help.ubuntu.com/community/PlayMusicFromCommandLine  recommends installing sox
+        sudo apt-get install sox libsox-fmt-all
+
+    gsutil cp s://cloud-samples-tests/speech/brooklyn.flac .
+    play brooklyn.flac
+
+Install google cloud sdk (I use Ubuntu 20.04.2)
+    sudo snap install google-cloud-sdk --classic
+
+Authenticate your client by running.
+    gcloud auth login
+    The gcloud auth login command gets your OAuth2 credentials and saves them locally on your computer.
+
+Set your default project ID.
+    gcloud config set project square-root-2
+    gcloud config list
+
+Enable Speech-to-Text API, and create a service account
+    https://console.cloud.google.com/
+    select project
+    search "APIs" 
+        APIs & Services -> Enable API -> Speech to Text -> Enable
+    search "service account"
+        create the service account,
+        create the key
+        download the key
+
+Add environment variable , with pathname to the downloaded service account key.
+  export GOOGLE_APPLICATION_CREDENTIALS=/home/haid/Downloads/square-root-2-1256570f4acc.json
+
+---------------------------------
+"Google Cloud Speech-to-Text API" - Streaming Input
+---------------------------------
+
+https://cloud.google.com/speech-to-text/docs/streaming-recognize
+- Performing streaming speech recognition on an audio stream
+- 'Go'
+- View on GitHub
+    https://github.com/GoogleCloudPlatform/golang-samples/tree/42a8597d5beb089c313eb618ac1363af5e404be0/speech/livecaption
+
+Install Go, and Install the Speech API Client  (On Ubuntu)
+  sudo apt install golang-go
+  go get -u cloud.google.com/go/speech/apiv1
+
+Install Go, and Install the Speech API Client  (On Raspberry Pi 4)
+- The version installed on Raspberry Pi, using 
+     sudo apt install golang-go
+  did not support cloud.google.com/go/speech/apiv1;  there was an error about TLS3?
+- Some research:
+     https://www.e-tinkers.com/2019/06/better-way-to-install-golang-go-on-raspberry-pi/
+     https://blog.francium.tech/go-modules-go-project-set-up-without-gopath-1ae601a4e868
+- Procedure for Rasperry Pi
+   - https://golang.org/dl/  and download, for example:   go1.16.6.linux-armv6l.tar.gz
+   - sudo tar -C /usr/local -xzf go1.16.6.linux-armv6l.tar.gz
+   - update PATH - PATH=$PATH:/usr/local/go/bin
+   - cd to dir that you want to build prog.go;  for example ...
+       cd speech_to_text
+       go mod init speech_to_text
+       go build livecaption.go
+       go get cloud.google.com/go/speech/apiv1
+       go build livecaption.go
+
+Build and test livecaption
+  cd ~proj/proj_robot2/brain/devel/speech_to_text
+  cp ../repos/golang-samples/speech/livecaption/livecaption.go .
+  go build livecaption.go
+  /usr/bin/arecord -D sysdefault:CARD=seeed4micvoicec -t raw -r 16000 -c 1 -f S16_LE t1.raw
+  /usr/bin/aplay   -D sysdefault:CARD=Device          -t raw -r 16000 -c 1 -f S16_LE t1.raw
+  cat t1.raw | livecaption
+
+Create mic.c pgm that writes mic data to stdout in 16bit format
+  mic > t2.raw
+  /usr/bin/aplay   -D sysdefault:CARD=Device -t raw -r 16000 -c 1 -f S16_LE t2.raw
+  cat t2.raw | livecaption
+  mic | livecaption 
+
+---------------------------------
+Wake Word Detection Engine
+---------------------------------
+
+https://medium.com/@alirezakenarsarianhari/yet-another-wake-word-detection-engine-a2486d36d8d4
+https://github.com/Picovoice/Porcupine
+
+build porcupine demo
+  cp ../../repos/Porcupine/demo/c/porcupine_demo_mic.c  .
+  gcc -std=c99 -O3 -o porcupine_demo_mic -I ../../repos/Porcupine/include/ porcupine_demo_mic.c -ldl -lasound
+
+porcupine_demo_mic args:
+  library_path 
+  model_path 
+  keyword_path 
+  sensitivity 
+  input_audio_device
+
+porcupine_demo_mic  \
+  ../../repos/Porcupine/lib/linux/x86_64/libpv_porcupine.so \
+  ../../repos/Porcupine/lib/common/porcupine_params.pv \
+  ../../repos/Porcupine/resources/keyword_files/linux/porcupine_linux.ppn \
+  0.5 \
+  sysdefault:CARD=Device
+
+===============================================
+TITLE: TEXT TO SPEECH
+===============================================
+
+---------------------
+google documentation
+---------------------
+
+https://cloud.google.com/text-to-speech
+https://cloud.google.com/text-to-speech/docs
+https://cloud.google.com/text-to-speech/docs/libraries
+
+https://github.com/GoogleCloudPlatform/golang-samples/blob/HEAD/texttospeech
+https://pkg.go.dev/google.golang.org/genproto/googleapis/cloud/texttospeech/v1#SynthesizeSpeechRequest.Descriptor
+
+---------------------
+curl / json on Ubuntu x86_64
+---------------------
+
+Create request.json with the following content
+
+{
+  "input":{
+    "text":"Android is a mobile operating system developed by Google, based on the Linux kernel and designed primarily for touchscreen mobile devices such as smartphones and tablets."
+  },
+  "voice":{
+    "languageCode":"en-gb",
+    "name":"en-GB-Standard-A",
+    "ssmlGender":"FEMALE"
+  },
+  "audioConfig":{
+    "audioEncoding":"MP3"
+  }
+}
+
+curl -X POST \
+-H "Authorization: Bearer "$(gcloud auth application-default print-access-token) \
+-H "Content-Type: application/json; charset=utf-8" \
+-d @request.json \
+https://texttospeech.googleapis.com/v1/text:synthesize > t2s.json
+
+cp t2s.json to t2s.base64
+and use editor to remove the json syntax, leaving just the value of audioContent,
+ without the quotes around the value
+
+base64 t2s.base64 -d > t2s.mp3
+play t2s.mp3
+
+---------------------------------------------------------
+Raspberry Pi - using synthesize_file.go, from git repo
+https://github.com/GoogleCloudPlatform/golang-samples.git
+---------------------------------------------------------
+
+gcloud is not available for Raspberry Pi, so the curl command above won't work,
+but this does ...
+
+install go on Raspberry Pi, described earlier
+
+Add environment variable , with pathname to the downloaded service account key.
+  export GOOGLE_APPLICATION_CREDENTIALS=/home/haid/Downloads/square-root-2-1256570f4acc.json
+
+mkdir text_to_speech
+cd text_to_speech
+cp ../repos/golang-samples/texttospeech/synthesize_file/synthesize_file.go .
+  if raw sound file format is desired:
+    chagne 'MP3' to 'LINEAR16'
+    change 'output.mp3' to 'output.raw'
+go mod init text_to_speech
+go get cloud.google.com/go/texttospeech/apiv1
+
+go build synthesize_file.go
+
+echo Open the pod bay door, please Hal. > hello.txt
+./synthesize_file --text hello.txt
+/usr/bin/aplay   -D sysdefault:CARD=Device -t raw -r 24000 -c 1 -f S16_LE output.raw
+
