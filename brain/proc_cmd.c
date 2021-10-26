@@ -26,6 +26,7 @@ static void hndlr_end_program(args_t args);
 static void hndlr_time(args_t args);
 static void hndlr_set_info(args_t args);
 static void hndlr_get_info(args_t args);
+static void hndlr_drive_fwd(args_t args);
 
 #define HNDLR(name) { #name, hndlr_##name }
 
@@ -37,6 +38,7 @@ static hndlr_lookup_t hndlr_lookup_tbl[] = {
     HNDLR(time),
     HNDLR(set_info),
     HNDLR(get_info),
+    HNDLR(drive_fwd),
     { NULL, NULL }
                 };
 
@@ -46,7 +48,7 @@ void proc_cmd_init(void)
 {
     pthread_t tid;
 
-    grammar_init("grammar.syntax", hndlr_lookup_tbl);
+    grammar_init("grammar", hndlr_lookup_tbl);
     pthread_create(&tid, NULL, cmd_thread, NULL);
 }
 
@@ -169,6 +171,21 @@ static void hndlr_get_info(args_t args)
         t2s_play("I don't know your %s", info_id);
     } else {
         t2s_play("your %s is %s", info_id, info_val);
+    }
+}
+
+// xxx define for 11
+// xxx return status
+static void hndlr_drive_fwd(args_t args)
+{
+    int feet = getnum(args[0], 0);
+    char failure_reason[200];
+    int rc;
+
+    rc = body_drive_cmd(11, feet, 0, 0, 0, failure_reason);
+        
+    if (rc < 0) {
+        t2s_play("%s", failure_reason);
     }
 }
 

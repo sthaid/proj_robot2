@@ -10,5 +10,9 @@ bool proc_cmd_in_progress(void);
 void proc_cmd_cancel(void);
 
 // body_intfc.c ...
-void body_intfc_init(void);
-int body_intfc_send_msg(int id, void *data, int data_len);
+void body_init(void);
+int body_drive_cmd(int proc_id, int arg0, int arg1, int arg2, int arg3, char *failure_reason);
+void body_emer_stop(void);
+void body_power_on(void);
+void body_power_off(void);
+

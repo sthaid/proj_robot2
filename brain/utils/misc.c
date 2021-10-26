@@ -48,12 +48,12 @@ int getsockaddr(char * node, int port, struct sockaddr_in * ret_addr)
 
     ret = getaddrinfo(node, port_str, &hints, &result);
     if (ret != 0) {
-        ERROR("failed to get address of %s, %s\n", node, gai_strerror(ret));
+        //ERROR("failed to get address of %s, %s\n", node, gai_strerror(ret));
         return -1;
     }
     if (result->ai_addrlen != sizeof(*ret_addr)) {
-        ERROR("getaddrinfo result addrlen=%d, expected=%d\n",
-            (int)result->ai_addrlen, (int)sizeof(*ret_addr));
+        //ERROR("getaddrinfo result addrlen=%d, expected=%d\n",
+        //    (int)result->ai_addrlen, (int)sizeof(*ret_addr));
         return -1;
     }
 

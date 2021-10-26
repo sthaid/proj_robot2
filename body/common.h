@@ -52,7 +52,7 @@
 //
 
 // main.c
-void send_drive_proc_complete_msg(int unique_id, char *reason);
+void send_drive_proc_complete_msg(int unique_id, bool succ, char *failure_reason);
 
 // oled_ctlr.c
 #define MAX_OLED_STR       5

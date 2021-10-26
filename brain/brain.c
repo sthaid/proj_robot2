@@ -28,7 +28,7 @@ int main(int argc, char **argv)
     // init logging
     log_init(NULL, false, false);
 
-    // call init routines
+    // call init utils routines
     INFO("INITIALIZING\n")
     if (wiringPiSetupGpio() != 0) {
         FATAL("wiringPiSetupGpio failed\n");
@@ -43,8 +43,9 @@ int main(int argc, char **argv)
     db_init("db.dat", true, GB);
     audio_init(proc_mic_data);
 
+    // call init routines
     proc_cmd_init();
-    body_intfc_init();
+    body_init();
 
     // program is running
     INFO("RUNNING\n");

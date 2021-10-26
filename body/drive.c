@@ -84,7 +84,7 @@ void drive_run(struct msg_drive_proc_s *drive_proc_msg_arg)
 
     if (drive_proc_msg != NULL) {
         ERROR("drive is busy\n");
-        send_drive_proc_complete_msg(drive_proc_msg_arg->unique_id, "drive is busy");
+        send_drive_proc_complete_msg(drive_proc_msg_arg->unique_id, false, "drive is busy");
         return;
     }
 
@@ -1029,7 +1029,7 @@ done:   drive_proc_msg = NULL;
         if (rc == -1 && emer_stop_reason[0] == '\0') {
             strcpy(emer_stop_reason, "unknown error");
         }
-        send_drive_proc_complete_msg(unique_id, emer_stop_reason);
+        send_drive_proc_complete_msg(unique_id, rc==0, emer_stop_reason);
     }
 
     return NULL;

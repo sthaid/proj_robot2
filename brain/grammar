@@ -33,6 +33,10 @@ HNDLR get_info
 what is my 0:INFO
 END
 
+HNDLR drive_fwd
+[drive] forward [for] 0:NUMBER feet
+END
+
 
 
 EXIT

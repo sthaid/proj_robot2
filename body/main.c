@@ -357,12 +357,14 @@ static void send_logmsg(char *str)
     send_msg(&msg);
 }
 
-void send_drive_proc_complete_msg(int unique_id, char *reason)
+void send_drive_proc_complete_msg(int unique_id, bool succ, char *failure_reason)
 {
     msg_t msg;
 
     msg.id = MSG_ID_DRIVE_PROC_COMPLETE;
-    safe_strncpy(msg.drive_proc_complete.reason, reason);
+    msg.drive_proc_complete.unique_id = unique_id;
+    msg.drive_proc_complete.succ = succ;
+    safe_strncpy(msg.drive_proc_complete.failure_reason, failure_reason);
     send_msg(&msg);
 }
 

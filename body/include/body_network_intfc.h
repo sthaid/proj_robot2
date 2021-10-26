@@ -31,9 +31,10 @@ typedef struct {
             int unique_id;
 	    double arg[8];
         } drive_proc;
-        struct {
+        struct drive_proc_complete_s {
             int unique_id;
-            char reason[MAX_DRIVE_PROC_COMPLETE_REASON_STR_SIZE];
+            bool succ;
+            char failure_reason[MAX_DRIVE_PROC_COMPLETE_REASON_STR_SIZE];
         } drive_proc_complete;
         struct msg_mc_debug_ctl_s {
             int enable;
