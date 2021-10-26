@@ -7,28 +7,22 @@ extern "C" {
 
 // general defines
 #define PORT                9777
-#define MSG_MAGIC           0x12345678
 #define MAX_LOGMSG_STR_SIZE 100
 #define MAX_OLED_STR        5
 #define MAX_OLED_STR_SIZE   10
 
 // msgs sent from client to body
-#define MSG_ID_DRIVE_EMER_STOP 1
-#define MSG_ID_DRIVE_PROC      2
-#define MSG_ID_MC_DEBUG_CTL    3
-#define MSG_ID_LOG_MARK        4
+#define MSG_ID_DRIVE_EMER_STOP 0x1001
+#define MSG_ID_DRIVE_PROC      0x1002
+#define MSG_ID_MC_DEBUG_CTL    0x1003
+#define MSG_ID_LOG_MARK        0x1004
 
 // msgs sent from body to client
-#define MSG_ID_STATUS          21
-#define MSG_ID_LOGMSG          22
+#define MSG_ID_STATUS          0x2001
+#define MSG_ID_LOGMSG          0x2002
 
 typedef struct {
-    struct msg_hdr_s {
-        int magic;
-        int len;
-        int id;
-        int pad;
-    } hdr;
+    int id;
     union {
         struct msg_drive_proc_s {
             int proc_id;
