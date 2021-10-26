@@ -9,7 +9,7 @@ void proc_cmd_execute(char *transcript, double doa);
 bool proc_cmd_in_progress(void);
 void proc_cmd_cancel(void);
 
-// body_intfc.c ...
+// body.c ...
 void body_init(void);
 int body_drive_cmd(int proc_id, int arg0, int arg1, int arg2, int arg3, char *failure_reason);
 void body_emer_stop(void);

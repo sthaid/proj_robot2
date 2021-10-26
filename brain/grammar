@@ -34,7 +34,7 @@ what is my 0:INFO
 END
 
 HNDLR drive_fwd
-[drive] forward [for] 0:NUMBER feet
+[<go drive>] forward [for] 0:NUMBER [<feet ft>]
 END
 
 

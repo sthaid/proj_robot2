@@ -19,8 +19,8 @@ static const char *keyword_paths[] = {
     "./devel/repos/Porcupine/resources/keyword_files/raspberry-pi/terminator_raspberry-pi.ppn",
             };
 static const float sensitivities[] = {
-    0.5,
-    0.5,
+    0.9,
+    0.9,
             };
 
 #define MAX_KEYWORD_PATHS (sizeof(keyword_paths) / sizeof(keyword_paths[0]))

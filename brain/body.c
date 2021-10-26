@@ -234,6 +234,7 @@ static void process_recvd_msg(msg_t *msg)
 {
     switch (msg->id) {
     case MSG_ID_STATUS:
+        //xxx INFO("BODY: got msg status\n");
         status = msg->status;
         break;
     case MSG_ID_LOGMSG:
