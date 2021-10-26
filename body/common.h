@@ -41,7 +41,7 @@
 //
 
 // dest must be a char array, and not a char *
-#define safe_strcpy(dest, src) \
+#define safe_strncpy(dest, src) \
     do { \
         strncpy(dest, src, sizeof(dest)-1); \
         (dest)[sizeof(dest)-1] = '\0'; \
@@ -50,6 +50,9 @@
 //
 // files
 //
+
+// main.c
+void send_drive_proc_complete_msg(int unique_id, char *reason);
 
 // oled_ctlr.c
 #define MAX_OLED_STR       5

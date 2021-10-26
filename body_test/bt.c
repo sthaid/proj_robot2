@@ -312,6 +312,8 @@ static void *msg_receive_thread(void *cx)
             safe_strcpy(logmsg_strs[logmsg_strs_count%MAX_LOGMSG_STRS], msg.logmsg.str);
             __sync_fetch_and_add(&logmsg_strs_count, 1);
             break;
+        case MSG_ID_DRIVE_PROC_COMPLETE:
+            break;
         default:
             fatal("unsupported msg id %d", msg.id);
             break;
@@ -513,6 +515,7 @@ static int process_cmdline(void)
     msg_t  msg;
 
     static char last_cmdline[100];
+    static int  unique_id;
 
     if (strcmp(cmdline, "r") == 0) {
         strcpy(cmdline, last_cmdline);
@@ -557,6 +560,7 @@ static int process_cmdline(void)
                         )
     {
         msg.id = MSG_ID_DRIVE_PROC;
+        msg.drive_proc.unique_id = ++unique_id;
         msg.drive_proc.proc_id = proc_id;
         msg.drive_proc.arg[0] = arg[0];
         msg.drive_proc.arg[1] = arg[1];

@@ -4,13 +4,6 @@
 // defines
 //
 
-// dest must be a char array, and not a char *
-#define safe_strncpy(dest, src) \
-    do { \
-        strncpy(dest, src, sizeof(dest)-1); \
-        (dest)[sizeof(dest)-1] = '\0'; \
-    } while (0)
-
 #define MUTEX_LOCK do { pthread_mutex_lock(&mutex); } while (0)
 #define MUTEX_UNLOCK do { pthread_mutex_unlock(&mutex); } while (0)
 
@@ -361,6 +354,15 @@ static void send_logmsg(char *str)
 
     msg.id = MSG_ID_LOGMSG;
     safe_strncpy(msg.logmsg.str, str);
+    send_msg(&msg);
+}
+
+void send_drive_proc_complete_msg(int unique_id, char *reason)
+{
+    msg_t msg;
+
+    msg.id = MSG_ID_DRIVE_PROC_COMPLETE;
+    safe_strncpy(msg.drive_proc_complete.reason, reason);
     send_msg(&msg);
 }
 
