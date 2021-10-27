@@ -6,10 +6,22 @@
 // defines
 //
 
+//#define NODE "192.168.0.11"
 #define NODE "robot-body"
 
 #define MUTEX_LOCK do { pthread_mutex_lock(&mutex); } while (0)
 #define MUTEX_UNLOCK do { pthread_mutex_unlock(&mutex); } while (0)
+
+#define SEND_MSG(_msg,_succ) \
+    do { \
+        MUTEX_LOCK; \
+        if (conn_sfd != -1) { \
+            (_succ) = (send(conn_sfd, _msg, sizeof(msg_t), MSG_NOSIGNAL) == sizeof(msg_t)); \
+        } else { \
+            (_succ) = false; \
+        } \
+        MUTEX_UNLOCK; \
+    } while (0)
 
 //
 // variables
@@ -33,8 +45,6 @@ static void disconnect_from_body(void);
 static int recv_msg(msg_t *msg);
 static void process_recvd_msg(msg_t *msg);
 
-static int send_msg(msg_t *msg);
-
 // -----------------  INIT & EXIT_HANDLER  -----------------------
 
 void body_init(void)
@@ -57,6 +67,7 @@ int body_drive_cmd(int proc_id, int arg0, int arg1, int arg2, int arg3, char *fa
 {
     static int unique_id;
     msg_t msg;
+    bool succ;
 
     // preset failure_reset to empty string
     failure_reason[0] = '\0';
@@ -70,7 +81,8 @@ int body_drive_cmd(int proc_id, int arg0, int arg1, int arg2, int arg3, char *fa
     msg.drive_proc.arg[2] = arg2;
     msg.drive_proc.arg[3] = arg3;
 
-    if (send_msg(&msg) < 0) {
+    SEND_MSG(&msg, succ);
+    if (!succ) {
         strcpy(failure_reason, "failed to send message to body");
         return -1;
     }
@@ -92,9 +104,10 @@ int body_drive_cmd(int proc_id, int arg0, int arg1, int arg2, int arg3, char *fa
 void body_emer_stop(void)
 {
     msg_t msg;
+    bool succ __attribute__((unused));
 
     msg.id = MSG_ID_DRIVE_EMER_STOP;
-    send_msg(&msg);
+    SEND_MSG(&msg, succ);
 }
 
 void body_power_on(void)
@@ -181,6 +194,7 @@ static int connect_to_body(void)
     // set global variable conn_sfd, indiating connection is established,
     // and return success
     INFO("connected to body\n");
+    t2s_play("connected to body");
     conn_sfd = sfd;
     return 0;
 }
@@ -198,6 +212,7 @@ static void disconnect_from_body(void)
 
     // print disconected msg
     INFO("disconnected from body\n");
+    t2s_play("disconnected from body");
 }
 
 static int recv_msg(msg_t *msg)
@@ -234,7 +249,7 @@ static void process_recvd_msg(msg_t *msg)
 {
     switch (msg->id) {
     case MSG_ID_STATUS:
-        //xxx INFO("BODY: got msg status\n");
+        //INFO("BODY: got msg status\n");
         status = msg->status;
         break;
     case MSG_ID_LOGMSG:
@@ -247,36 +262,4 @@ static void process_recvd_msg(msg_t *msg)
         FATAL("XXX");
         break;
     }
-}
-
-// -----------------  SEND MSG  ----------------------------------
-
-static int send_msg(msg_t *msg)
-{
-    int rc;
-
-    // acquire mutex
-    MUTEX_LOCK;
-
-    // if not connected return error
-    if (conn_sfd == -1) {
-        MUTEX_UNLOCK;
-        return -1;
-    }
-
-    // send the msg
-    rc = send(conn_sfd, msg, sizeof(msg_t), MSG_NOSIGNAL);
-    if (rc != sizeof(msg_t)) {
-        MUTEX_UNLOCK;
-        if (rc == 0) {
-            ERROR("connection closed by peer");
-        } else {
-            ERROR("send msg rc=%d, %s", rc, strerror(errno));
-        }
-        return -1;
-    }
-
-    // release mutex, and return success
-    MUTEX_UNLOCK;
-    return 0;
 }

@@ -5,7 +5,6 @@
 //
 
 static char *cmd;
-static bool cancel;
 
 //
 // prototypes
@@ -21,7 +20,6 @@ static bool strmatch(char *s, ...);
 
 static void hndlr_set_volume(args_t args);
 static void hndlr_get_volume(args_t args);
-static void hndlr_sleep(args_t args);
 static void hndlr_end_program(args_t args);
 static void hndlr_time(args_t args);
 static void hndlr_set_info(args_t args);
@@ -33,7 +31,6 @@ static void hndlr_drive_fwd(args_t args);
 static hndlr_lookup_t hndlr_lookup_tbl[] = {
     HNDLR(set_volume),
     HNDLR(get_volume),
-    HNDLR(sleep),
     HNDLR(end_program),
     HNDLR(time),
     HNDLR(set_info),
@@ -66,7 +63,7 @@ bool proc_cmd_in_progress(void)
 
 void proc_cmd_cancel(void)
 {
-    cancel = true;
+    body_emer_stop();
 }
 
 // -----------------  CMD THREAD  -------------------------------------------
@@ -87,7 +84,6 @@ static void *cmd_thread(void *cx)
         INFO("match=%d, args=  '%s'  '%s'  '%s'  '%s'\n", match, args[0], args[1], args[2], args[3]);
         if (match) {
             proc(args);
-            if (cancel) audio_out_beep(6);
         } else {
             audio_out_beep(3);
         }
@@ -95,7 +91,6 @@ static void *cmd_thread(void *cx)
         // done with this cmd
         free(cmd);
         cmd = NULL;
-        cancel = false;
     }
 
     return NULL;
@@ -123,18 +118,6 @@ static void hndlr_set_volume(args_t args)
 static void hndlr_get_volume(args_t args)
 {
     t2s_play("The volume is %d%%.", t2s_get_volume());
-}
-
-static void hndlr_sleep(args_t args)
-{
-    int secs = getnum(args[0], 10);
-    
-    t2s_play("Sleeping for %d seconds.", secs);
-
-    for (int i = 0; i < 10*secs; i++) {
-        usleep(100000);
-        if (cancel) break;
-    }
 }
 
 static void hndlr_end_program(args_t args)

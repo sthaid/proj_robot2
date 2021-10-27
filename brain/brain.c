@@ -28,7 +28,7 @@ int main(int argc, char **argv)
     // init logging
     log_init(NULL, false, false);
 
-    // call init utils routines
+    // initialize
     INFO("INITIALIZING\n")
     if (wiringPiSetupGpio() != 0) {
         FATAL("wiringPiSetupGpio failed\n");
@@ -41,16 +41,14 @@ int main(int argc, char **argv)
     leds_init();
     sf_init();
     db_init("db.dat", true, GB);
+    proc_cmd_init();
     audio_init(proc_mic_data);
 
-    // call init routines
-    proc_cmd_init();
-    body_init();
-
-    // program is running
     INFO("RUNNING\n");
-    set_leds(LED_BLUE, 50, -1);
     t2s_play("program running");
+    sleep(1);
+    body_init();
+    set_leds(LED_BLUE, 50, -1);
 
     // wait for end_pgm
     while (!end_program) {
@@ -116,7 +114,6 @@ static int proc_mic_data(short *frame)
         char *transcript = s2t_feed(sound_val);
         if (transcript) {
             if (strcmp(transcript, "TIMEDOUT") == 0) {
-                audio_out_beep(3);
                 free(transcript);
                 state = STATE_DONE_WITH_CMD;
                 break;

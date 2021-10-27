@@ -11,10 +11,6 @@ query volume
 what is <the your> volume
 END
 
-HNDLR sleep
-sleep 0:NUMBER
-END
-
 HNDLR end_program
 <and end> program
 END
@@ -36,8 +32,6 @@ END
 HNDLR drive_fwd
 [<go drive>] forward [for] 0:NUMBER [<feet ft>]
 END
-
-
 
 EXIT
 
