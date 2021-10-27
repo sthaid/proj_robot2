@@ -1076,11 +1076,11 @@ emer_stopped:
         }
 
         if (mcs->state == MC_STATE_DISABLED) {
-            DO_EMER_STOP("motors have been disabled\n");
+            DO_EMER_STOP("motors have been disabled");
         }
 
         if (stop_button_pressed) {
-            DO_EMER_STOP("stop button\n");
+            DO_EMER_STOP("stop button");
         }
 
         if ((encoder_errs = encoder_get_errors(0))) {
@@ -1098,7 +1098,7 @@ emer_stopped:
         }
 
         if (imu_check_accel_alert(&accel)) {
-            DO_EMER_STOP("acceleration %0.1f gravity\n", accel);
+            DO_EMER_STOP("acceleration %0.1f gravity", accel);
         }
 
         for (int id = 0; id < 2; id++) {
