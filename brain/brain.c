@@ -5,7 +5,6 @@
 //
 
 static bool end_program;
-static bool end_program_by_signal;
 
 //
 // prototypes
@@ -42,12 +41,11 @@ int main(int argc, char **argv)
     sf_init();
     db_init("db.dat", true, GB);
     proc_cmd_init();
-    audio_init(proc_mic_data);
+    audio_init(proc_mic_data);  // starts callback to prco_mic_data and spkr output
+    body_init();                // establishes connection to body
 
     INFO("RUNNING\n");
     t2s_play("program running");
-    sleep(1);
-    body_init();
     set_leds(LED_BLUE, 50, -1);
 
     // wait for end_pgm
@@ -58,7 +56,6 @@ int main(int argc, char **argv)
     // program is terminating
     INFO("TERMINATING\n")
     t2s_play("program terminating");
-    if (!end_program_by_signal) sleep(2);
     set_leds(LED_OFF, 0, -1);
 
     return 0;
@@ -71,7 +68,6 @@ void brain_end_program(void)
 
 static void sig_hndlr(int sig)
 {
-    end_program_by_signal = true;
     brain_end_program();
 }
 
@@ -84,7 +80,8 @@ static int proc_mic_data(short *frame)
     #define STATE_WAITING_FOR_WAKE_WORD  0
     #define STATE_RECEIVING_CMD          1
     #define STATE_PROCESSING_CMD         2
-    #define STATE_DONE_WITH_CMD          3
+    #define STATE_COMPLETED_CMD_OKAY     3
+    #define STATE_COMPLETED_CMD_ERROR    4
 
     static int    state = STATE_WAITING_FOR_WAKE_WORD;
     static double doa;
@@ -115,7 +112,8 @@ static int proc_mic_data(short *frame)
         if (transcript) {
             if (strcmp(transcript, "TIMEDOUT") == 0) {
                 free(transcript);
-                state = STATE_DONE_WITH_CMD;
+                set_leds(LED_BLUE, 50, -1);
+                state = STATE_WAITING_FOR_WAKE_WORD;
                 break;
             }
             proc_cmd_execute(transcript, doa);
@@ -123,19 +121,29 @@ static int proc_mic_data(short *frame)
         }
         break; }
     case STATE_PROCESSING_CMD: {
-        if (proc_cmd_in_progress() == false) {
-            state = STATE_DONE_WITH_CMD;
+        bool succ;
+        if (proc_cmd_in_progress(&succ) == false) {
+            state = (succ ? STATE_COMPLETED_CMD_OKAY : STATE_COMPLETED_CMD_ERROR);
             break;
         }
         if (wwd_feed(sound_val) & WW_TERMINATE_MASK) {
-            INFO("CANCELLING\n");
             proc_cmd_cancel();
         }
         break; }
-    case STATE_DONE_WITH_CMD: {
-        doa = -1;
+    case STATE_COMPLETED_CMD_OKAY: {
         set_leds(LED_BLUE, 50, -1);
         state = STATE_WAITING_FOR_WAKE_WORD;
+        break; }
+    case STATE_COMPLETED_CMD_ERROR: {
+        static int cnt;
+        cnt++;
+        if (cnt == 1) {
+            set_leds(LED_RED, 50, -1);
+        } else if (cnt == 8000) {
+            set_leds(LED_BLUE, 50, -1);
+            state = STATE_WAITING_FOR_WAKE_WORD;
+            cnt = 0;
+        }
         break; }
     }
         

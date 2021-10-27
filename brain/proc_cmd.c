@@ -18,13 +18,13 @@ static bool strmatch(char *s, ...);
 // handlers
 //
 
-static void hndlr_set_volume(args_t args);
-static void hndlr_get_volume(args_t args);
-static void hndlr_end_program(args_t args);
-static void hndlr_time(args_t args);
-static void hndlr_set_info(args_t args);
-static void hndlr_get_info(args_t args);
-static void hndlr_drive_fwd(args_t args);
+static int hndlr_set_volume(args_t args);
+static int hndlr_get_volume(args_t args);
+static int hndlr_end_program(args_t args);
+static int hndlr_time(args_t args);
+static int hndlr_set_info(args_t args);
+static int hndlr_get_info(args_t args);
+static int hndlr_drive_fwd(args_t args);
 
 #define HNDLR(name) { #name, hndlr_##name }
 
@@ -56,9 +56,17 @@ void proc_cmd_execute(char *transcript, double doa)
     cmd = transcript;
 }
 
-bool proc_cmd_in_progress(void)
+bool proc_cmd_in_progress(bool *succ)
 {
-    return cmd != NULL;
+    if (cmd != NULL && cmd != (void*)1) {
+        // in progress
+        *succ = false;
+        return true;
+    } else {
+        // completed
+        *succ = (cmd == NULL);
+        return false;
+    }
 }
 
 void proc_cmd_cancel(void)
@@ -72,10 +80,11 @@ static void *cmd_thread(void *cx)
 {
     hndlr_t proc;
     args_t args;
+    int rc;
 
     while (true) {
         // wait for cmd
-        while (cmd == NULL) {
+        while (cmd == NULL || cmd == (void*)1) {
             usleep(10000);
         }
 
@@ -83,14 +92,15 @@ static void *cmd_thread(void *cx)
         bool match = grammar_match(cmd, &proc, args);
         INFO("match=%d, args=  '%s'  '%s'  '%s'  '%s'\n", match, args[0], args[1], args[2], args[3]);
         if (match) {
-            proc(args);
+            rc = proc(args);
         } else {
-            audio_out_beep(3);
+            audio_out_beep(2);
+            rc = -1;
         }
 
         // done with this cmd
         free(cmd);
-        cmd = NULL;
+        cmd = (rc == 0 ? NULL : (void*)1);
     }
 
     return NULL;
@@ -98,7 +108,7 @@ static void *cmd_thread(void *cx)
 
 // -----------------  PROC CMD HANDLERS  ------------------------------------
 
-static void hndlr_set_volume(args_t args)
+static int hndlr_set_volume(args_t args)
 {
     char *action = args[0];
     char *amount = args[1];
@@ -111,55 +121,71 @@ static void hndlr_set_volume(args_t args)
         t2s_set_volume(getnum(amount, DEFAULT_VOLUME), false);
     } else if (strmatch(action, "reset", NULL)) {
         t2s_set_volume(DEFAULT_VOLUME, false);
-    }
+    } // xxx error case
+
     t2s_play("The volume is now %d%%.", t2s_get_volume());
+
+    return 0;
 }
 
-static void hndlr_get_volume(args_t args)
+static int hndlr_get_volume(args_t args)
 {
     t2s_play("The volume is %d%%.", t2s_get_volume());
+
+    return 0;
 }
 
-static void hndlr_end_program(args_t args)
+static int hndlr_end_program(args_t args)
 {
     brain_end_program();
+
+    return 0;
 }
 
-static void hndlr_time(args_t args)
+static int hndlr_time(args_t args)
 {
     struct tm *tm;
     time_t t = time(NULL);
 
     tm = localtime(&t);
     t2s_play_nodb("the time is %d:%d", tm->tm_hour, tm->tm_min);
+
+    return 0;
 }
 
-static void hndlr_set_info(args_t args)
+static int hndlr_set_info(args_t args)
 {
     char *info_id = args[0];
     char *info_val = args[1];
-    INFO("XXX '%s' = '%s'\n", info_id, info_val);
+    INFO("xxx '%s' = '%s'\n", info_id, info_val);
 
     t2s_play("your %s is %s, got it!", info_id, info_val);
     db_set(KEYID_INFO, info_id, info_val, strlen(info_val)+1);
+
+    return 0;
 }
 
-static void hndlr_get_info(args_t args)
+static int hndlr_get_info(args_t args)
 {
     char *info_id = args[0];
     char *info_val;
     unsigned int info_val_len;
+    int rc;
 
     if (db_get(KEYID_INFO, args[0], (void**)&info_val, &info_val_len) < 0) {
         t2s_play("I don't know your %s", info_id);
+        rc = -1;
     } else {
         t2s_play("your %s is %s", info_id, info_val);
+        rc = 0;
     }
+
+    return rc;
 }
 
 // xxx define for 11
 // xxx return status
-static void hndlr_drive_fwd(args_t args)
+static int hndlr_drive_fwd(args_t args)
 {
     int feet = getnum(args[0], 0);
     char failure_reason[200];
@@ -170,6 +196,8 @@ static void hndlr_drive_fwd(args_t args)
     if (rc < 0) {
         t2s_play("%s", failure_reason);
     }
+
+    return rc;
 }
 
 // -----------------  SUPPORT  ----------------------------------------------

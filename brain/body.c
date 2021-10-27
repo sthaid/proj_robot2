@@ -128,6 +128,8 @@ static void *connect_and_recv_thread(void *cx)
 {
     msg_t msg;
 
+    sleep(1);
+
     while (true) {
         // if body is not on then delay and contine
         if (power_is_on == false) {
@@ -176,9 +178,9 @@ static int connect_to_body(void)
     // connect to body pgm
     sfd = socket(AF_INET, SOCK_STREAM, 0);
     if (connect(sfd, (struct sockaddr*)&sockaddr, sizeof(sockaddr)) < 0) {
-        ERROR("failed connect to %s, %s\n",
-              sock_addr_to_str(s, sizeof(s), (struct sockaddr *)&sockaddr),
-              strerror(errno));
+        ERROR_INTVL(60000, "failed connect to %s, %s\n",
+                    sock_addr_to_str(s, sizeof(s), (struct sockaddr *)&sockaddr),
+                    strerror(errno));
         close(sfd);
         return -1;
     }
@@ -201,13 +203,12 @@ static int connect_to_body(void)
 
 static void disconnect_from_body(void)
 {
-    // set conn_sfd to -1, indicating not connected; and close the socket
+    // close socket and set conn_sfd to -1
     MUTEX_LOCK;
-    if (conn_sfd == -1) {
-        return;
+    if (conn_sfd != -1) {
+        close(conn_sfd);
+        conn_sfd = -1;
     }
-    close(conn_sfd);
-    conn_sfd = -1;
     MUTEX_UNLOCK;
 
     // print disconected msg

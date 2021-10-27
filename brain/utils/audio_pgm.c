@@ -62,7 +62,7 @@ int main(int argc, char **argv)
     }
 
     // wait for audio output to complete
-    usleep(100000);
+    sleep(1);
     while (shm->execute) {
         usleep(10000);
     }

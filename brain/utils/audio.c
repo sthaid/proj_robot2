@@ -92,7 +92,10 @@ static void * proc_mic_data_thread(void *cx)
 
 // -----------------  API ROUTINES  -----------------------------------------
 
-// these routines issue requests to the audio_pgm 
+#define WAIT_FOR_COMPLETE \
+    do { \
+        while (shm->execute) usleep(1000); \
+    } while (0)
 
 void audio_out_beep(int beep_count)
 {
@@ -101,10 +104,10 @@ void audio_out_beep(int beep_count)
     }
 
     shm->beep_count = beep_count;
-
     __sync_synchronize();
     shm->execute = true;
-    __sync_synchronize();
+
+    WAIT_FOR_COMPLETE;
 }
 
 void audio_out_play_data(short *data, int max_data)
@@ -115,10 +118,10 @@ void audio_out_play_data(short *data, int max_data)
 
     memcpy(shm->data, data, max_data*sizeof(short));
     shm->max_data = max_data;
-
     __sync_synchronize();
     shm->execute = true;
-    __sync_synchronize();
+
+    WAIT_FOR_COMPLETE;
 }
 
 void audio_out_play_wav(char *file_name, short **data, int *max_data)
@@ -152,5 +155,7 @@ void audio_out_play_wav(char *file_name, short **data, int *max_data)
     // set shm->execute, this will cause audio_pgm to play the shm->data
     __sync_synchronize();
     shm->execute = true;
-    __sync_synchronize();
+
+    // wait for audio output to complete
+    WAIT_FOR_COMPLETE;
 }
