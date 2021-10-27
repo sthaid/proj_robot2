@@ -34,7 +34,7 @@ static int stop_motors(int print);
 
 static int drive_straight(double desired_feet, double mph, bool stop_motors_flag,
                           int *avg_lspeed_arg, int *avg_rspeed_arg);
-static int drive_straight_mtr_speed_comp(bool init, double rotation_target);
+static int drive_straight_mtr_speed_comp(bool init, double rotation_target) __attribute__((unused));
 
 static void drive_straight_cal_cvt_mph_to_mtr_speeds(double mph, int *lspeed, int *rspeed);
 static int drive_straight_cal_file_read(void);
@@ -685,6 +685,7 @@ static int drive_straight(double desired_feet, double mph, bool stop_motors_flag
             break;
         }
 
+#if 0   // note: comment this out on bench
         // perform motor speed compensation, and
         // maintain sums for calculation of avg mtr speeds
         if ((ms % 100) == 0) {
@@ -699,6 +700,7 @@ static int drive_straight(double desired_feet, double mph, bool stop_motors_flag
             avg_rspeed_sum += rspeed;
             avg_speed_cnt++;
         }
+#endif
 
         // sleep for 1 ms
         usleep(1000);  // 1 ms
@@ -1096,7 +1098,7 @@ emer_stopped:
         }
 
         if (imu_check_accel_alert(&accel)) {
-            DO_EMER_STOP("acceleration %0.1f g\n", accel);
+            DO_EMER_STOP("acceleration %0.1f gravity\n", accel);
         }
 
         for (int id = 0; id < 2; id++) {

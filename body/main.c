@@ -7,6 +7,13 @@
 #define MUTEX_LOCK do { pthread_mutex_lock(&mutex); } while (0)
 #define MUTEX_UNLOCK do { pthread_mutex_unlock(&mutex); } while (0)
 
+#define SEND_MSG(_msg) \
+    do { \
+        MUTEX_LOCK; \
+        if (sockfd != -1) send(sockfd, _msg, sizeof(msg_t), MSG_NOSIGNAL); \
+        MUTEX_UNLOCK; \
+    } while (0)
+
 //
 // typedefs
 //
@@ -33,8 +40,6 @@ static void process_received_msg(msg_t *msg);
 
 static void *send_status_msg_thread(void *cx);
 static void generate_status_msg(msg_t *msg);
-static void send_logmsg(char *str);
-static void send_msg(msg_t *msg);
 
 // -----------------  MAIN AND INIT ROUTINES  ------------------------------
 
@@ -114,7 +119,11 @@ static void sig_hndlr(int signum)
 
 static void logmsg_cb(char *str)
 {
-    send_logmsg(str);
+    msg_t msg;
+
+    msg.id = MSG_ID_LOGMSG;
+    safe_strncpy(msg.logmsg.str, str);
+    SEND_MSG(&msg);
 }
 
 // -----------------  ACCEPT CONN, RECV & PROCESS MSGS  --------------------
@@ -169,13 +178,12 @@ accept_connection:
     // recv and process messages
     while (true) {
         msg_t msg;
-
-        if (recv_msg(&msg) < 0) {
-            break;
-        }
-
+        if (recv_msg(&msg) < 0) break;
         process_received_msg(&msg);
     }
+
+    // emergency stop when client has disconnected
+    drive_emer_stop();
 
     // print disconnected and close sockfd
     INFO("disconnecting from %s\n", client);
@@ -251,7 +259,7 @@ static void *send_status_msg_thread(void *cx)
     while (true) {
         if (sockfd != -1) {
             generate_status_msg(&msg);
-            send_msg(&msg);
+            SEND_MSG(&msg);
         }
 
         usleep(500000);
@@ -348,15 +356,6 @@ static void generate_status_msg(msg_t *msg)
 
 // -----------------  SEND MSG PROCS  --------------------------------------
 
-static void send_logmsg(char *str)
-{
-    msg_t msg;
-
-    msg.id = MSG_ID_LOGMSG;
-    safe_strncpy(msg.logmsg.str, str);
-    send_msg(&msg);
-}
-
 void send_drive_proc_complete_msg(int unique_id, bool succ, char *failure_reason)
 {
     msg_t msg;
@@ -365,32 +364,5 @@ void send_drive_proc_complete_msg(int unique_id, bool succ, char *failure_reason
     msg.drive_proc_complete.unique_id = unique_id;
     msg.drive_proc_complete.succ = succ;
     safe_strncpy(msg.drive_proc_complete.failure_reason, failure_reason);
-    send_msg(&msg);
-}
-
-static void send_msg(msg_t *msg)
-{
-    int rc;
-
-    // if client not connected then return
-    MUTEX_LOCK;
-    if (sockfd == -1) {
-        MUTEX_UNLOCK;
-        return;
-    }
-
-    // send the msg
-    rc = send(sockfd, msg, sizeof(msg_t), MSG_NOSIGNAL);
-    if (rc != sizeof(msg_t)) {
-        if (rc == 0) {
-            ERROR("connection terminated by peer\n");
-        } else {
-            ERROR("send rc=%d sizeof(msg_t)=%zd, %s\n", rc, sizeof(msg_t), strerror(errno));
-        }
-        MUTEX_UNLOCK;
-        return;
-    }
-
-    // unlock mutex
-    MUTEX_UNLOCK;
+    SEND_MSG(&msg);
 }
