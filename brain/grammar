@@ -33,6 +33,11 @@ HNDLR drive_fwd
 [<go drive>] forward [for] 0:NUMBER [<feet ft>]
 END
 
+HNDLR body_power
+[<set turn>] body [power] 0:<on off>
+turn 0:<on off> body [power]
+END
+
 EXIT
 
 HNDLR rotate

@@ -232,6 +232,10 @@ void db_dump(void);
 
 #define AUDIO_SHM "/audio_shm"
 
+#define AUDIO_OUT_STATE_IDLE   0
+#define AUDIO_OUT_STATE_PREP   1
+#define AUDIO_OUT_STATE_PLAY   2
+
 typedef struct {
     // audio input ...
     short frames[48000][4];
@@ -240,7 +244,7 @@ typedef struct {
     int   beep_count;
     short data[60*24000];
     int   max_data;
-    bool  execute;
+    int   state;
 } audio_shm_t;
 
 void audio_init(int (*proc_mic_data)(short *frame));
@@ -248,3 +252,4 @@ void audio_init(int (*proc_mic_data)(short *frame));
 void audio_out_beep(int beep_count);
 void audio_out_play_data(short *data, int max_data);
 void audio_out_play_wav(char *file_name, short **data, int *max_data);
+void audio_out_wait(void);

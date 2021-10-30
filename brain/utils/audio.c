@@ -1,9 +1,14 @@
 #include <utils.h>
 
+// defines
+#define MUTEX_LOCK do { pthread_mutex_lock(&mutex); } while (0)
+#define MUTEX_UNLOCK do { pthread_mutex_unlock(&mutex); } while (0)
+
 // variables
 static pthread_t proc_mic_data_tid;
 static audio_shm_t *shm;
 static bool audio_exitting;
+static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
 // prototypes
 static void audio_exit(void);
@@ -90,49 +95,47 @@ static void * proc_mic_data_thread(void *cx)
     return NULL;
 }
 
-// -----------------  API ROUTINES  -----------------------------------------
+// -----------------  AUDIO OUT API ROUTINES  --------------------------------
 
-#define WAIT_FOR_COMPLETE \
-    do { \
-        while (shm->execute) usleep(1000); \
-    } while (0)
+// These routines return when audio output has started.
 
 void audio_out_beep(int beep_count)
 {
-    while (shm->execute) {
-        usleep(1000);
-    }
-
+    MUTEX_LOCK;
+    while (shm->state != AUDIO_OUT_STATE_IDLE) usleep(1000);
+    shm->state = AUDIO_OUT_STATE_PREP;
+    MUTEX_UNLOCK;
+    
     shm->beep_count = beep_count;
-    __sync_synchronize();
-    shm->execute = true;
 
-    WAIT_FOR_COMPLETE;
+    __sync_synchronize();
+    shm->state = AUDIO_OUT_STATE_PLAY;
 }
 
 void audio_out_play_data(short *data, int max_data)
 {
-    while (shm->execute) {
-        usleep(1000);
-    }
+    MUTEX_LOCK;
+    while (shm->state != AUDIO_OUT_STATE_IDLE) usleep(1000);
+    shm->state = AUDIO_OUT_STATE_PREP;
+    MUTEX_UNLOCK;
 
     memcpy(shm->data, data, max_data*sizeof(short));
     shm->max_data = max_data;
-    __sync_synchronize();
-    shm->execute = true;
 
-    WAIT_FOR_COMPLETE;
+    __sync_synchronize();
+    shm->state = AUDIO_OUT_STATE_PLAY;
 }
 
 void audio_out_play_wav(char *file_name, short **data, int *max_data)
 {
     int max_chan, sample_rate, rc;
-    
-    // wait for in progress audio output to complete
-    while (shm->execute) {
-        usleep(1000);
-    }
 
+    // wait for AUDIO_OUT_STATE_IDLE, and set state to AUDIO_OUT_STATE_PREP
+    MUTEX_LOCK;
+    while (shm->state != AUDIO_OUT_STATE_IDLE) usleep(1000);
+    shm->state = AUDIO_OUT_STATE_PREP;
+    MUTEX_UNLOCK;
+    
     // read the wav file directly into shm->data
     shm->max_data = sizeof(shm->data)/sizeof(short);
     rc = sf_read_wav_file2(file_name, shm->data, &max_chan, &shm->max_data, &sample_rate);
@@ -152,10 +155,16 @@ void audio_out_play_wav(char *file_name, short **data, int *max_data)
         *max_data = shm->max_data;
     }
 
-    // set shm->execute, this will cause audio_pgm to play the shm->data
+    // set AUDIO_OUT_STATE_PLAY
     __sync_synchronize();
-    shm->execute = true;
+    shm->state = AUDIO_OUT_STATE_PLAY;
+}
 
-    // wait for audio output to complete
-    WAIT_FOR_COMPLETE;
+// Wait for audio output to complete.
+
+void audio_out_wait(void)
+{
+    MUTEX_LOCK;
+    while (shm->state != AUDIO_OUT_STATE_IDLE) usleep(1000);
+    MUTEX_UNLOCK;
 }

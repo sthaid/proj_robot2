@@ -25,6 +25,7 @@ static int hndlr_time(args_t args);
 static int hndlr_set_info(args_t args);
 static int hndlr_get_info(args_t args);
 static int hndlr_drive_fwd(args_t args);
+static int hndlr_body_power(args_t args);
 
 #define HNDLR(name) { #name, hndlr_##name }
 
@@ -36,6 +37,7 @@ static hndlr_lookup_t hndlr_lookup_tbl[] = {
     HNDLR(set_info),
     HNDLR(get_info),
     HNDLR(drive_fwd),
+    HNDLR(body_power),
     { NULL, NULL }
                 };
 
@@ -98,6 +100,9 @@ static void *cmd_thread(void *cx)
             rc = -1;
         }
 
+        // wait for audio output to complete
+        audio_out_wait();
+
         // done with this cmd
         free(cmd);
         cmd = (rc == 0 ? NULL : (void*)1);
@@ -121,7 +126,10 @@ static int hndlr_set_volume(args_t args)
         t2s_set_volume(getnum(amount, DEFAULT_VOLUME), false);
     } else if (strmatch(action, "reset", NULL)) {
         t2s_set_volume(DEFAULT_VOLUME, false);
-    } // xxx error case
+    } else {
+        ERROR("hndllr_se_volume unexpected action '%s'\n", action);
+        return -1;
+    }
 
     t2s_play("The volume is now %d%%.", t2s_get_volume());
 
@@ -148,7 +156,7 @@ static int hndlr_time(args_t args)
     time_t t = time(NULL);
 
     tm = localtime(&t);
-    t2s_play_nodb("the time is %d:%d", tm->tm_hour, tm->tm_min);
+    t2s_play_nodb("the time is %d:%2.2d", tm->tm_hour, tm->tm_min);
 
     return 0;
 }
@@ -157,7 +165,6 @@ static int hndlr_set_info(args_t args)
 {
     char *info_id = args[0];
     char *info_val = args[1];
-    INFO("xxx '%s' = '%s'\n", info_id, info_val);
 
     t2s_play("your %s is %s, got it!", info_id, info_val);
     db_set(KEYID_INFO, info_id, info_val, strlen(info_val)+1);
@@ -183,14 +190,13 @@ static int hndlr_get_info(args_t args)
     return rc;
 }
 
-// xxx define for 11
-// xxx return status
 static int hndlr_drive_fwd(args_t args)
 {
     int feet = getnum(args[0], 0);
     char failure_reason[200];
     int rc;
 
+    // xxx define for 11
     rc = body_drive_cmd(11, feet, 0, 0, 0, failure_reason);
         
     if (rc < 0) {
@@ -198,6 +204,19 @@ static int hndlr_drive_fwd(args_t args)
     }
 
     return rc;
+}
+
+static int hndlr_body_power(args_t args)
+{
+    char *onoff = args[0];
+
+    if (strcmp(onoff, "on") == 0) {
+        body_power_on();
+    } else {
+        body_power_off();
+    }
+
+    return 0;
 }
 
 // -----------------  SUPPORT  ----------------------------------------------

@@ -63,7 +63,7 @@ int main(int argc, char **argv)
 
     // wait for audio output to complete
     sleep(1);
-    while (shm->execute) {
+    while (shm->state != AUDIO_OUT_STATE_IDLE) {
         usleep(10000);
     }
 
@@ -108,7 +108,7 @@ static void *audio_out_thread(void *cx)
 {
     while (true) {
         // wait
-        while (shm->execute == false) {
+        while (shm->state != AUDIO_OUT_STATE_PLAY) {
             usleep(2000);
         }
 
@@ -116,7 +116,7 @@ static void *audio_out_thread(void *cx)
         pa_play2("USB", 2, 24000, PA_INT16, audio_out_get_frame, NULL);
 
         // done
-        shm->execute = false;
+        shm->state = AUDIO_OUT_STATE_IDLE;
     }
 
     return NULL;

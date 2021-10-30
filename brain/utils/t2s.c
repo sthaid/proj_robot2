@@ -27,7 +27,7 @@ void t2s_play_nodb(char *fmt, ...)
     p += sprintf(p, "\"");
 
     // debug print the text
-    INFO("playing %s\n", text);
+    INFO("PLAY: %s\n", text);
 
     // run synthesize_text to convert text to wav file, output.raw
     if (system(cmd) < 0) {
@@ -61,7 +61,7 @@ void t2s_play(char *fmt, ...)
     p += sprintf(p, "\"");
 
     // debug print the text
-    INFO("playing %s\n", text);
+    INFO("PLAY: %s\n", text);
 
     // if requested text is available in database then 
     //   play the buffer from db to audio_out_play_data
@@ -97,6 +97,11 @@ void t2s_play(char *fmt, ...)
 
 static int curr_vol;
 
+// notes:
+// - aplay -l              - displays card numbers
+// - arecord -l            - ditto
+// - amixer -c 1 controls  - displays controls
+
 void t2s_set_volume(int percent, bool relative)
 {
     char cmd[100];
@@ -109,8 +114,9 @@ void t2s_set_volume(int percent, bool relative)
     if (curr_vol < 0) curr_vol = 0;
     if (curr_vol > 100) curr_vol = 100;
 
-    sprintf(cmd, "amixer -c 2 set PCM Playback Volume %d%%", curr_vol);
+    sprintf(cmd, "amixer -c 1 set PCM Playback Volume %d%%", curr_vol);
     system(cmd);
+    sleep(1);
 }
 
 int t2s_get_volume(void)

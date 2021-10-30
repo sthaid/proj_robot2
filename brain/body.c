@@ -23,6 +23,8 @@
         MUTEX_UNLOCK; \
     } while (0)
 
+#define GPIO_BODY_POWER  12
+
 //
 // variables
 //
@@ -30,6 +32,7 @@
 static struct msg_status_s          status;  // xxx need to use this
 static int                          conn_sfd = -1;
 static bool                         power_is_on;
+static uint64_t                     power_state_change_time_us;
 static struct drive_proc_complete_s drive_proc_complete;
 static pthread_mutex_t              mutex = PTHREAD_MUTEX_INITIALIZER;
 
@@ -51,6 +54,8 @@ void body_init(void)
 {
     pthread_t tid;
 
+    pinMode(GPIO_BODY_POWER, OUTPUT);
+
     body_power_on();
     pthread_create(&tid, NULL, connect_and_recv_thread, NULL);
     atexit(exit_handler);
@@ -58,7 +63,7 @@ void body_init(void)
 
 static void exit_handler(void)
 {
-    body_power_off();
+    //body_power_off();  xxx add this code later
 }
 
 // -----------------  API  ---------------------------------------
@@ -112,14 +117,20 @@ void body_emer_stop(void)
 
 void body_power_on(void)
 {
-    // xxx set gpio
+    digitalWrite(GPIO_BODY_POWER, 0);
     power_is_on = true;
+    power_state_change_time_us = microsec_timer();
+
+    t2s_play("body power is on\n");
 }
 
 void body_power_off(void)
 {
-    // xxx set gpio
+    digitalWrite(GPIO_BODY_POWER, 1);
     power_is_on = false;
+    power_state_change_time_us = microsec_timer();
+
+    t2s_play("body power is off\n");
 }
 
 // -----------------  CONNECT AND RECEIVE  -----------------------
@@ -127,8 +138,9 @@ void body_power_off(void)
 static void *connect_and_recv_thread(void *cx)
 {
     msg_t msg;
+    bool notified = false;
 
-    sleep(1);
+    sleep(2);
 
     while (true) {
         // if body is not on then delay and contine
@@ -140,9 +152,17 @@ static void *connect_and_recv_thread(void *cx)
         // if not connected then establish connection
         if (conn_sfd == -1) {
             if (connect_to_body() < 0) {
+                // if the body is powered up but hasn't connected then notify of such
+                if ((microsec_timer() - power_state_change_time_us > 60000000) && !notified) {
+                    t2s_play("body is on but not connected to brain");
+                    notified = true;
+                }
+
+                // sleep 5 secs and continue
                 sleep(5);
                 continue;
             }
+            notified = false;
             assert(conn_sfd != -1);
         }
 
@@ -195,8 +215,7 @@ static int connect_to_body(void)
 
     // set global variable conn_sfd, indiating connection is established,
     // and return success
-    INFO("connected to body\n");
-    t2s_play("connected to body");
+    t2s_play("brain is connected to body");
     conn_sfd = sfd;
     return 0;
 }
@@ -212,8 +231,7 @@ static void disconnect_from_body(void)
     MUTEX_UNLOCK;
 
     // print disconected msg
-    INFO("disconnected from body\n");
-    t2s_play("disconnected from body");
+    t2s_play("brain is disconnected from body");
 }
 
 static int recv_msg(msg_t *msg)
@@ -250,7 +268,6 @@ static void process_recvd_msg(msg_t *msg)
 {
     switch (msg->id) {
     case MSG_ID_STATUS:
-        //INFO("BODY: got msg status\n");
         status = msg->status;
         break;
     case MSG_ID_LOGMSG:
@@ -260,7 +277,7 @@ static void process_recvd_msg(msg_t *msg)
         drive_proc_complete = msg->drive_proc_complete;
         break;
     default:
-        FATAL("XXX");
+        assert(0);
         break;
     }
 }

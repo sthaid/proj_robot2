@@ -44,7 +44,7 @@ int main(int argc, char **argv)
     audio_init(proc_mic_data);  // starts callback to prco_mic_data and spkr output
     body_init();                // establishes connection to body
 
-    INFO("RUNNING\n");
+    INFO("PROGRAM RUNNING\n");
     t2s_play("program running");
     set_leds(LED_BLUE, 50, -1);
 
@@ -54,7 +54,7 @@ int main(int argc, char **argv)
     }
     
     // program is terminating
-    INFO("TERMINATING\n")
+    INFO("PROGRAM TERMINATING\n")
     t2s_play("program terminating");
     set_leds(LED_OFF, 0, -1);
 
