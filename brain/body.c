@@ -29,7 +29,8 @@
 // variables
 //
 
-static struct msg_status_s          status;  // xxx need to use this
+static struct msg_status_s          status;
+static uint64_t                     status_time_us;
 static int                          conn_sfd = -1;
 static bool                         power_is_on;
 static uint64_t                     power_state_change_time_us;
@@ -131,6 +132,36 @@ void body_power_off(void)
     power_state_change_time_us = microsec_timer();
 
     t2s_play("body power is off\n");
+}
+
+void body_status_report(void)
+{
+    if (!power_is_on) {
+        t2s_play("Bbody is off.\n");
+    } else if (conn_sfd == -1) {
+        t2s_play("Brain is not connected to body.\n");
+    } else if (microsec_timer() - status_time_us > 3000000) {
+        t2s_play("Status message has not been received from the body.");
+    } else {
+        t2s_play("Brain is connected to body.");
+        t2s_play("Voltage = %0.1f volts", status.voltage);
+        t2s_play("Current = %0.0f milliamps", 1000*status.total_current);
+        t2s_play("Magnetic heading = %0.0f degrees", status.mag_heading);
+    }
+}
+
+void body_weather_report(void)
+{
+    if (!power_is_on) {
+        t2s_play("Bbody is off.\n");
+    } else if (conn_sfd == -1) {
+        t2s_play("Brain is not connected to body.\n");
+    } else if (microsec_timer() - status_time_us > 3000000) {
+        t2s_play("Status message has not been received from the body.");
+    } else {
+        t2s_play("Temperature = %0.0f degrees", status.temperature_degf);
+        t2s_play("Pressure = %0.2f inches of mercury", status.pressure_inhg);
+    }
 }
 
 // -----------------  CONNECT AND RECEIVE  -----------------------
@@ -269,6 +300,7 @@ static void process_recvd_msg(msg_t *msg)
     switch (msg->id) {
     case MSG_ID_STATUS:
         status = msg->status;
+        status_time_us = microsec_timer();
         break;
     case MSG_ID_LOGMSG:
         INFO("BODY: %s\n", msg->logmsg.str);

@@ -26,6 +26,8 @@ static int hndlr_set_info(args_t args);
 static int hndlr_get_info(args_t args);
 static int hndlr_drive_fwd(args_t args);
 static int hndlr_body_power(args_t args);
+static int hndlr_status_report(args_t args);
+static int hndlr_weather_report(args_t args);
 
 #define HNDLR(name) { #name, hndlr_##name }
 
@@ -38,6 +40,8 @@ static hndlr_lookup_t hndlr_lookup_tbl[] = {
     HNDLR(get_info),
     HNDLR(drive_fwd),
     HNDLR(body_power),
+    HNDLR(status_report),
+    HNDLR(weather_report),
     { NULL, NULL }
                 };
 
@@ -215,6 +219,20 @@ static int hndlr_body_power(args_t args)
     } else {
         body_power_off();
     }
+
+    return 0;
+}
+
+static int hndlr_status_report(args_t args)
+{
+    body_status_report();
+
+    return 0;
+}
+
+static int hndlr_weather_report(args_t args)
+{
+    body_weather_report();
 
     return 0;
 }

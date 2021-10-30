@@ -38,6 +38,14 @@ HNDLR body_power
 turn 0:<on off> body [power]
 END
 
+HNDLR status_report
+status [report]
+END
+
+HNDLR weather_report
+weather [report]
+END
+
 EXIT
 
 HNDLR rotate
