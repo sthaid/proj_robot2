@@ -1,0 +1,17 @@
+[Unit]
+Description=Robot brain service
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/home/haid/proj/proj_robot2/brain/brain
+WorkingDirectory=/home/haid/proj/proj_robot2/brain
+StandardInput=null
+StandardOutput=append:/home/haid/proj/proj_robot2/brain/brain.log
+StandardError=inherit
+User=haid
+Restart=no
+Environment="GOOGLE_APPLICATION_CREDENTIALS=/home/haid/Downloads/google/square-root-2-1256570f4acc.json"
+
+[Install]
+WantedBy=multi-user.target
