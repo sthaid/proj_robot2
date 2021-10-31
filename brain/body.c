@@ -1,3 +1,5 @@
+// xxx turn off body if not being used for 10 minutes
+
 #include <common.h>
 
 #include "../body/include/body_network_intfc.h"
@@ -56,15 +58,13 @@ void body_init(void)
     pthread_t tid;
 
     pinMode(GPIO_BODY_POWER, OUTPUT);
-
-    body_power_on();
     pthread_create(&tid, NULL, connect_and_recv_thread, NULL);
     atexit(exit_handler);
 }
 
 static void exit_handler(void)
 {
-    //body_power_off();  xxx add this code later
+    // xxx nothing?
 }
 
 // -----------------  API  ---------------------------------------
@@ -121,7 +121,6 @@ void body_power_on(void)
     digitalWrite(GPIO_BODY_POWER, 0);
     power_is_on = true;
     power_state_change_time_us = microsec_timer();
-
     t2s_play("body power is on\n");
 }
 
@@ -130,7 +129,6 @@ void body_power_off(void)
     digitalWrite(GPIO_BODY_POWER, 1);
     power_is_on = false;
     power_state_change_time_us = microsec_timer();
-
     t2s_play("body power is off\n");
 }
 
@@ -170,7 +168,8 @@ static void *connect_and_recv_thread(void *cx)
     msg_t msg;
     bool notified = false;
 
-    sleep(2);
+    sleep(5);
+    body_power_on();
 
     while (true) {
         // if body is not on then delay and contine
@@ -267,18 +266,25 @@ static void disconnect_from_body(void)
 static int recv_msg(msg_t *msg)
 {
     int rc;
+    int eagain_count = 0;
 
     assert(conn_sfd != -1);
 
     // receive the msg
+try_again:
     rc = recv(conn_sfd, msg, sizeof(msg_t), MSG_WAITALL);
     if (rc != sizeof(msg_t)) {
-        if (rc == 0) {
+        if (rc == -1 && errno == EAGAIN && eagain_count++ < 20) {
+            WARN("EAGAIN, delay and try again\n");
+            usleep(100000);
+            goto try_again;
+        } else if (rc == 0) {
             ERROR("connection closed by peer\n");
+            return -1;
         } else {
             ERROR("recv msg rc=%d, %s\n", rc, strerror(errno));
+            return -1;
         }
-        return -1;
     }
 
     // validate the msg->id

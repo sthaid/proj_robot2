@@ -10,6 +10,7 @@ static bool end_program;
 // prototypes
 //
 
+static void initialize(void);
 static void sig_hndlr(int sig);
 static int proc_mic_data(short *frame);
 static void set_leds(unsigned int color, int brightness, double doa);
@@ -18,37 +19,15 @@ static void set_leds(unsigned int color, int brightness, double doa);
 
 int main(int argc, char **argv)
 {
-    // register for SIGINT and SIGTERM
-    static struct sigaction act;
-    act.sa_handler = sig_hndlr;
-    sigaction(SIGINT, &act, NULL);
-    sigaction(SIGTERM, &act, NULL);
-
-    // init logging
-    log_init(NULL, false, false);
-
     // initialize
+    log_init(NULL, false, false);
     INFO("INITIALIZING\n")
-    if (wiringPiSetupGpio() != 0) {
-        FATAL("wiringPiSetupGpio failed\n");
-    }
-    misc_init();
-    wwd_init();
-    t2s_init();
-    s2t_init();
-    doa_init();
-    leds_init();
-    sf_init();
-    db_init("db.dat", true, GB);
-    proc_cmd_init();
-    audio_init(proc_mic_data);
+    initialize();
 
+    // run
     INFO("PROGRAM RUNNING\n");
     t2s_play("program running");
     set_leds(LED_BLUE, 50, -1);
-
-    // establishes connection to body
-    body_init();
 
     // wait for end_pgm
     while (!end_program) {
@@ -60,8 +39,52 @@ int main(int argc, char **argv)
     t2s_play("program terminating");
     set_leds(LED_OFF, 0, -1);
 
+    // return success
     return 0;
 }
+
+static void initialize(void)
+{
+    uint64_t secs_since_boot;
+
+    // register for SIGINT and SIGTERM
+    static struct sigaction act;
+    act.sa_handler = sig_hndlr;
+    sigaction(SIGINT, &act, NULL);
+    sigaction(SIGTERM, &act, NULL);
+
+    // xxx
+    secs_since_boot = microsec_timer()/1000000;
+    if (secs_since_boot < 20) {
+        INFO("secs_since_boot=%lld, sleeping 20 secs\n", secs_since_boot);
+        sleep(20);
+    }
+
+    // xxx
+    if (wiringPiSetupGpio() != 0) {
+        FATAL("wiringPiSetupGpio failed\n");
+    }
+
+    // xxx
+    misc_init();
+    wwd_init();
+    t2s_init();
+    s2t_init();
+    doa_init();
+    leds_init();
+    sf_init();
+    db_init("db.dat", true, GB);
+    proc_cmd_init();
+    audio_init(proc_mic_data);
+    body_init();
+}
+
+static void sig_hndlr(int sig)
+{
+    brain_end_program();
+}
+
+// -----------------  PUBLIC ROUTINES  -------------------------------------------
 
 void brain_end_program(void)
 {
@@ -71,11 +94,6 @@ void brain_end_program(void)
 void brain_restart_program(void)
 {
     system("sudo systemctl restart robot-brain &");
-}
-
-static void sig_hndlr(int sig)
-{
-    brain_end_program();
 }
 
 // -----------------  PROCESS MIC DATA FRAME  ------------------------------------

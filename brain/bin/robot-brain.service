@@ -1,6 +1,6 @@
 [Unit]
 Description=Robot brain service
-After=network.target
+After=network.target sound.target
 
 [Service]
 Type=simple
