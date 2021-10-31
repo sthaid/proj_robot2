@@ -168,7 +168,7 @@ static void *connect_and_recv_thread(void *cx)
     msg_t msg;
     bool notified = false;
 
-    sleep(5);
+    sleep(3);
     body_power_on();
 
     while (true) {
