@@ -515,7 +515,7 @@ static int process_cmdline(void)
     msg_t  msg;
 
     static char last_cmdline[100];
-    static int  unique_id;
+    static int  unique_id = 1000000;
 
     if (strcmp(cmdline, "r") == 0) {
         strcpy(cmdline, last_cmdline);
