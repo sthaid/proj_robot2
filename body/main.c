@@ -10,7 +10,8 @@
 #define SEND_MSG(_msg) \
     do { \
         MUTEX_LOCK; \
-        if (sockfd != -1) send(sockfd, _msg, sizeof(msg_t), MSG_NOSIGNAL); \
+        if (sockfd[0] != -1) send(sockfd[0], _msg, sizeof(msg_t), MSG_NOSIGNAL); \
+        if (sockfd[1] != -1) send(sockfd[1], _msg, sizeof(msg_t), MSG_NOSIGNAL); \
         MUTEX_UNLOCK; \
     } while (0)
 
@@ -23,7 +24,7 @@
 //
 
 static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
-static int sockfd = -1;
+static int sockfd[2] = {-1,-1};
 static bool sigint, sigterm;
 
 //
@@ -34,8 +35,9 @@ static void initialize(void);
 static void sig_hndlr(int signum);
 static void logmsg_cb(char *str);
 
-static void server(void);
-static int recv_msg(msg_t *msg);
+static void *server_thread(void *cx);
+static void *recv_and_proc_msg_thread(void *sfd);
+static int recv_msg(int sfd, msg_t *msg);
 static void process_received_msg(msg_t *msg);
 
 static void *send_status_msg_thread(void *cx);
@@ -45,24 +47,23 @@ static void generate_status_msg(msg_t *msg);
 
 int main(int argc, char **argv)
 {
+    pthread_t tid;
+
     // init
     initialize();
 
     // call server to accept and process connections from clients
-    server();
+    pthread_create(&tid, NULL, server_thread, NULL);
 
-    // stop motors
-    drive_emer_stop();
-
-    // print reason for terminating
-    if (sigint || sigterm) {
-        INFO("terminating due to %s\n", sigint ? "SIGINT" : "SIGTERM");
+    // wait for SIGINT or SIGTERM
+    while (!sigint && !sigterm) {
+        sleep(1);  // xxx or shorter
     }
 
-    // call oled_exit to clear the oled display
+    // cleanup and exit
+    INFO("terminating, reason=%s\n", sigint ? "SIGINT" : sigterm ? "SIGTERM" : "????");
+    drive_emer_stop();
     oled_ctlr_exit("term");
-
-    // done
     return 0;
 }
 
@@ -128,13 +129,15 @@ static void logmsg_cb(char *str)
 
 // -----------------  ACCEPT CONN, RECV & PROCESS MSGS  --------------------
 
-static void server(void)
+static void *server_thread(void *cx)
 {
     struct sockaddr_in server_address;
     int                listen_sockfd;
     int                ret;
     int                optval;
     char               client[200];
+    int               *sfd;
+    pthread_t          tid;
 
     // create socket
     listen_sockfd = socket(AF_INET, SOCK_STREAM, 0);
@@ -158,27 +161,46 @@ static void server(void)
     // listen 
     listen(listen_sockfd, 2);
 
-    // accept connection
-accept_connection:
+    // loop forever, xxx
     while (true) {
-        socklen_t len;
-        struct sockaddr_in address;
-
-        len = sizeof(address);
-        sockfd = accept(listen_sockfd, (struct sockaddr *) &address, &len);
-        if (sockfd == -1) {
-            if (sigint || sigterm) return;
-            ERROR("accept, %s\n", strerror(errno));
-            continue;
+        // wait for one of the two sockets to be free
+        while (true) {
+            if (sockfd[0] == -1) { sfd = &sockfd[0]; break; }
+            if (sockfd[1] == -1) { sfd = &sockfd[1]; break; }
+            sleep(1);
         }
-        INFO("accepted connection from %s\n", sock_addr_to_str(client,sizeof(client),(struct sockaddr *)&address));
-        break;
+
+        // accept connection
+        while (true) {
+            socklen_t len;
+            struct sockaddr_in address;
+
+            len = sizeof(address);
+            *sfd = accept(listen_sockfd, (struct sockaddr *) &address, &len);
+            if (*sfd == -1) {
+                ERROR("accept, %s\n", strerror(errno));
+                sleep(1);
+                continue;
+            }
+            INFO("accepted connection from %s\n", sock_addr_to_str(client,sizeof(client),(struct sockaddr *)&address));
+            break;
+        }
+
+        // create thread to recv and process messages
+        pthread_create(&tid, NULL, recv_and_proc_msg_thread, sfd);
     }
+
+    return NULL;
+}
+
+static void *recv_and_proc_msg_thread(void *cx)
+{
+    msg_t msg;
+    int *sfd = cx;
 
     // recv and process messages
     while (true) {
-        msg_t msg;
-        if (recv_msg(&msg) < 0) break;
+        if (recv_msg(*sfd, &msg) < 0) break;
         process_received_msg(&msg);
     }
 
@@ -186,26 +208,22 @@ accept_connection:
     drive_emer_stop();
 
     // print disconnected and close sockfd
-    INFO("disconnecting from %s\n", client);
+    //INFO("disconnecting from %s\n", client);
+    INFO("disconnecting xxx\n");
     MUTEX_LOCK;
-    close(sockfd);
-    sockfd = -1;
+    close(*sfd);
+    *sfd = -1;
     MUTEX_UNLOCK;
 
-    // if program is terminating then return otherwise accept connection
-    if (sigint || sigterm) {
-        return;
-    } else {
-        goto accept_connection;
-    }
+    return NULL;
 }
 
-static int recv_msg(msg_t *msg)
+static int recv_msg(int sfd, msg_t *msg)
 {
     int rc;
 
     // receive the msg
-    rc = recv(sockfd, msg, sizeof(msg_t), MSG_WAITALL);
+    rc = recv(sfd, msg, sizeof(msg_t), MSG_WAITALL);
     if (rc != sizeof(msg_t)) {
         if (rc == 0) {
             ERROR("connection closed by peer\n");
@@ -257,7 +275,7 @@ static void *send_status_msg_thread(void *cx)
     msg_t msg;
 
     while (true) {
-        if (sockfd != -1) {
+        if (sockfd[0] != -1 || sockfd[1] != -1) {
             generate_status_msg(&msg);
             SEND_MSG(&msg);
         }
