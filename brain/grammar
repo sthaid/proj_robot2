@@ -15,6 +15,10 @@ HNDLR end_program
 <and end> program
 END
 
+HNDLR restart_program
+restart program
+END
+
 HNDLR time
 what [is the] time [is it]
 END
@@ -44,6 +48,10 @@ END
 
 HNDLR weather_report
 weather [report]
+END
+
+HNDLR count
+count to 0:NUMBER
 END
 
 EXIT

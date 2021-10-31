@@ -2,6 +2,7 @@
 
 // brain.c ...
 void brain_end_program(void);
+void brain_restart_program(void);
 
 // proc_cmd.c ...
 void proc_cmd_init(void);

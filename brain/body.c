@@ -143,8 +143,7 @@ void body_status_report(void)
     } else if (microsec_timer() - status_time_us > 3000000) {
         t2s_play("Status message has not been received from the body.");
     } else {
-        t2s_play("Brain is connected to body.");
-        t2s_play("Voltage = %0.1f volts", status.voltage);
+        t2s_play("Voltage = %0.2f volts", status.voltage);
         t2s_play("Current = %0.0f milliamps", 1000*status.total_current);
         t2s_play("Magnetic heading = %0.0f degrees", status.mag_heading);
     }

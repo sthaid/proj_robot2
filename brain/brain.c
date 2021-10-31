@@ -41,12 +41,14 @@ int main(int argc, char **argv)
     sf_init();
     db_init("db.dat", true, GB);
     proc_cmd_init();
-    audio_init(proc_mic_data);  // starts callback to prco_mic_data and spkr output
-    body_init();                // establishes connection to body
+    audio_init(proc_mic_data);
 
     INFO("PROGRAM RUNNING\n");
     t2s_play("program running");
     set_leds(LED_BLUE, 50, -1);
+
+    // establishes connection to body
+    body_init();
 
     // wait for end_pgm
     while (!end_program) {
@@ -64,6 +66,11 @@ int main(int argc, char **argv)
 void brain_end_program(void)
 {
     end_program = true;
+}
+
+void brain_restart_program(void)
+{
+    system("sudo systemctl restart robot-brain &");
 }
 
 static void sig_hndlr(int sig)

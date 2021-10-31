@@ -5,6 +5,7 @@
 //
 
 static char *cmd;
+static bool cancel;
 
 //
 // prototypes
@@ -21,6 +22,7 @@ static bool strmatch(char *s, ...);
 static int hndlr_set_volume(args_t args);
 static int hndlr_get_volume(args_t args);
 static int hndlr_end_program(args_t args);
+static int hndlr_restart_program(args_t args);
 static int hndlr_time(args_t args);
 static int hndlr_set_info(args_t args);
 static int hndlr_get_info(args_t args);
@@ -28,6 +30,7 @@ static int hndlr_drive_fwd(args_t args);
 static int hndlr_body_power(args_t args);
 static int hndlr_status_report(args_t args);
 static int hndlr_weather_report(args_t args);
+static int hndlr_count(args_t args);
 
 #define HNDLR(name) { #name, hndlr_##name }
 
@@ -35,6 +38,7 @@ static hndlr_lookup_t hndlr_lookup_tbl[] = {
     HNDLR(set_volume),
     HNDLR(get_volume),
     HNDLR(end_program),
+    HNDLR(restart_program),
     HNDLR(time),
     HNDLR(set_info),
     HNDLR(get_info),
@@ -42,6 +46,7 @@ static hndlr_lookup_t hndlr_lookup_tbl[] = {
     HNDLR(body_power),
     HNDLR(status_report),
     HNDLR(weather_report),
+    HNDLR(count),
     { NULL, NULL }
                 };
 
@@ -77,6 +82,7 @@ bool proc_cmd_in_progress(bool *succ)
 
 void proc_cmd_cancel(void)
 {
+    cancel = true;
     body_emer_stop();
 }
 
@@ -98,6 +104,7 @@ static void *cmd_thread(void *cx)
         bool match = grammar_match(cmd, &proc, args);
         INFO("match=%d, args=  '%s'  '%s'  '%s'  '%s'\n", match, args[0], args[1], args[2], args[3]);
         if (match) {
+            cancel = false;
             rc = proc(args);
         } else {
             audio_out_beep(2);
@@ -154,6 +161,13 @@ static int hndlr_end_program(args_t args)
     return 0;
 }
 
+static int hndlr_restart_program(args_t args)
+{
+    brain_restart_program();
+
+    return 0;
+}
+
 static int hndlr_time(args_t args)
 {
     struct tm *tm;
@@ -202,7 +216,6 @@ static int hndlr_drive_fwd(args_t args)
 
     // xxx define for 11
     rc = body_drive_cmd(11, feet, 0, 0, 0, failure_reason);
-        
     if (rc < 0) {
         t2s_play("%s", failure_reason);
     }
@@ -233,6 +246,19 @@ static int hndlr_status_report(args_t args)
 static int hndlr_weather_report(args_t args)
 {
     body_weather_report();
+
+    return 0;
+}
+
+static int hndlr_count(args_t args)
+{
+    int cnt = getnum(args[0], 10);
+
+    for (int i = 1; i <= cnt; i++) {
+        t2s_play("%d", i);
+        usleep(200000);
+        if (cancel) return -1;
+    }        
 
     return 0;
 }
