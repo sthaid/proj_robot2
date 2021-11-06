@@ -101,3 +101,7 @@ HNDLR polite_conversation
 0:(what is your favorite color)
 0:(what is your name)
 END
+
+HNDLR lights
+lights 0:<on off>
+END

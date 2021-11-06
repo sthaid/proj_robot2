@@ -41,6 +41,7 @@ static int hndlr_time(args_t args);
 static int hndlr_weather_report(args_t args);
 static int hndlr_count(args_t args);
 static int hndlr_polite_conversation(args_t args);
+static int hndlr_lights(args_t args);
 
 #define HNDLR(name) { #name, hndlr_##name }
 
@@ -67,6 +68,7 @@ static hndlr_lookup_t hndlr_lookup_tbl[] = {
     HNDLR(weather_report),
     HNDLR(count),
     HNDLR(polite_conversation),
+    HNDLR(lights),
     { NULL, NULL }
                 };
 
@@ -385,6 +387,23 @@ static int hndlr_polite_conversation(args_t args)
 
     ERROR("polite_conversation: '%s'\n", args[0]);
     t2s_play("Sorry, I do not understand you");
+    return 0;
+}
+
+static int hndlr_lights(args_t args)
+{
+    char cmd[200];
+    int rc;
+
+    sprintf(cmd, "./tplink-smartplug-master/tplink_smartplug.py  -t 192.168.1.191 -c %s", args[0]);
+    rc = system(cmd);
+
+    if (rc != 0) {
+        ERROR("failed to turn lights %s, rc=0x%x\n", args[0], rc);
+        t2s_play("an error occurred when turning lights %s", args[0]);
+        return -1;
+    }
+
     return 0;
 }
 
