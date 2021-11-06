@@ -99,6 +99,20 @@ double max_doubles(double *x, int n, int *max_idx);
 double min_doubles(double *x, int n, int *min_idx);
 char *stars(double v, double max_v, int max_stars, char *s);
 
+static inline double low_pass_filter(double v, double *cx, double k2)
+{
+    *cx = k2 * *cx + (1-k2) * v;
+    return *cx;
+}
+
+static inline double low_pass_filter_ex(double v, double *cx, int k1, double k2)
+{
+    for (int i = 0; i < k1; i++) {
+        v = low_pass_filter(v, &cx[i], k2);
+    }
+    return v;
+}
+
 // -------- pa.c --------
 
 #define DEFAULT_OUTPUT_DEVICE "DEFAULT_OUTPUT_DEVICE"
@@ -240,16 +254,21 @@ typedef struct {
     // audio input ...
     short frames[48000][4];
     int   fidx;
+    bool  reset_mic;
     // audio output ...
     int   beep_count;
     short data[60*24000];
     int   max_data;
+    int   sample_rate;
     int   state;
 } audio_shm_t;
 
 void audio_init(int (*proc_mic_data)(short *frame));
 
+int audio_in_reset_mic(void);
+
 void audio_out_beep(int beep_count);
-void audio_out_play_data(short *data, int max_data);
+void audio_out_play_data(short *data, int max_data, int sample_rate);
 void audio_out_play_wav(char *file_name, short **data, int *max_data);
 void audio_out_wait(void);
+

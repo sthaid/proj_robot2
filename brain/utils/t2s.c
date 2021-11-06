@@ -13,6 +13,11 @@ void t2s_init(void)
 
 // -----------------  PLAY  ------------------------------------------------
 
+// xxx make a common routine
+// - and remove \n if it appears in the text
+// - why are there " in db
+// - get rid of the nodb version (maybe)
+
 void t2s_play_nodb(char *fmt, ...)
 {
     char cmd[10000], *p=cmd, *text;
@@ -71,7 +76,7 @@ void t2s_play(char *fmt, ...)
     //   save synthesize_text result in db
     // endif
     if (db_get(KEYID_T2S, text, &val, &val_len) == 0) {
-        audio_out_play_data((short*)val, val_len/sizeof(short));
+        audio_out_play_data((short*)val, val_len/sizeof(short), 24000);
         cnt_db++;
     } else {
         if (system(cmd) < 0) {

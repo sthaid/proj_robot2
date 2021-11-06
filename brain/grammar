@@ -19,6 +19,14 @@ HNDLR restart_program
 restart program
 END
 
+HNDLR playback
+playback
+END
+
+HNDLR reset_mic
+reset microphone
+END
+
 HNDLR time
 what [is the] time [is it]
 END

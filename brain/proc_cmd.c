@@ -23,6 +23,8 @@ static int hndlr_set_volume(args_t args);
 static int hndlr_get_volume(args_t args);
 static int hndlr_end_program(args_t args);
 static int hndlr_restart_program(args_t args);
+static int hndlr_reset_mic(args_t args);
+static int hndlr_playback(args_t args);
 static int hndlr_time(args_t args);
 static int hndlr_set_info(args_t args);
 static int hndlr_get_info(args_t args);
@@ -39,6 +41,8 @@ static hndlr_lookup_t hndlr_lookup_tbl[] = {
     HNDLR(get_volume),
     HNDLR(end_program),
     HNDLR(restart_program),
+    HNDLR(reset_mic),
+    HNDLR(playback),
     HNDLR(time),
     HNDLR(set_info),
     HNDLR(get_info),
@@ -165,6 +169,28 @@ static int hndlr_restart_program(args_t args)
 {
     brain_restart_program();
 
+    return 0;
+}
+
+static int hndlr_reset_mic(args_t args)
+{
+    int rc = audio_in_reset_mic();
+    if (rc < 0) {
+        t2s_play("failed to reset microphone");
+        return -1;
+    } else {
+        t2s_play("the microphone has been reset");
+        return 0;
+    }
+}
+
+static int hndlr_playback(args_t args)
+{
+    #define MAX_DATA (5*16000)
+    short data[MAX_DATA];
+
+    brain_get_recording(data, MAX_DATA);
+    audio_out_play_data(data, MAX_DATA, 16000);
     return 0;
 }
 

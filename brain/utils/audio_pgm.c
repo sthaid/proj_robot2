@@ -49,16 +49,23 @@ int main(int argc, char **argv)
     // call pa_record2 to start receiving the 4 channel respeaker mic data;
     // the recv_mic_data callback routine is called with mic data frames
     INFO("AUDIO RUNNING\n");
-    pthread_create(&tid, NULL, recv_mic_data_setup_thread, NULL);
-    rc =  pa_record2("seeed-4mic-voicecard",
-                     4,                   // max_chan
-                     48000,               // sample_rate
-                     PA_INT16,            // 16 bit signed data
-                     recv_mic_data,       // callback
-                     NULL,                // cx passed to recv_mic_data
-                     0);                  // discard_samples count
-    if (rc < 0) {
-        ERROR("error pa_record2\n");
+    while (true) {
+        recv_mic_data_tid = 0;
+        pthread_create(&tid, NULL, recv_mic_data_setup_thread, NULL);
+        rc =  pa_record2("seeed-4mic-voicecard",
+                         4,                   // max_chan
+                         48000,               // sample_rate
+                         PA_INT16,            // 16 bit signed data
+                         recv_mic_data,       // callback
+                         NULL,                // cx passed to recv_mic_data
+                         0);                  // discard_samples count
+        if (rc < 0) {
+            ERROR("error pa_record2\n");
+        }
+
+        if (end_program) {
+            break;
+        }
     }
 
     // wait for audio output to complete
@@ -113,7 +120,7 @@ static void *audio_out_thread(void *cx)
         }
 
         // play
-        pa_play2("USB", 2, 24000, PA_INT16, audio_out_get_frame, NULL);
+        pa_play2("USB", 2, shm->sample_rate, PA_INT16, audio_out_get_frame, NULL);
 
         // done
         shm->state = AUDIO_OUT_STATE_IDLE;
@@ -174,6 +181,13 @@ static int recv_mic_data(const void *frame, void *cx)
     // check if this program is terminating; if so,
     // return -1 to stop receiving mic data, and pa_record2 will return
     if (end_program) {
+        return -1;
+    }
+
+    // if requested to reset the mic then return -1 to 
+    // stop receiving mic data, and cause the call to pa_record2 to return
+    if (shm->reset_mic) {
+        shm->reset_mic = false;
         return -1;
     }
 

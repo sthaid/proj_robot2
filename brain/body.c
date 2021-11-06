@@ -121,7 +121,7 @@ void body_power_on(void)
     digitalWrite(GPIO_BODY_POWER, 0);
     power_is_on = true;
     power_state_change_time_us = microsec_timer();
-    t2s_play("body power is on\n");
+    t2s_play("body power is on");
 }
 
 void body_power_off(void)
@@ -129,15 +129,15 @@ void body_power_off(void)
     digitalWrite(GPIO_BODY_POWER, 1);
     power_is_on = false;
     power_state_change_time_us = microsec_timer();
-    t2s_play("body power is off\n");
+    t2s_play("body power is off");
 }
 
 void body_status_report(void)
 {
     if (!power_is_on) {
-        t2s_play("Bbody is off.\n");
+        t2s_play("Bbody is off.");
     } else if (conn_sfd == -1) {
-        t2s_play("Brain is not connected to body.\n");
+        t2s_play("Brain is not connected to body.");
     } else if (microsec_timer() - status_time_us > 3000000) {
         t2s_play("Status message has not been received from the body.");
     } else {
@@ -150,9 +150,9 @@ void body_status_report(void)
 void body_weather_report(void)
 {
     if (!power_is_on) {
-        t2s_play("Bbody is off.\n");
+        t2s_play("Bbody is off.");
     } else if (conn_sfd == -1) {
-        t2s_play("Brain is not connected to body.\n");
+        t2s_play("Brain is not connected to body.");
     } else if (microsec_timer() - status_time_us > 3000000) {
         t2s_play("Status message has not been received from the body.");
     } else {
