@@ -1136,6 +1136,20 @@ find the address of the broadcom
 TITLE: RPI - GENERAL TIPS
 ===========================
 
+setting netowrk addresses for the wired ethernet device
+- vi etc/dhcpcd.conf
+  #### brain
+  interface eth0
+  static ip_address=192.168.0.10/24
+  #### body
+  interface eth0
+  static ip_address=192.168.0.11/24
+
+isolcpus example:
+  $ cat /boot/cmdline.txt 
+    console=serial0,115200 console=tty1 root=PARTUUID=f0413295-02 rootfstype=ext4 
+       elevator=deadline fsck.repair=yes rootwait quiet splash plymouth.ignore-serial-consoles isolcpus=3
+
 apt examples
 - apt update   - download package information from all configured sources
 - apt upgrade
