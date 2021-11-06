@@ -19,36 +19,50 @@ static bool strmatch(char *s, ...);
 // handlers
 //
 
-static int hndlr_set_volume(args_t args);
-static int hndlr_get_volume(args_t args);
+// program control & test
 static int hndlr_end_program(args_t args);
 static int hndlr_restart_program(args_t args);
 static int hndlr_reset_mic(args_t args);
 static int hndlr_playback(args_t args);
-static int hndlr_time(args_t args);
+// volume control
+static int hndlr_set_volume(args_t args);
+static int hndlr_get_volume(args_t args);
+// personal info
 static int hndlr_set_info(args_t args);
 static int hndlr_get_info(args_t args);
-static int hndlr_drive_fwd(args_t args);
+// body status & power
 static int hndlr_body_power(args_t args);
 static int hndlr_status_report(args_t args);
+// body drive
+static int hndlr_drive_fwd(args_t args);
+static int hndlr_drive_rotate(args_t args);
+// misc
+static int hndlr_time(args_t args);
 static int hndlr_weather_report(args_t args);
 static int hndlr_count(args_t args);
 
 #define HNDLR(name) { #name, hndlr_##name }
 
 static hndlr_lookup_t hndlr_lookup_tbl[] = {
-    HNDLR(set_volume),
-    HNDLR(get_volume),
+    // program control & test
     HNDLR(end_program),
     HNDLR(restart_program),
     HNDLR(reset_mic),
     HNDLR(playback),
-    HNDLR(time),
+    // volume control
+    HNDLR(set_volume),
+    HNDLR(get_volume),
+    // personal info
     HNDLR(set_info),
     HNDLR(get_info),
-    HNDLR(drive_fwd),
+    // body status & power
     HNDLR(body_power),
     HNDLR(status_report),
+    // body drive
+    HNDLR(drive_fwd),
+    HNDLR(drive_rotate),
+    // misc
+    HNDLR(time),
     HNDLR(weather_report),
     HNDLR(count),
     { NULL, NULL }
@@ -128,35 +142,11 @@ static void *cmd_thread(void *cx)
 
 // -----------------  PROC CMD HANDLERS  ------------------------------------
 
-static int hndlr_set_volume(args_t args)
-{
-    char *action = args[0];
-    char *amount = args[1];
 
-    if (strmatch(action, "up", "increase", NULL)) {
-        t2s_set_volume(getnum(amount, DELTA_VOLUME), true);
-    } else if (strmatch(action, "down", "decrease", NULL)) {
-        t2s_set_volume(-getnum(amount, DELTA_VOLUME), true);
-    } else if (strmatch(action, "set", NULL)) {
-        t2s_set_volume(getnum(amount, DEFAULT_VOLUME), false);
-    } else if (strmatch(action, "reset", NULL)) {
-        t2s_set_volume(DEFAULT_VOLUME, false);
-    } else {
-        ERROR("hndllr_se_volume unexpected action '%s'\n", action);
-        return -1;
-    }
 
-    t2s_play("The volume is now %d%%.", t2s_get_volume());
-
-    return 0;
-}
-
-static int hndlr_get_volume(args_t args)
-{
-    t2s_play("The volume is %d%%.", t2s_get_volume());
-
-    return 0;
-}
+// ----------------------
+// program control & test
+// ----------------------
 
 static int hndlr_end_program(args_t args)
 {
@@ -193,18 +183,43 @@ static int hndlr_playback(args_t args)
     audio_out_play_data(data, MAX_DATA, 16000);
     return 0;
 }
+// ----------------------
+// volume control
+// ----------------------
 
-static int hndlr_time(args_t args)
+static int hndlr_set_volume(args_t args)
 {
-    struct tm *tm;
-    time_t t = time(NULL);
+    char *action = args[0];
+    char *amount = args[1];
 
-    tm = localtime(&t);
-    t2s_play("the time is");  // xxx make same change in other places
-    t2s_play_nodb("%d %2.2d", tm->tm_hour, tm->tm_min);
+    if (strmatch(action, "up", "increase", NULL)) {
+        t2s_set_volume(getnum(amount, DELTA_VOLUME), true);
+    } else if (strmatch(action, "down", "decrease", NULL)) {
+        t2s_set_volume(-getnum(amount, DELTA_VOLUME), true);
+    } else if (strmatch(action, "set", NULL)) {
+        t2s_set_volume(getnum(amount, DEFAULT_VOLUME), false);
+    } else if (strmatch(action, "reset", NULL)) {
+        t2s_set_volume(DEFAULT_VOLUME, false);
+    } else {
+        ERROR("hndllr_se_volume unexpected action '%s'\n", action);
+        return -1;
+    }
+
+    t2s_play("The volume is now %d%%.", t2s_get_volume());
 
     return 0;
 }
+
+static int hndlr_get_volume(args_t args)
+{
+    t2s_play("The volume is %d%%.", t2s_get_volume());
+
+    return 0;
+}
+
+// ----------------------
+// personal info
+// ----------------------
 
 static int hndlr_set_info(args_t args)
 {
@@ -235,19 +250,15 @@ static int hndlr_get_info(args_t args)
     return rc;
 }
 
-static int hndlr_drive_fwd(args_t args)
+// ----------------------
+// body status & power
+// ----------------------
+
+static int hndlr_status_report(args_t args)
 {
-    int feet = getnum(args[0], 0);
-    char failure_reason[200];
-    int rc;
+    body_status_report();
 
-    // xxx define for 11
-    rc = body_drive_cmd(11, feet, 0, 0, 0, failure_reason);
-    if (rc < 0) {
-        t2s_play("%s", failure_reason);
-    }
-
-    return rc;
+    return 0;
 }
 
 static int hndlr_body_power(args_t args)
@@ -263,9 +274,62 @@ static int hndlr_body_power(args_t args)
     return 0;
 }
 
-static int hndlr_status_report(args_t args)
+// ----------------------
+// body drive
+// ----------------------
+
+static int hndlr_drive_fwd(args_t args)
 {
-    body_status_report();
+    int feet = getnum(args[0], 0);
+    char failure_reason[200];
+    int rc;
+
+    // xxx define for 11
+    rc = body_drive_cmd(11, feet, 0, 0, 0, failure_reason);
+    if (rc < 0) {
+        t2s_play("%s", failure_reason);
+    }
+
+    return rc;
+}
+
+static int hndlr_drive_rotate(args_t args)
+{
+    char *amount    = args[0];
+    char *direction = args[1];
+    bool dir_is_clockwise;
+    int  degrees;
+
+    dir_is_clockwise = (strcmp(direction, "clockwise") == 0) ||
+                       (strcmp(direction, "") == 0);
+
+    if (sscanf(amount, "%d degrees", &degrees) == 1) {
+        // okay
+    } else if (strcmp(amount, "halfway around") == 0) {
+        degrees = 180;
+    } else {
+        degrees = 360;
+    }
+
+    t2s_play("rotate %s %d degrees",
+             dir_is_clockwise ? "clockwise" : "counterclockwise",
+             degrees);
+
+    return 0;
+}
+
+// ----------------------
+// misc
+// ----------------------
+
+static int hndlr_time(args_t args)
+{
+    struct tm *tm;
+    time_t t = time(NULL);
+
+    tm = localtime(&t);
+    t2s_play("the time is");  // xxx make same change in other places
+    t2s_play_nodb("%d %2.2d", tm->tm_hour, tm->tm_min);
 
     return 0;
 }
