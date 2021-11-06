@@ -93,3 +93,11 @@ HNDLR count
 count to 0:NUMBER
 END
 
+HNDLR polite_conversation
+0:(hello)
+0:(how are you)
+0:(how do you feel)
+0:(how old are you)
+0:(what is your favorite color)
+0:(what is your name)
+END

@@ -40,6 +40,7 @@ static int hndlr_drive_rotate(args_t args);
 static int hndlr_time(args_t args);
 static int hndlr_weather_report(args_t args);
 static int hndlr_count(args_t args);
+static int hndlr_polite_conversation(args_t args);
 
 #define HNDLR(name) { #name, hndlr_##name }
 
@@ -65,6 +66,7 @@ static hndlr_lookup_t hndlr_lookup_tbl[] = {
     HNDLR(time),
     HNDLR(weather_report),
     HNDLR(count),
+    HNDLR(polite_conversation),
     { NULL, NULL }
                 };
 
@@ -351,6 +353,38 @@ static int hndlr_count(args_t args)
         if (cancel) return -1;
     }        
 
+    return 0;
+}
+
+static int hndlr_polite_conversation(args_t args)
+{
+    static struct {
+        char *cmd;
+        char *response;
+    } tbl[] = {
+        { "hello",
+          "Hello to you to" },
+        { "how are you",
+          "I am well, thank you for asking" },
+        { "how do you feel",
+          "I am well, thank you for asking" },
+        { "how old are you", 
+          "I am still very young" },
+        { "what is your favorite color",
+          "I like purple" },
+        { "what is your name",
+          "I haven't decided on a name yet" },
+                };
+
+    for (int i = 0; i < sizeof(tbl)/sizeof(tbl[0]); i++) {
+        if (strcmp(tbl[i].cmd, args[0]) == 0) {
+            t2s_play("%s", tbl[i].response);
+            return 0;
+        }
+    }
+
+    ERROR("polite_conversation: '%s'\n", args[0]);
+    t2s_play("Sorry, I do not understand you");
     return 0;
 }
 
