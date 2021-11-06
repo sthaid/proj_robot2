@@ -200,7 +200,8 @@ static int hndlr_time(args_t args)
     time_t t = time(NULL);
 
     tm = localtime(&t);
-    t2s_play_nodb("the time is %d:%2.2d", tm->tm_hour, tm->tm_min);
+    t2s_play("the time is");  // xxx make same change in other places
+    t2s_play_nodb("%d %2.2d", tm->tm_hour, tm->tm_min);
 
     return 0;
 }

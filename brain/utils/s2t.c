@@ -5,7 +5,7 @@
 #define TIMEOUT_SECS 10
 
 // use during development to not run livecaption
-#define NO_LIVECAPTION
+//#define NO_LIVECAPTION
 
 // variables
 static char    * transcript;
