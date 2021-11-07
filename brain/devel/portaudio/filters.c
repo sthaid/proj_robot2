@@ -213,24 +213,26 @@ static void reset_params(void)
 // -----------------  INIT IN DATA ARRAY  ------------------------
 
 // arg: 'type'
-// - F1 ... F12:  tones 100 ... 1200 Hz
-// - '1':         white noise
-// - '2':         mix of sine waves
-// - '3':         file-data
+// - F1, F2: tones 100 ... 5000 Hz
+// - '1':    white noise
+// - '2':    mix of sine waves
+// - '3':    file-data
 static void init_in_data(int type)
 {
     int i, j, freq;
+    static int static_freq = 100;
 
     // fill the in_data array, based on 'type' arg
     switch (type) {
-    case SDL_EVENT_KEY_F(1) ... SDL_EVENT_KEY_F(12):  // tone
-    case SDL_EVENT_KEY_INSERT: case SDL_EVENT_KEY_HOME: case SDL_EVENT_KEY_PGUP:
-        freq = (type >= SDL_EVENT_KEY_F(1) && type <= SDL_EVENT_KEY_F(12)) ? (type-SDL_EVENT_KEY_F(1)+1)*100 :
-               (type == SDL_EVENT_KEY_INSERT)                              ? 1300 :
-               (type == SDL_EVENT_KEY_HOME)                                ? 1400 :
-                                                                             1500;
+    case SDL_EVENT_KEY_F(1) ... SDL_EVENT_KEY_F(2): 
+        if (type == SDL_EVENT_KEY_F(1)) {
+            static_freq -= 100;
+        } else {
+            static_freq += 100;
+        }
+        clip_int(&static_freq, 100, 5000);
         for (i = 0; i < N; i++) {
-            in_data[i] = sin((2*M_PI) * freq * ((double)i/SAMPLE_RATE));
+            in_data[i] = sin((2*M_PI) * static_freq * ((double)i/SAMPLE_RATE));
         }
         break;
     case '1':  // white nosie
@@ -541,8 +543,7 @@ static int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_
             break;
 
         // in data selection
-        case SDL_EVENT_KEY_F(1) ... SDL_EVENT_KEY_F(12):
-        case SDL_EVENT_KEY_INSERT: case SDL_EVENT_KEY_HOME: case SDL_EVENT_KEY_PGUP:
+        case SDL_EVENT_KEY_F(1) ... SDL_EVENT_KEY_F(2):
         case '1' ... '3':
             init_in_data(event->event_id);
             break;
@@ -672,7 +673,7 @@ static int plot(rect_t *pane, int idx, complex *data, int n)
 
     static double max_y_value;
 
-    #define MAX_PLOT_FREQ 5000
+    #define MAX_PLOT_FREQ 5001
 
     // init
     y_pixels = pane->h / 4;
