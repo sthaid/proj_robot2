@@ -80,6 +80,8 @@ TITLE: RESPEAKER - SOUND DIRECTION OF ARRIVAL DEVEL
 TITLE: SPEECH TO TEXT
 TITLE: TEXT TO SPEECH
 
+TITLE: LINUX AUDIO RECORDING
+
 ===========================
 TITLE: INTRO - ROBOT CAPABILITY IDEAS
 ===========================
@@ -1136,6 +1138,20 @@ find the address of the broadcom
 TITLE: RPI - GENERAL TIPS
 ===========================
 
+setting netowrk addresses for the wired ethernet device
+- vi etc/dhcpcd.conf
+  #### brain
+  interface eth0
+  static ip_address=192.168.0.10/24
+  #### body
+  interface eth0
+  static ip_address=192.168.0.11/24
+
+isolcpus example:
+  $ cat /boot/cmdline.txt 
+    console=serial0,115200 console=tty1 root=PARTUUID=f0413295-02 rootfstype=ext4 
+       elevator=deadline fsck.repair=yes rootwait quiet splash plymouth.ignore-serial-consoles isolcpus=3
+
 apt examples
 - apt update   - download package information from all configured sources
 - apt upgrade
@@ -1944,3 +1960,24 @@ echo Open the pod bay door, please Hal. > hello.txt
 ./synthesize_file --text hello.txt
 /usr/bin/aplay   -D sysdefault:CARD=Device -t raw -r 24000 -c 1 -f S16_LE output.raw
 
+===============================================
+TITLE: LINUX AUDIO RECORDING
+===============================================
+
+Various Suggestions from here:
+- https://superuser.com/questions/597227/linux-arecord-capture-sound-card-output-rather-than-microphone-input
+- such as
+    sudo modprobe snd-aloop
+    sudo apt install pavucontrol
+
+Eventually led to -
+- https://launchpad.net/~audio-recorder/+archive/ubuntu/ppa
+- Installation:
+   0) Remove the OLD, PRIVATE PPA that belonged to the developer. Run:
+      sudo add-apt-repository --remove ppa:osmoma/audio-recorder
+   1) Add new PPA.
+      Then update your package list and Install the latest version of audio-recorder. Run:
+      sudo add-apt-repository ppa:audio-recorder/ppa
+      sudo apt-get -y update
+      sudo apt-get install --reinstall audio-recorder
+- and run audio-recorder, recorded files are in ~/Audio

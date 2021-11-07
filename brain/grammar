@@ -1,3 +1,27 @@
+# ==================
+# PROGRAM CONTROL & TEST
+# ==================
+
+HNDLR end_program
+<and end> program
+END
+
+HNDLR restart_program
+restart program
+END
+
+HNDLR reset_mic
+reset microphone
+END
+
+HNDLR playback
+playback
+END
+
+# ==================
+# VOLUME CONTROL
+# ==================
+
 HNDLR set_volume
 0:<increase decrease> volume [by] [1:PERCENT]
 volume 0:<increase decrease up down> [by] [1:PERCENT]
@@ -11,17 +35,9 @@ query volume
 what is <the your> volume
 END
 
-HNDLR end_program
-<and end> program
-END
-
-HNDLR restart_program
-restart program
-END
-
-HNDLR time
-what [is the] time [is it]
-END
+# ==================
+# PERSONAL INFO
+# ==================
 
 DEFINE INFO <name  age  (favorite color)>
 
@@ -33,8 +49,12 @@ HNDLR get_info
 what is my 0:INFO
 END
 
-HNDLR drive_fwd
-[<go drive>] forward [for] 0:NUMBER [<feet ft>]
+# ==================
+# BODY STATUS & POWER
+# ==================
+
+HNDLR status_report
+status [report]
 END
 
 HNDLR body_power
@@ -42,8 +62,27 @@ HNDLR body_power
 turn 0:<on off> body [power]
 END
 
-HNDLR status_report
-status [report]
+# ==================
+# BODY DRIVE
+# ==================
+
+HNDLR drive_fwd
+[<go drive>] forward [for] 0:NUMBER [<feet ft>]
+END
+
+HNDLR drive_rotate
+DEFINE AMOUNT <(NUMBER degrees)  (halfway around)  (all [of] the way around)>
+DEFINE DIRECTION <clockwise  counter-clockwise  counterclockwise>
+<rotate turn> 0:[AMOUNT] 1:[DIRECTION]
+<rotate turn> 1:[DIRECTION] 0:[AMOUNT]
+END
+
+# ==================
+# MISC
+# ==================
+
+HNDLR time
+what [is the] time [is it]
 END
 
 HNDLR weather_report
@@ -54,11 +93,19 @@ HNDLR count
 count to 0:NUMBER
 END
 
-EXIT
+HNDLR polite_conversation
+0:(hello)
+0:(how are you)
+0:(how do you feel)
+0:(how old are you)
+0:(what is your favorite color)
+0:(what is your name)
+END
 
-HNDLR rotate
-DEFINE AMOUNT <(NUMBER degrees)  (halfway around)  (all [of] the way around)>
-DEFINE DIRECTION <clockwise  counter-clockwise  counterclockwise>
-<rotate turn> 0:[AMOUNT] 1:[DIRECTION]
-<rotate turn> 1:[DIRECTION] 0:[AMOUNT]
+HNDLR lights
+lights 0:<on off>
+END
+
+HNDLR play_music
+play 0:<music (WORD [WORD] [WORD] [WORD])>
 END

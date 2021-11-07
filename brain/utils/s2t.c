@@ -54,6 +54,7 @@ char * s2t_feed(short sound_val)
         return ts;
     }
 
+    // xxx crash here
     sv[max_sv++] = sound_val;
     return NULL;
 }
@@ -163,8 +164,11 @@ static void *s2t_thread(void *cx)
             usleep(30000);
         }
 
+        // to test microphone, playback the last 3 secs
+        sleep(3);
+        audio_out_play_data(sv, max_sv, 16000);
+
         // provide a dummy transcript
-        sleep(1);
         ts = malloc(100);
         strcpy(ts, "dummy transcript");
         INFO("TRANSCRIPT: '%s'\n", ts);

@@ -19,34 +19,58 @@ static bool strmatch(char *s, ...);
 // handlers
 //
 
-static int hndlr_set_volume(args_t args);
-static int hndlr_get_volume(args_t args);
+// program control & test
 static int hndlr_end_program(args_t args);
 static int hndlr_restart_program(args_t args);
-static int hndlr_time(args_t args);
+static int hndlr_reset_mic(args_t args);
+static int hndlr_playback(args_t args);
+// volume control
+static int hndlr_set_volume(args_t args);
+static int hndlr_get_volume(args_t args);
+// personal info
 static int hndlr_set_info(args_t args);
 static int hndlr_get_info(args_t args);
-static int hndlr_drive_fwd(args_t args);
+// body status & power
 static int hndlr_body_power(args_t args);
 static int hndlr_status_report(args_t args);
+// body drive
+static int hndlr_drive_fwd(args_t args);
+static int hndlr_drive_rotate(args_t args);
+// misc
+static int hndlr_time(args_t args);
 static int hndlr_weather_report(args_t args);
 static int hndlr_count(args_t args);
+static int hndlr_polite_conversation(args_t args);
+static int hndlr_lights(args_t args);
+static int hndlr_play_music(args_t args);
 
 #define HNDLR(name) { #name, hndlr_##name }
 
 static hndlr_lookup_t hndlr_lookup_tbl[] = {
-    HNDLR(set_volume),
-    HNDLR(get_volume),
+    // program control & test
     HNDLR(end_program),
     HNDLR(restart_program),
-    HNDLR(time),
+    HNDLR(reset_mic),
+    HNDLR(playback),
+    // volume control
+    HNDLR(set_volume),
+    HNDLR(get_volume),
+    // personal info
     HNDLR(set_info),
     HNDLR(get_info),
-    HNDLR(drive_fwd),
+    // body status & power
     HNDLR(body_power),
     HNDLR(status_report),
+    // body drive
+    HNDLR(drive_fwd),
+    HNDLR(drive_rotate),
+    // misc
+    HNDLR(time),
     HNDLR(weather_report),
     HNDLR(count),
+    HNDLR(polite_conversation),
+    HNDLR(lights),
+    HNDLR(play_music),
     { NULL, NULL }
                 };
 
@@ -82,7 +106,9 @@ bool proc_cmd_in_progress(bool *succ)
 
 void proc_cmd_cancel(void)
 {
+    INFO("CANCEL CMD\n");
     cancel = true;
+    audio_out_cancel();
     body_emer_stop();
 }
 
@@ -106,6 +132,7 @@ static void *cmd_thread(void *cx)
         if (match) {
             cancel = false;
             rc = proc(args);
+            if (cancel) rc = -1;
         } else {
             audio_out_beep(2);
             rc = -1;
@@ -123,6 +150,49 @@ static void *cmd_thread(void *cx)
 }
 
 // -----------------  PROC CMD HANDLERS  ------------------------------------
+
+// ----------------------
+// program control & test
+// ----------------------
+
+static int hndlr_end_program(args_t args)
+{
+    brain_end_program();
+
+    return 0;
+}
+
+static int hndlr_restart_program(args_t args)
+{
+    brain_restart_program();
+
+    return 0;
+}
+
+static int hndlr_reset_mic(args_t args)
+{
+    int rc = audio_in_reset_mic();
+    if (rc < 0) {
+        t2s_play("failed to reset microphone");
+        return -1;
+    } else {
+        t2s_play("the microphone has been reset");
+        return 0;
+    }
+}
+
+static int hndlr_playback(args_t args)
+{
+    #define MAX_DATA (5*16000)
+    short data[MAX_DATA];
+
+    brain_get_recording(data, MAX_DATA);
+    audio_out_play_data(data, MAX_DATA, 16000);
+    return 0;
+}
+// ----------------------
+// volume control
+// ----------------------
 
 static int hndlr_set_volume(args_t args)
 {
@@ -154,30 +224,9 @@ static int hndlr_get_volume(args_t args)
     return 0;
 }
 
-static int hndlr_end_program(args_t args)
-{
-    brain_end_program();
-
-    return 0;
-}
-
-static int hndlr_restart_program(args_t args)
-{
-    brain_restart_program();
-
-    return 0;
-}
-
-static int hndlr_time(args_t args)
-{
-    struct tm *tm;
-    time_t t = time(NULL);
-
-    tm = localtime(&t);
-    t2s_play_nodb("the time is %d:%2.2d", tm->tm_hour, tm->tm_min);
-
-    return 0;
-}
+// ----------------------
+// personal info
+// ----------------------
 
 static int hndlr_set_info(args_t args)
 {
@@ -208,19 +257,15 @@ static int hndlr_get_info(args_t args)
     return rc;
 }
 
-static int hndlr_drive_fwd(args_t args)
+// ----------------------
+// body status & power
+// ----------------------
+
+static int hndlr_status_report(args_t args)
 {
-    int feet = getnum(args[0], 0);
-    char failure_reason[200];
-    int rc;
+    body_status_report();
 
-    // xxx define for 11
-    rc = body_drive_cmd(11, feet, 0, 0, 0, failure_reason);
-    if (rc < 0) {
-        t2s_play("%s", failure_reason);
-    }
-
-    return rc;
+    return 0;
 }
 
 static int hndlr_body_power(args_t args)
@@ -236,9 +281,62 @@ static int hndlr_body_power(args_t args)
     return 0;
 }
 
-static int hndlr_status_report(args_t args)
+// ----------------------
+// body drive
+// ----------------------
+
+static int hndlr_drive_fwd(args_t args)
 {
-    body_status_report();
+    int feet = getnum(args[0], 0);
+    char failure_reason[200];
+    int rc;
+
+    // xxx define for 11
+    rc = body_drive_cmd(11, feet, 0, 0, 0, failure_reason);
+    if (rc < 0) {
+        t2s_play("%s", failure_reason);
+    }
+
+    return rc;
+}
+
+static int hndlr_drive_rotate(args_t args)
+{
+    char *amount    = args[0];
+    char *direction = args[1];
+    bool dir_is_clockwise;
+    int  degrees;
+
+    dir_is_clockwise = (strcmp(direction, "clockwise") == 0) ||
+                       (strcmp(direction, "") == 0);
+
+    if (sscanf(amount, "%d degrees", &degrees) == 1) {
+        // okay
+    } else if (strcmp(amount, "halfway around") == 0) {
+        degrees = 180;
+    } else {
+        degrees = 360;
+    }
+
+    t2s_play("rotate %s %d degrees",
+             dir_is_clockwise ? "clockwise" : "counterclockwise",
+             degrees);
+
+    return 0;
+}
+
+// ----------------------
+// misc
+// ----------------------
+
+static int hndlr_time(args_t args)
+{
+    struct tm *tm;
+    time_t t = time(NULL);
+
+    tm = localtime(&t);
+    t2s_play("the time is");  // xxx make same change in other places
+    t2s_play_nodb("%d %2.2d", tm->tm_hour, tm->tm_min);
 
     return 0;
 }
@@ -257,8 +355,121 @@ static int hndlr_count(args_t args)
     for (int i = 1; i <= cnt; i++) {
         t2s_play("%d", i);
         usleep(200000);
-        if (cancel) return -1;
+        if (cancel) break;
     }        
+
+    return 0;
+}
+
+static int hndlr_polite_conversation(args_t args)
+{
+    static struct {
+        char *cmd;
+        char *response;
+    } tbl[] = {
+        { "hello",
+          "Hello to you to" },
+        { "how are you",
+          "I am well, thank you for asking" },
+        { "how do you feel",
+          "I am well, thank you for asking" },
+        { "how old are you", 
+          "I am still very young" },
+        { "what is your favorite color",
+          "I like purple" },
+        { "what is your name",
+          "I haven't decided on a name yet" },
+                };
+
+    for (int i = 0; i < sizeof(tbl)/sizeof(tbl[0]); i++) {
+        if (strcmp(tbl[i].cmd, args[0]) == 0) {
+            t2s_play("%s", tbl[i].response);
+            return 0;
+        }
+    }
+
+    ERROR("polite_conversation: '%s'\n", args[0]);
+    t2s_play("Sorry, I do not understand you");
+    return 0;
+}
+
+static int hndlr_lights(args_t args)
+{
+    char cmd[200];
+    int rc;
+
+    sprintf(cmd, "./tplink-smartplug-master/tplink_smartplug.py  -t 192.168.1.191 -c %s", args[0]);
+    rc = system(cmd);
+
+    if (rc != 0) {
+        ERROR("failed to turn lights %s, rc=0x%x\n", args[0], rc);
+        t2s_play("an error occurred when turning lights %s", args[0]);
+        return -1;
+    }
+
+    return 0;
+}
+
+// xxx randomize
+static int hndlr_play_music(args_t args)
+{
+    INFO("play %s\n", args[0]);
+
+    if (strcmp(args[0], "music") == 0) {
+        char *names[100];
+        int max_names, rc;
+        char filename[200];
+
+        // get list of files in the music direcotry, and
+        // shuffle the list
+        rc = get_filenames("music", names, &max_names);
+        if (rc < 0) {
+            ERROR("play music failed to get filenames\n");
+            return -1;
+        }
+
+        shuffle(names, sizeof(void*), max_names);
+        for (int i = 0; i < max_names; i++) {
+            INFO("shuffled music file list - %s\n", names[i]);
+        }
+
+        // play the wav files 
+        for (int i = 0; i < max_names; i++) {
+            if (strstr(names[i], ".wav") == NULL) continue;
+            sprintf(filename, "music/%s", names[i]);
+            INFO("calling audio_out_play_wav %s\n", names[i]);
+            audio_out_play_wav(filename, NULL, 0);
+            audio_out_wait();
+            if (cancel) break;
+        }
+
+        // free names
+        for (int i = 0; i < max_names; i++) {
+            free(names[i]);
+        }
+    } else {
+        char filename[200], *p;
+        int rc;
+        struct stat buf;
+
+        // construct filename
+        sprintf(filename, "music/%s.wav", args[0]);
+        for (p = filename; *p; p++) {
+            if (*p == ' ') *p = '_';
+        }
+        INFO("filename = %s\n", filename);
+
+        // stat file to ensure it exists
+        rc = stat(filename, &buf);
+        if (rc < 0) {
+            ERROR("filename %s, %s\n", filename, strerror(errno));
+            return -1;
+        }
+
+        // play the file
+        audio_out_play_wav(filename, NULL, 0);
+        audio_out_wait();
+    }
 
     return 0;
 }

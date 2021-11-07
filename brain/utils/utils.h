@@ -15,6 +15,7 @@
 #include <signal.h>
 #include <assert.h>
 #include <ctype.h>
+#include <dirent.h>
 
 #include <sys/types.h>
 #include <sys/wait.h>
@@ -94,10 +95,15 @@ void run_program(pid_t *prog_pid, int *fd_to_prog, int *fd_from_prog, char *prog
 
 void poly_fit(int max_data, double *x_data, double *y_data, int degree_of_poly, double *coefficients);
 
+double low_pass_filter(double v, double *cx, double k2);
+double low_pass_filter_ex(double v, double *cx, int k1, double k2);
+
 double normalize_angle(double angle);
 double max_doubles(double *x, int n, int *max_idx);
 double min_doubles(double *x, int n, int *min_idx);
 char *stars(double v, double max_v, int max_stars, char *s);
+void shuffle(void *array, int elem_size, int num_elem);
+int get_filenames(char *dirname, char **names, int *max_names);
 
 // -------- pa.c --------
 
@@ -240,16 +246,23 @@ typedef struct {
     // audio input ...
     short frames[48000][4];
     int   fidx;
+    bool  reset_mic;
     // audio output ...
     int   beep_count;
-    short data[60*24000];
+    short data[1800*24000];
     int   max_data;
+    int   sample_rate;
     int   state;
+    bool  cancel;
 } audio_shm_t;
 
 void audio_init(int (*proc_mic_data)(short *frame));
 
+int audio_in_reset_mic(void);
+
 void audio_out_beep(int beep_count);
-void audio_out_play_data(short *data, int max_data);
+void audio_out_play_data(short *data, int max_data, int sample_rate);
 void audio_out_play_wav(char *file_name, short **data, int *max_data);
 void audio_out_wait(void);
+void audio_out_cancel(void);
+

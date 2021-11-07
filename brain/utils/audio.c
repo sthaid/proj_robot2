@@ -95,10 +95,23 @@ static void * proc_mic_data_thread(void *cx)
     return NULL;
 }
 
+// -----------------  AUDIO IN API ROUTINES  ---------------------------------
+
+int audio_in_reset_mic(void)
+{
+    int count = 0;
+
+    shm->reset_mic = true;
+    while (shm->reset_mic && count++ < 100) {
+        usleep(10000);
+    }
+
+    return (shm->reset_mic == false ? 0 : -1);
+}
+
 // -----------------  AUDIO OUT API ROUTINES  --------------------------------
 
-// These routines return when audio output has started.
-
+// These 3 routines return when audio output has started.
 void audio_out_beep(int beep_count)
 {
     MUTEX_LOCK;
@@ -106,19 +119,21 @@ void audio_out_beep(int beep_count)
     shm->state = AUDIO_OUT_STATE_PREP;
     MUTEX_UNLOCK;
     
+    shm->sample_rate = 24000;  // xxx define
     shm->beep_count = beep_count;
 
     __sync_synchronize();
     shm->state = AUDIO_OUT_STATE_PLAY;
 }
 
-void audio_out_play_data(short *data, int max_data)
+void audio_out_play_data(short *data, int max_data, int sample_rate)
 {
     MUTEX_LOCK;
     while (shm->state != AUDIO_OUT_STATE_IDLE) usleep(1000);
     shm->state = AUDIO_OUT_STATE_PREP;
     MUTEX_UNLOCK;
 
+    shm->sample_rate = sample_rate;
     memcpy(shm->data, data, max_data*sizeof(short));
     shm->max_data = max_data;
 
@@ -128,7 +143,7 @@ void audio_out_play_data(short *data, int max_data)
 
 void audio_out_play_wav(char *file_name, short **data, int *max_data)
 {
-    int max_chan, sample_rate, rc;
+    int max_chan, rc;
 
     // wait for AUDIO_OUT_STATE_IDLE, and set state to AUDIO_OUT_STATE_PREP
     MUTEX_LOCK;
@@ -138,15 +153,14 @@ void audio_out_play_wav(char *file_name, short **data, int *max_data)
     
     // read the wav file directly into shm->data
     shm->max_data = sizeof(shm->data)/sizeof(short);
-    rc = sf_read_wav_file2(file_name, shm->data, &max_chan, &shm->max_data, &sample_rate);
+    rc = sf_read_wav_file2(file_name, shm->data, &max_chan, &shm->max_data, &shm->sample_rate);
     if (rc < 0) {
-        ERROR("sf_read_wav_file failed\n");
+        ERROR("sf_read_wav_file failed, %s\n", file_name);
         return;
     }
-    INFO("max_data=%d  max_chan=%d  sample_rate=%d\n", shm->max_data, max_chan, sample_rate);
+    INFO("max_data=%d  max_chan=%d  sample_rate=%d\n", shm->max_data, max_chan, shm->sample_rate);
     assert(shm->max_data > 0 && shm->max_data <= sizeof(shm->data)/sizeof(short));
     assert(max_chan == 1);
-    assert(sample_rate == 24000);
 
     // if caller wants copy of data then provide to caller
     if (data) {
@@ -161,10 +175,13 @@ void audio_out_play_wav(char *file_name, short **data, int *max_data)
 }
 
 // Wait for audio output to complete.
-
 void audio_out_wait(void)
 {
-    MUTEX_LOCK;
     while (shm->state != AUDIO_OUT_STATE_IDLE) usleep(1000);
-    MUTEX_UNLOCK;
+}
+
+// Cancel audio output.
+void audio_out_cancel(void)
+{
+    shm->cancel = true;
 }

@@ -789,11 +789,21 @@ void db_dump(void)
 
 static void dump_cb(int keyid, char *keystr, void *val, unsigned int val_len)
 {
+    int i;
+    char keystr2[33];
+
     if (keyid > last_keyid_dumped) {
         INFO("KEYID = %d\n", keyid);
         last_keyid_dumped = keyid;
     }
-    INFO("  %-32s = %s  len=%d\n", keystr, val_str(val,val_len), val_len);
+
+    strncpy(keystr2, keystr, sizeof(keystr2));
+    keystr2[sizeof(keystr2)-1] = '\0';
+    for (i = 0; keystr2[i]; i++) {
+        if (keystr2[i] == '\n') keystr2[i] = '.';
+    }
+
+    INFO("  %-32s = %s  len=%d\n", keystr2, val_str(val,val_len), val_len);
 }
 
 static char *val_str(void *val_arg, unsigned int val_len)

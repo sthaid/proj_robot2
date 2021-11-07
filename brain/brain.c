@@ -1,10 +1,18 @@
 #include <common.h>
 
 //
+// defines
+//
+
+#define MAX_RECORDING (60*16000)
+
+//
 // variables
 //
 
-static bool end_program;
+static bool  end_program;
+static short recording[MAX_RECORDING];
+static int   recording_idx;
 
 //
 // prototypes
@@ -96,10 +104,22 @@ void brain_restart_program(void)
     system("sudo systemctl restart robot-brain &");
 }
 
+void brain_get_recording(short *data, int max)
+{
+    int ri = recording_idx;
+
+    if (ri-max >= 0) {
+        memcpy(data, recording+(ri-max), max*sizeof(short));
+    } else {
+        int tmp = -(ri-max);
+        memcpy(data, recording+(MAX_RECORDING-tmp), tmp*sizeof(short));
+        memcpy(data+tmp, recording, (max-tmp)*sizeof(short));
+    }
+}
+
 // -----------------  PROCESS MIC DATA FRAME  ------------------------------------
 
 // called at sample rate 48000
-
 static int proc_mic_data(short *frame)
 {
     #define STATE_WAITING_FOR_WAKE_WORD  0
@@ -121,9 +141,20 @@ static int proc_mic_data(short *frame)
     }
     discard_cnt = 0;
 
-    // the sound value used for the remaining of this routine is the value from mic chan 0
+    // the sound value used for the remaining of this routine is the value from mic chan 0;
+    // low pass filter is used to eliminate high frequency background noise
+#if 1
+    static double cx[2];
+    short sound_val = 5 * low_pass_filter_ex(frame[0], cx, 2, 0.90);
+#else
     short sound_val = frame[0];
+#endif
 
+    // save sound recording so it can be played to test audio quality
+    recording[recording_idx] = sound_val;
+    recording_idx = (recording_idx == MAX_RECORDING-1 ? 0 : recording_idx+1);
+
+    // process mic data state machine
     switch (state) {
     case STATE_WAITING_FOR_WAKE_WORD: {
         if (wwd_feed(sound_val) & WW_KEYWORD_MASK) {

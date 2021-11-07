@@ -309,6 +309,22 @@ static void printMatrix(int m, int n, double matrix[m][n])
     }
 }
 
+// -----------------  AUDIO FILTERS  ------------------------------------
+
+double low_pass_filter(double v, double *cx, double k2)
+{
+    *cx = k2 * *cx + (1-k2) * v;
+    return *cx;
+}
+
+double low_pass_filter_ex(double v, double *cx, int k1, double k2)
+{
+    for (int i = 0; i < k1; i++) {
+        v = low_pass_filter(v, &cx[i], k2);
+    }
+    return v;
+}
+
 // -----------------  GENERAL UTILS  ------------------------------------
 
 double normalize_angle(double angle)
@@ -371,4 +387,41 @@ char *stars(double v, double max_v, int max_stars, char *s)
     s[n] = '\0';
 
     return s;
+}
+
+void shuffle(void *array, int elem_size, int num_elem)
+{
+    void *tmp = malloc(elem_size);
+    for (int i = 0; i < 2*num_elem; i++) {
+        void *elem1 = array + ((random()%num_elem) * elem_size);
+        void *elem2 = array + ((random()%num_elem) * elem_size);
+        memcpy(tmp, elem1, elem_size);
+        memcpy(elem1, elem2, elem_size);
+        memcpy(elem2, tmp, elem_size);
+    }
+    free(tmp);
+}
+
+int get_filenames(char *dirname, char **names, int *max_names)
+{
+    DIR *dir;
+    struct dirent *dirent;
+
+    *max_names = 0;
+
+    dir = opendir(dirname);
+    if (dir == NULL) {
+        ERROR("failed to open dir %s, %s\n", dirname, strerror(errno));
+        return -1;
+    }
+
+    while (true) {
+        dirent = readdir(dir);
+        if (dirent == NULL) break;
+        if ((dirent->d_type & DT_REG) == 0) continue;
+        names[(*max_names)++] = strdup(dirent->d_name);
+    }
+
+    closedir(dir); 
+    return 0;
 }
