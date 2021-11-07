@@ -162,7 +162,7 @@ int main(int argc, char **argv)
 
     // init data, use file_data if avail, else white noise
     in_data  = (complex*)fftw_malloc(sizeof(complex) * N);
-    init_in_data(file_data ? '3': '1');
+    init_in_data(file_data ? '3': '2');
 
     // create audio_out_thread
     pthread_create(&tid, NULL, audio_out_thread, NULL);
@@ -194,10 +194,11 @@ static void reset_params(void)
 {
     int i;
 
-    lpf_k1 = 5;
-    lpf_k2 = 0.95;
+    // tuned for midrange (bandpass) filter 500 to 2000 hz
+    lpf_k1 = 7;
+    lpf_k2 = 0.85;
     hpf_k1 = 5;
-    hpf_k2 = 0.95;
+    hpf_k2 = 0.85;
 
     audio_out_auto_volume = true;
     for (i = 0; i < 4; i++) {
@@ -239,7 +240,7 @@ static void init_in_data(int type)
         break;
     case '2':  // sum of sine waves
         memset(in_data, 0, N*sizeof(complex));
-        for (freq = 25; freq <= 1500; freq += 25) {
+        for (freq = 25; freq <= 5000; freq += 25) {
             for (i = 0; i < N; i++) {
                 in_data[i] += sin((2*M_PI) * freq * ((double)i/SAMPLE_RATE));
             }
@@ -671,7 +672,7 @@ static int plot(rect_t *pane, int idx, complex *data, int n)
 
     static double max_y_value;
 
-    #define MAX_PLOT_FREQ 1501
+    #define MAX_PLOT_FREQ 5000
 
     // init
     y_pixels = pane->h / 4;
@@ -679,7 +680,11 @@ static int plot(rect_t *pane, int idx, complex *data, int n)
     y_max    = y_pixels - 20;
     x_max    = pane->w - 200;
     memset(y_values, 0, sizeof(y_values));
+#if 0
     if (idx == 0) max_y_value = 0;
+#else
+    max_y_value = 0;
+#endif
 
     // determine the y value that will be plotted below
     for (i = 0; i < n; i++) {
@@ -695,11 +700,18 @@ static int plot(rect_t *pane, int idx, complex *data, int n)
         if (absv > y_values[x]) {
             y_values[x] = absv;
 
+#if 0
             // max_y_value is determined for plot idx 0, and is 
             // subsequently used for plot idx 1 to 3 the are next called
             if (idx == 0 && y_values[x] > max_y_value) {
                 max_y_value = y_values[x];
             }
+#else
+            // max_y_values is determined for each plot
+            if (y_values[x] > max_y_value) {
+                max_y_value = y_values[x];
+            }
+#endif
         }
     }
 
@@ -719,9 +731,9 @@ static int plot(rect_t *pane, int idx, complex *data, int n)
     // x axis
     int color = (idx == audio_out_filter ? SDL_BLUE : SDL_GREEN);
     sdl_render_line(pane, 0, y_origin, x_max, y_origin, color);
-    for (freq = 100; freq <= MAX_PLOT_FREQ-100; freq+= 100) {
+    for (freq = 200; freq <= MAX_PLOT_FREQ-200; freq+= 200) {
         x = freq / MAX_PLOT_FREQ * x_max;
-        sprintf(str, "%d", (int)nearbyint(freq));
+        sprintf(str, "%d", (int)(nearbyint(freq)/100));
         sdl_render_text(pane,
             x-COL2X(strlen(str),20)/2, y_origin+1, 20, str, color, SDL_BLACK);
     }
