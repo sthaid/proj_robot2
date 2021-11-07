@@ -107,5 +107,5 @@ lights 0:<on off>
 END
 
 HNDLR play_music
-play music
+play 0:<music (WORD [WORD] [WORD] [WORD])>
 END

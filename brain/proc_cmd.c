@@ -410,11 +410,67 @@ static int hndlr_lights(args_t args)
     return 0;
 }
 
+// xxx randomize
 static int hndlr_play_music(args_t args)
 {
-    // xxx pick song at random
-    audio_out_play_wav("music/super_critical.wav", NULL, 0);
-    audio_out_wait();
+    INFO("play %s\n", args[0]);
+
+    if (strcmp(args[0], "music") == 0) {
+        char *names[100];
+        int max_names, rc;
+        char filename[200];
+
+        // get list of files in the music direcotry, and
+        // shuffle the list
+        rc = get_filenames("music", names, &max_names);
+        if (rc < 0) {
+            ERROR("play music failed to get filenames\n");
+            return -1;
+        }
+
+        shuffle(names, sizeof(void*), max_names);
+        for (int i = 0; i < max_names; i++) {
+            INFO("shuffled music file list - %s\n", names[i]);
+        }
+
+        // play the wav files 
+        for (int i = 0; i < max_names; i++) {
+            if (strstr(names[i], ".wav") == NULL) continue;
+            sprintf(filename, "music/%s", names[i]);
+            INFO("calling audio_out_play_wav %s\n", names[i]);
+            audio_out_play_wav(filename, NULL, 0);
+            audio_out_wait();
+            if (cancel) break;
+        }
+
+        // free names
+        for (int i = 0; i < max_names; i++) {
+            free(names[i]);
+        }
+    } else {
+        char filename[200], *p;
+        int rc;
+        struct stat buf;
+
+        // construct filename
+        sprintf(filename, "music/%s.wav", args[0]);
+        for (p = filename; *p; p++) {
+            if (*p == ' ') *p = '_';
+        }
+        INFO("filename = %s\n", filename);
+
+        // stat file to ensure it exists
+        rc = stat(filename, &buf);
+        if (rc < 0) {
+            ERROR("filename %s, %s\n", filename, strerror(errno));
+            return -1;
+        }
+
+        // play the file
+        audio_out_play_wav(filename, NULL, 0);
+        audio_out_wait();
+    }
+
     return 0;
 }
 

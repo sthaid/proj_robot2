@@ -155,7 +155,7 @@ void audio_out_play_wav(char *file_name, short **data, int *max_data)
     shm->max_data = sizeof(shm->data)/sizeof(short);
     rc = sf_read_wav_file2(file_name, shm->data, &max_chan, &shm->max_data, &shm->sample_rate);
     if (rc < 0) {
-        ERROR("sf_read_wav_file failed\n");
+        ERROR("sf_read_wav_file failed, %s\n", file_name);
         return;
     }
     INFO("max_data=%d  max_chan=%d  sample_rate=%d\n", shm->max_data, max_chan, shm->sample_rate);
