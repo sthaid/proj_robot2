@@ -257,10 +257,11 @@ typedef struct {
     bool  reset_mic;
     // audio output ...
     int   beep_count;
-    short data[60*24000];
+    short data[1800*24000];
     int   max_data;
     int   sample_rate;
     int   state;
+    bool  cancel;
 } audio_shm_t;
 
 void audio_init(int (*proc_mic_data)(short *frame));
@@ -271,4 +272,5 @@ void audio_out_beep(int beep_count);
 void audio_out_play_data(short *data, int max_data, int sample_rate);
 void audio_out_play_wav(char *file_name, short **data, int *max_data);
 void audio_out_wait(void);
+void audio_out_cancel(void);
 

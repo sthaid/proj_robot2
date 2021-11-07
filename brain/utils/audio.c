@@ -111,8 +111,7 @@ int audio_in_reset_mic(void)
 
 // -----------------  AUDIO OUT API ROUTINES  --------------------------------
 
-// These routines return when audio output has started.
-
+// These 3 routines return when audio output has started.
 void audio_out_beep(int beep_count)
 {
     MUTEX_LOCK;
@@ -176,10 +175,13 @@ void audio_out_play_wav(char *file_name, short **data, int *max_data)
 }
 
 // Wait for audio output to complete.
-
 void audio_out_wait(void)
 {
-    MUTEX_LOCK;
     while (shm->state != AUDIO_OUT_STATE_IDLE) usleep(1000);
-    MUTEX_UNLOCK;
+}
+
+// Cancel audio output.
+void audio_out_cancel(void)
+{
+    shm->cancel = true;
 }

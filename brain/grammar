@@ -105,3 +105,7 @@ END
 HNDLR lights
 lights 0:<on off>
 END
+
+HNDLR play_music
+play music
+END

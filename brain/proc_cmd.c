@@ -42,6 +42,7 @@ static int hndlr_weather_report(args_t args);
 static int hndlr_count(args_t args);
 static int hndlr_polite_conversation(args_t args);
 static int hndlr_lights(args_t args);
+static int hndlr_play_music(args_t args);
 
 #define HNDLR(name) { #name, hndlr_##name }
 
@@ -69,6 +70,7 @@ static hndlr_lookup_t hndlr_lookup_tbl[] = {
     HNDLR(count),
     HNDLR(polite_conversation),
     HNDLR(lights),
+    HNDLR(play_music),
     { NULL, NULL }
                 };
 
@@ -104,7 +106,9 @@ bool proc_cmd_in_progress(bool *succ)
 
 void proc_cmd_cancel(void)
 {
+    INFO("CANCEL CMD\n");
     cancel = true;
+    audio_out_cancel();
     body_emer_stop();
 }
 
@@ -128,6 +132,7 @@ static void *cmd_thread(void *cx)
         if (match) {
             cancel = false;
             rc = proc(args);
+            if (cancel) rc = -1;
         } else {
             audio_out_beep(2);
             rc = -1;
@@ -145,8 +150,6 @@ static void *cmd_thread(void *cx)
 }
 
 // -----------------  PROC CMD HANDLERS  ------------------------------------
-
-
 
 // ----------------------
 // program control & test
@@ -352,7 +355,7 @@ static int hndlr_count(args_t args)
     for (int i = 1; i <= cnt; i++) {
         t2s_play("%d", i);
         usleep(200000);
-        if (cancel) return -1;
+        if (cancel) break;
     }        
 
     return 0;
@@ -404,6 +407,14 @@ static int hndlr_lights(args_t args)
         return -1;
     }
 
+    return 0;
+}
+
+static int hndlr_play_music(args_t args)
+{
+    // xxx pick song at random
+    audio_out_play_wav("music/super_critical.wav", NULL, 0);
+    audio_out_wait();
     return 0;
 }
 

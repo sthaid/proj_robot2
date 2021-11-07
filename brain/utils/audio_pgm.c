@@ -120,6 +120,7 @@ static void *audio_out_thread(void *cx)
         }
 
         // play
+        shm->cancel = false;
         pa_play2("USB", 2, shm->sample_rate, PA_INT16, audio_out_get_frame, NULL);
 
         // done
@@ -132,33 +133,39 @@ static void *audio_out_thread(void *cx)
 static int audio_out_get_frame(void *data_arg, void *cx)
 {
     short *data = data_arg;
+    static int beep_idx;
+    static int data_idx;
 
     assert(shm->beep_count >= 0);
     assert(shm->max_data >= 0);
 
+    if (shm->cancel) {
+        beep_idx = 0;
+        data_idx = 0;
+        shm->beep_count = 0;
+        shm->max_data = 0;
+        return -1;
+    }
+
     if (shm->beep_count > 0) {
-        static int idx;
+        data[0] = beep_data[beep_idx];
+        data[1] = beep_data[beep_idx];
+        beep_idx++;
 
-        data[0] = beep_data[idx];
-        data[1] = beep_data[idx];
-        idx++;
-
-        if (idx >= MAX_BEEP_DATA) {
-            idx = 0;
+        if (beep_idx >= MAX_BEEP_DATA) {
+            beep_idx = 0;
             shm->beep_count--;
         }
         return 0;
     }
 
     if (shm->max_data > 0) {
-        static int idx;
+        data[0] = shm->data[data_idx];
+        data[1] = shm->data[data_idx];
+        data_idx++;
 
-        data[0] = shm->data[idx];
-        data[1] = shm->data[idx];
-        idx++;
-
-        if (idx >= shm->max_data) {
-            idx = 0;
+        if (data_idx >= shm->max_data) {
+            data_idx = 0;
             shm->max_data = 0;
         }
         return 0;
