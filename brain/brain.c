@@ -74,6 +74,9 @@ static void initialize(void)
     }
 
     // xxx
+    srandom(time(NULL));
+
+    // xxx
     misc_init();
     wwd_init();
     t2s_init();

@@ -418,7 +418,7 @@ static int hndlr_play_music(args_t args)
     if (strcmp(args[0], "music") == 0) {
         char *names[100];
         int max_names, rc;
-        char filename[200];
+        char filename[200], playing[200], *p;
 
         // get list of files in the music direcotry, and
         // shuffle the list
@@ -427,7 +427,6 @@ static int hndlr_play_music(args_t args)
             ERROR("play music failed to get filenames\n");
             return -1;
         }
-
         shuffle(names, sizeof(void*), max_names);
         for (int i = 0; i < max_names; i++) {
             INFO("shuffled music file list - %s\n", names[i]);
@@ -436,8 +435,15 @@ static int hndlr_play_music(args_t args)
         // play the wav files 
         for (int i = 0; i < max_names; i++) {
             if (strstr(names[i], ".wav") == NULL) continue;
+
             sprintf(filename, "music/%s", names[i]);
             INFO("calling audio_out_play_wav %s\n", names[i]);
+
+            strcpy(playing, names[i]);
+            p = strstr(playing, ".wav"); *p = '\0';
+            for (p = playing; *p; p++) if (*p == '_') *p = ' ';
+            t2s_play("playing %s", playing);
+
             audio_out_play_wav(filename, NULL, 0);
             audio_out_wait();
             if (cancel) break;
