@@ -7,7 +7,7 @@ int main(int argc, char **argv)
     log_init(NULL,false,true);
 
     sf_gen_wav_file("sweep.wav",
-                    100, 7000,   // freq range
+                    100, 8000,   // freq range
                     30,          // duration secs
                     1, 48000);   // max_chan, sample_rate
     return 0;

@@ -7,14 +7,14 @@
 //   file:///usr/share/doc/libsndfile1-dev/html/api.html
 //   https://github.com/libsndfile/libsndfile
 
-// -----------------------------------------------------------------
+// -----------------  INIT  ----------------------------------------
 
 void sf_init(void)
 {
     // nothing needed
 }
 
-// -----------------------------------------------------------------
+// -----------------  WRITE WAV FILE  ------------------------------
 
 int sf_write_wav_file(char *filename, short *data, int max_chan, int max_data, int sample_rate)
 {
@@ -55,7 +55,7 @@ int sf_write_wav_file(char *filename, short *data, int max_chan, int max_data, i
     return 0;
 }
 
-// -----------------------------------------------------------------
+// -----------------  READ WAV FILE  -------------------------------
 
 // caller must free returned data when done
 int sf_read_wav_file(char *filename, short **data, int *max_chan, int *max_data, int *sample_rate)
@@ -146,13 +146,13 @@ int sf_read_wav_file2(char *filename, short *data, int *max_chan, int *max_data,
     return 0;
 }
 
-// -----------------------------------------------------------------
+// -----------------  GEN FREQ SWEEP WAV FILE  ---------------------
 
 int sf_gen_wav_file(char *filename, int freq_start, int freq_end, int duration, int max_chan, int sample_rate)
 {
     int i, j, max_data, idx=0, rc;
-    double k, t, freq;
-    short *data, val;
+    double k, t, freq, val, last_val, offset;
+    short *data;
 
     INFO("gen_wav_file: %s freq_range=%d-%d  duration=%d  max_chan=%d  sample_rate=%d\n",
          filename, freq_start, freq_end, duration, max_chan, sample_rate);
@@ -163,14 +163,22 @@ int sf_gen_wav_file(char *filename, int freq_start, int freq_end, int duration, 
 
     // init data
     k = log((double)freq_end/freq_start) / duration;
+    offset = 0;
+    last_val = 0;
+    freq = freq_start;
     for (i = 0; i < duration*sample_rate; i++) {
         t = (double)i / sample_rate;
-        freq = freq_start * exp(k * t);
-        val = nearbyint(32767 * sin((2*M_PI) * freq * t));
-        for (j = 0; j < max_chan; j++) {
-            data[idx++] = val;
+        val = sin((2*M_PI) * freq * t + offset);
+        if (val >= 0 && last_val < 0) {
+            // calc new frequency and offset when sine wave goes from negative to positive
+            freq = freq_start * exp(k * t);
+            offset = asin(val) - (2*M_PI * freq * t);
         }
-        //if (i > 450000) INFO("%d - %d\n", i, val);
+        last_val = val;
+
+        for (j = 0; j < max_chan; j++) {
+            data[idx++] = nearbyint(val * 32767);
+        }
     }
     assert(idx == max_data);
 
