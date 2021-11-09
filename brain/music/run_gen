@@ -1,0 +1,8 @@
+
+gcc -g -O2 -Wall -I../utils gen.c ../utils/sf.c ../utils/logging.c ../utils/misc.c -lm -lsndfile -o gen
+if [ $? -ne 0 ]; then
+  exit 1
+fi
+./gen
+rm gen
+aplay -D sysdefault:CARD=Device sweep.wav

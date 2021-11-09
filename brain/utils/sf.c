@@ -7,10 +7,14 @@
 //   file:///usr/share/doc/libsndfile1-dev/html/api.html
 //   https://github.com/libsndfile/libsndfile
 
+// -----------------------------------------------------------------
+
 void sf_init(void)
 {
     // nothing needed
 }
+
+// -----------------------------------------------------------------
 
 int sf_write_wav_file(char *filename, short *data, int max_chan, int max_data, int sample_rate)
 {
@@ -50,6 +54,8 @@ int sf_write_wav_file(char *filename, short *data, int max_chan, int max_data, i
 
     return 0;
 }
+
+// -----------------------------------------------------------------
 
 // caller must free returned data when done
 int sf_read_wav_file(char *filename, short **data, int *max_chan, int *max_data, int *sample_rate)
@@ -137,5 +143,46 @@ int sf_read_wav_file2(char *filename, short *data, int *max_chan, int *max_data,
     *max_chan    = sfinfo.channels;
     *max_data    = items;
     *sample_rate = sfinfo.samplerate;
+    return 0;
+}
+
+// -----------------------------------------------------------------
+
+int sf_gen_wav_file(char *filename, int freq_start, int freq_end, int duration, int max_chan, int sample_rate)
+{
+    int i, j, max_data, idx=0, rc;
+    double k, t, freq;
+    short *data, val;
+
+    INFO("gen_wav_file: %s freq_range=%d-%d  duration=%d  max_chan=%d  sample_rate=%d\n",
+         filename, freq_start, freq_end, duration, max_chan, sample_rate);
+
+    // allocate data
+    max_data = duration * sample_rate * max_chan;
+    data = malloc(max_data * sizeof(short));
+
+    // init data
+    k = log((double)freq_end/freq_start) / duration;
+    for (i = 0; i < duration*sample_rate; i++) {
+        t = (double)i / sample_rate;
+        freq = freq_start * exp(k * t);
+        val = nearbyint(32767 * sin((2*M_PI) * freq * t));
+        for (j = 0; j < max_chan; j++) {
+            data[idx++] = val;
+        }
+        //if (i > 450000) INFO("%d - %d\n", i, val);
+    }
+    assert(idx == max_data);
+
+    // write file
+    rc = sf_write_wav_file(filename, data, max_chan, max_data, sample_rate);
+    if (rc < 0) {
+        ERROR("failed to create wav file %s\n", filename);
+        return -1;
+    }
+    INFO("created %s\n", filename);
+
+    // free data, and return success
+    free(data);
     return 0;
 }
