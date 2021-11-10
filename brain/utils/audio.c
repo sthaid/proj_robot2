@@ -177,11 +177,25 @@ void audio_out_play_wav(char *file_name, short **data, int *max_data)
 // Wait for audio output to complete.
 void audio_out_wait(void)
 {
-    while (shm->state != AUDIO_OUT_STATE_IDLE) usleep(1000);
+    while (shm->state != AUDIO_OUT_STATE_IDLE) usleep(3000);  // xxx check these times
+}
+
+// Return true if audio output has completed (is IDLE).
+bool audio_out_is_complete(void)
+{
+    return shm->state == AUDIO_OUT_STATE_IDLE;
 }
 
 // Cancel audio output.
 void audio_out_cancel(void)
 {
     shm->cancel = true;
+}
+
+// xxx
+void audio_out_get_low_mid_high(double *low, double *mid, double *high)
+{
+    *low  = shm->low;
+    *mid  = shm->mid;
+    *high = shm->high;
 }

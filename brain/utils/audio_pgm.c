@@ -96,6 +96,8 @@ static short beep_data[MAX_BEEP_DATA];
 
 static void *audio_out_thread(void *cx);
 static int audio_out_get_frame(void *data_arg, void *cx);
+static void lmh_init(void);
+static void lmh(short v);
 
 // - - - - - - - - - - - 
 
@@ -121,6 +123,7 @@ static void *audio_out_thread(void *cx)
 
         // play
         shm->cancel = false;
+        lmh_init();
         pa_play2("USB", 2, shm->sample_rate, PA_INT16, audio_out_get_frame, NULL);
 
         // done
@@ -160,6 +163,7 @@ static int audio_out_get_frame(void *data_arg, void *cx)
     }
 
     if (shm->max_data > 0) {
+        lmh(shm->data[data_idx]);
         data[0] = shm->data[data_idx];
         data[1] = shm->data[data_idx];
         data_idx++;
@@ -172,6 +176,40 @@ static int audio_out_get_frame(void *data_arg, void *cx)
     }
 
     return -1;
+}
+
+// - - - - - - - - - - - 
+
+// this code is used to determine the sound intensity in the 
+// low, medium, and high frequency bands
+
+static double cx_low[10], cx_low_smooth;
+static double cx_mid[10], cx_mid_smooth;
+static double cx_high[10], cx_high_smooth;
+
+static void lmh_init(void)
+{
+    memset(cx_low, 0, sizeof(cx_low));
+    cx_low_smooth = 0;
+    memset(cx_mid, 0, sizeof(cx_mid));
+    cx_mid_smooth = 0;
+    memset(cx_high, 0, sizeof(cx_high));
+    cx_high_smooth = 0;
+}
+
+static void lmh(short v)
+{
+    #define SMOOTH 0.995
+    double low, high, mid;
+
+    low = low_pass_filter_ex(v, cx_low, 7, .85);
+    shm->low = low_pass_filter(fabs(low), &cx_low_smooth, SMOOTH);
+
+    high = high_pass_filter_ex(v, cx_high, 5, .85);
+    shm->high = low_pass_filter(fabs(high), &cx_high_smooth, SMOOTH);
+
+    mid = high_pass_filter_ex(low, cx_mid, 5, .85);
+    shm->mid = low_pass_filter(fabs(mid), &cx_mid_smooth, SMOOTH);
 }
 
 // -----------------  AUDIO INPUT FROM RESPEAKER 4 CHAN MIC  ------------------
