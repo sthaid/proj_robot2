@@ -207,15 +207,10 @@ char *s2t_feed(short sound_val);
 
 // -------- t2s.c --------
 
-#define DEFAULT_VOLUME 20
-#define DELTA_VOLUME   5
-
 void t2s_init(void);
 
 void t2s_play(char *fmt, ...) __attribute__((format(printf, 1, 2)));
 void t2s_play_nodb(char *fmt, ...) __attribute__((format(printf, 1, 2)));
-void t2s_set_volume(int percent, bool relative);
-int t2s_get_volume(void);
 
 // -------- wwd.c --------
 
@@ -249,8 +244,9 @@ bool grammar_match(char *cmd, hndlr_t *proc, args_t args);
 
 // -------- db.c --------
 
-#define KEYID_T2S 1
-#define KEYID_INFO 2
+#define KEYID_T2S       1
+#define KEYID_INFO      2
+#define KEYID_SETTINGS  3
 
 void db_init(char *file_name, bool create, uint64_t file_len);
 
@@ -265,6 +261,9 @@ void db_reset(void);
 void db_dump(void);
 
 // -------- audio.c --------
+
+#define DEFAULT_VOLUME 20
+#define DELTA_VOLUME   5
 
 #define AUDIO_SHM "/audio_shm"
 
@@ -297,7 +296,12 @@ int audio_in_reset_mic(void);
 void audio_out_beep(int beep_count);
 void audio_out_play_data(short *data, int max_data, int sample_rate);
 void audio_out_play_wav(char *file_name, short **data, int *max_data);
+
 void audio_out_wait(void);
 bool audio_out_is_complete(void);
 void audio_out_cancel(void);
 void audio_out_get_low_mid_high(double *low, double *mid, double *high);
+
+void audio_out_set_volume(int percent, bool relative);
+int audio_out_get_volume(void);
+

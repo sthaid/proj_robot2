@@ -121,7 +121,7 @@ void body_power_on(void)
     digitalWrite(GPIO_BODY_POWER, 0);
     power_is_on = true;
     power_state_change_time_us = microsec_timer();
-    t2s_play("body power is on");
+    // xxx t2s_play("body power is on");
 }
 
 void body_power_off(void)

@@ -201,26 +201,26 @@ static int hndlr_set_volume(args_t args)
     char *amount = args[1];
 
     if (strmatch(action, "up", "increase", NULL)) {
-        t2s_set_volume(getnum(amount, DELTA_VOLUME), true);
+        audio_out_set_volume(getnum(amount, DELTA_VOLUME), true);
     } else if (strmatch(action, "down", "decrease", NULL)) {
-        t2s_set_volume(-getnum(amount, DELTA_VOLUME), true);
+        audio_out_set_volume(-getnum(amount, DELTA_VOLUME), true);
     } else if (strmatch(action, "set", NULL)) {
-        t2s_set_volume(getnum(amount, DEFAULT_VOLUME), false);
+        audio_out_set_volume(getnum(amount, DEFAULT_VOLUME), false);
     } else if (strmatch(action, "reset", NULL)) {
-        t2s_set_volume(DEFAULT_VOLUME, false);
+        audio_out_set_volume(DEFAULT_VOLUME, false);
     } else {
         ERROR("hndllr_se_volume unexpected action '%s'\n", action);
         return -1;
     }
 
-    t2s_play("The volume is now %d%%.", t2s_get_volume());
+    t2s_play("The volume is now %d%%.", audio_out_get_volume());
 
     return 0;
 }
 
 static int hndlr_get_volume(args_t args)
 {
-    t2s_play("The volume is %d%%.", t2s_get_volume());
+    t2s_play("The volume is %d%%.", audio_out_get_volume());
 
     return 0;
 }

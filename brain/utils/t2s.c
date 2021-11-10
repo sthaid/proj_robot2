@@ -5,8 +5,6 @@ static int cnt_db;
 static int cnt_synth_text;
 static int cnt_synth_text_nodb;
 
-static int curr_vol;
-
 // prototypes
 static void t2s_play_common(bool nodb, char *fmt, va_list ap);
 
@@ -14,7 +12,7 @@ static void t2s_play_common(bool nodb, char *fmt, va_list ap);
 
 void t2s_init(void)
 {
-    t2s_set_volume(DEFAULT_VOLUME, false);
+    // nothing
 }
 
 // -----------------  PLAY  ------------------------------------------------
@@ -103,33 +101,3 @@ static void t2s_play_common(bool nodb, char *fmt, va_list ap)
     INFO("t2s_play audio stats: db=%d synth_text=%d synth_text_nodb=%d\n", 
          cnt_db, cnt_synth_text, cnt_synth_text_nodb);
 }
-    
-// -----------------  VOLUME SUPPORT  --------------------------------------
-
-// notes:
-// - aplay -l              - displays card numbers
-// - arecord -l            - ditto
-// - amixer -c 1 controls  - displays controls
-
-void t2s_set_volume(int percent, bool relative)
-{
-    char cmd[100];
-
-    if (!relative) {
-        curr_vol = percent;
-    } else {
-        curr_vol += percent;
-    }
-    if (curr_vol < 0) curr_vol = 0;
-    if (curr_vol > 100) curr_vol = 100;
-
-    sprintf(cmd, "amixer -c 1 set PCM Playback Volume %d%%", curr_vol);
-    system(cmd);
-    sleep(1);
-}
-
-int t2s_get_volume(void)
-{
-    return curr_vol;
-}
-

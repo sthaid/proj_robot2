@@ -3,7 +3,7 @@
 # ==================
 
 HNDLR end_program
-<and end> program
+[computer] <and end terminate> program
 END
 
 HNDLR restart_program
