@@ -79,8 +79,7 @@ void leds_stage_led(int num, unsigned int rgb, int led_brightness)
     if (first_call) {
         first_call = false;
         for (int i = 0; i <= 100; i++) {
-            b[i] = 1e-6 * (i * i * i) + .002;
-            if (b[i] > 1) b[i] = 1;
+            b[i] = 1e-6 * (i * i * i);
         }
     }
 
@@ -89,10 +88,8 @@ void leds_stage_led(int num, unsigned int rgb, int led_brightness)
         return;
     }
 
-    if (led_brightness < 0 || led_brightness > 100) {
-        ERROR("invalid arg led_brightnesss=%d\n", led_brightness);
-        return;
-    }
+    if (led_brightness < 0) led_brightness = 0;
+    if (led_brightness > 100) led_brightness = 100;
 
     x->red   = nearbyint(((rgb >>  0) & 0xff) * b[led_brightness]);
     x->green = nearbyint(((rgb >>  8) & 0xff) * b[led_brightness]);

@@ -309,22 +309,6 @@ static void printMatrix(int m, int n, double matrix[m][n])
     }
 }
 
-// -----------------  AUDIO FILTERS  ------------------------------------
-
-double low_pass_filter(double v, double *cx, double k2)
-{
-    *cx = k2 * *cx + (1-k2) * v;
-    return *cx;
-}
-
-double low_pass_filter_ex(double v, double *cx, int k1, double k2)
-{
-    for (int i = 0; i < k1; i++) {
-        v = low_pass_filter(v, &cx[i], k2);
-    }
-    return v;
-}
-
 // -----------------  GENERAL UTILS  ------------------------------------
 
 double normalize_angle(double angle)

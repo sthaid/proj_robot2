@@ -95,15 +95,42 @@ void run_program(pid_t *prog_pid, int *fd_to_prog, int *fd_from_prog, char *prog
 
 void poly_fit(int max_data, double *x_data, double *y_data, int degree_of_poly, double *coefficients);
 
-double low_pass_filter(double v, double *cx, double k2);
-double low_pass_filter_ex(double v, double *cx, int k1, double k2);
-
 double normalize_angle(double angle);
 double max_doubles(double *x, int n, int *max_idx);
 double min_doubles(double *x, int n, int *min_idx);
 char *stars(double v, double max_v, int max_stars, char *s);
 void shuffle(void *array, int elem_size, int num_elem);
 int get_filenames(char *dirname, char **names, int *max_names);
+
+// -------- filter routines  --------
+
+static inline double low_pass_filter(double v, double *cx, double k2)
+{
+    *cx = k2 * *cx + (1-k2) * v;
+    return *cx;
+}
+
+static inline double low_pass_filter_ex(double v, double *cx, int k1, double k2)
+{
+    for (int i = 0; i < k1; i++) {
+        v = low_pass_filter(v, &cx[i], k2);
+    }
+    return v;
+}
+
+static inline double high_pass_filter(double v, double *cx, double k2)
+{
+    *cx = *cx * k2 + (1-k2) * v;
+    return v - *cx;
+}
+
+static inline double high_pass_filter_ex(double v, double *cx, int k1, double k2)
+{
+    for (int i = 0; i < k1; i++) {
+        v = high_pass_filter(v, &cx[i], k2);
+    }
+    return v;
+}
 
 // -------- pa.c --------
 
@@ -139,6 +166,9 @@ void sf_init(void);
 int sf_write_wav_file(char *filename, short *data, int max_chan, int max_data, int sample_rate);
 int sf_read_wav_file(char *filename, short **data, int *max_chan, int *max_data, int *sample_rate);
 int sf_read_wav_file2(char *filename, short *data, int *max_chan, int *max_data, int *sample_rate);
+
+int sf_gen_sweep_wav(char *filename, int freq_start, int freq_end, int duration, int max_chan, int sample_rate);
+int sf_gen_white_wav(char *filename, int duration, int max_chan, int sample_rate);
 
 // -------- leds.c --------
 
@@ -249,11 +279,15 @@ typedef struct {
     bool  reset_mic;
     // audio output ...
     int   beep_count;
-    short data[1800*24000];
+    short data[3600*24000];
     int   max_data;
     int   sample_rate;
     int   state;
     bool  cancel;
+    // audio output amplitude of low, mid and high freq ranges
+    double low;
+    double mid;
+    double high;
 } audio_shm_t;
 
 void audio_init(int (*proc_mic_data)(short *frame));
@@ -264,5 +298,6 @@ void audio_out_beep(int beep_count);
 void audio_out_play_data(short *data, int max_data, int sample_rate);
 void audio_out_play_wav(char *file_name, short **data, int *max_data);
 void audio_out_wait(void);
+bool audio_out_is_complete(void);
 void audio_out_cancel(void);
-
+void audio_out_get_low_mid_high(double *low, double *mid, double *high);
