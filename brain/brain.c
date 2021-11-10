@@ -44,6 +44,7 @@ int main(int argc, char **argv)
     
     // program is terminating
     INFO("PROGRAM TERMINATING\n")
+    audio_out_cancel();
     t2s_play("program terminating");
     set_leds(LED_OFF, 0, -1);
 
