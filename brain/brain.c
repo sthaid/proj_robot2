@@ -6,6 +6,10 @@
 
 #define MAX_RECORDING (60*16000)
 
+#define LEDS_IDLE              1
+#define LEDS_RECV_AND_PROC_CMD 2
+#define LEDS_ERROR             3
+
 //
 // variables
 //
@@ -21,7 +25,8 @@ static int   recording_idx;
 static void initialize(void);
 static void sig_hndlr(int sig);
 static int proc_mic_data(short *frame);
-static void set_leds(unsigned int color, int brightness, double doa);
+static void set_leds(int cmd, int doa);
+static void *leds_thread(void *cx);
 
 // -----------------  MAIN  ------------------------------------------------------
 
@@ -35,7 +40,6 @@ int main(int argc, char **argv)
     // run
     INFO("PROGRAM RUNNING\n");
     t2s_play("program running");
-    set_leds(LED_BLUE, 50, -1);
 
     // wait for end_pgm
     while (!end_program) {
@@ -46,7 +50,6 @@ int main(int argc, char **argv)
     INFO("PROGRAM TERMINATING\n")
     audio_out_cancel();
     t2s_play("program terminating");
-    set_leds(LED_OFF, 0, -1);
 
     // return success
     return 0;
@@ -55,6 +58,7 @@ int main(int argc, char **argv)
 static void initialize(void)
 {
     uint64_t secs_since_boot;
+    pthread_t tid;
 
     // register for SIGINT and SIGTERM
     static struct sigaction act;
@@ -89,6 +93,9 @@ static void initialize(void)
     proc_cmd_init();
     audio_init(proc_mic_data);
     body_init();
+
+    // xxx
+    pthread_create(&tid, NULL, leds_thread, NULL);
 }
 
 static void sig_hndlr(int sig)
@@ -132,7 +139,7 @@ static int proc_mic_data(short *frame)
     #define STATE_COMPLETED_CMD_OKAY     3
     #define STATE_COMPLETED_CMD_ERROR    4
 
-    static int    state = STATE_WAITING_FOR_WAKE_WORD;
+    static int state = STATE_WAITING_FOR_WAKE_WORD;
     static double doa;
 
     // supply the frame for doa analysis, frame is 4 shorts
@@ -164,7 +171,7 @@ static int proc_mic_data(short *frame)
         if (wwd_feed(sound_val) & WW_KEYWORD_MASK) {
             state = STATE_RECEIVING_CMD;
             doa = doa_get();
-            set_leds(LED_WHITE, 100, doa);
+            set_leds(LEDS_RECV_AND_PROC_CMD, doa);
         }
         break; }
     case STATE_RECEIVING_CMD: {
@@ -172,7 +179,7 @@ static int proc_mic_data(short *frame)
         if (transcript) {
             if (strcmp(transcript, "TIMEDOUT") == 0) {
                 free(transcript);
-                set_leds(LED_BLUE, 50, -1);
+                set_leds(LEDS_IDLE, -1);
                 state = STATE_WAITING_FOR_WAKE_WORD;
                 break;
             }
@@ -191,19 +198,12 @@ static int proc_mic_data(short *frame)
         }
         break; }
     case STATE_COMPLETED_CMD_OKAY: {
-        set_leds(LED_BLUE, 50, -1);
+        set_leds(LEDS_IDLE, -1);
         state = STATE_WAITING_FOR_WAKE_WORD;
         break; }
     case STATE_COMPLETED_CMD_ERROR: {
-        static int cnt;
-        cnt++;
-        if (cnt == 1) {
-            set_leds(LED_RED, 50, -1);
-        } else if (cnt == 8000) {
-            set_leds(LED_BLUE, 50, -1);
-            state = STATE_WAITING_FOR_WAKE_WORD;
-            cnt = 0;
-        }
+        set_leds(LEDS_ERROR, -1);
+        state = STATE_WAITING_FOR_WAKE_WORD;
         break; }
     }
         
@@ -211,36 +211,84 @@ static int proc_mic_data(short *frame)
     return 0;
 }
 
-// -----------------  SET LEDS  --------------------------------------------------
+// -----------------  LEDS THREAD  -----------------------------------------------
 
+static int leds_cmd;
+static int leds_doa;
 static void convert_angle_to_led_num(double angle, int *led_a, int *led_b);
 
-static void set_leds(unsigned int color, int led_brightness, double doa)
+static void set_leds(int cmd, int doa)
 {
-    leds_stage_all(color, led_brightness);
+    leds_doa = doa; 
+    __sync_synchronize();
+    leds_cmd = cmd;
+}
 
-    if (doa != -1) {
-        int led_a, led_b;
-        convert_angle_to_led_num(doa, &led_a, &led_b);
-        if (led_a != -1) leds_stage_led(led_a, LED_LIGHT_BLUE, led_brightness);
-        if (led_b != -1) leds_stage_led(led_b, LED_LIGHT_BLUE, led_brightness);
+static void *leds_thread(void *cx)
+{
+    static bool     rotating = false;
+    static int      rotating_cnt = 0;
+    static uint64_t set_leds_idle_time = 0;
+
+    set_leds(LEDS_IDLE, -1);
+
+    while (true) {
+        switch (leds_cmd) {
+        case LEDS_IDLE:
+            for (int i = 0; i < MAX_LED; i++) {
+                leds_stage_led(i, LED_BLUE, 50 * (i + 3) / MAX_LED);
+            }
+            leds_commit();
+            rotating = true;
+            set_leds_idle_time = 0;
+            break;
+        case LEDS_RECV_AND_PROC_CMD:
+            leds_stage_all(LED_WHITE, 50);
+            if (leds_doa != -1) {
+                int led_a, led_b;
+                convert_angle_to_led_num(leds_doa, &led_a, &led_b);
+                if (led_a != -1) leds_stage_led(led_a, LED_LIGHT_BLUE, 80);
+                if (led_b != -1) leds_stage_led(led_b, LED_LIGHT_BLUE, 80);
+            }
+            leds_commit();
+            rotating = false;
+            set_leds_idle_time = 0;
+            break;
+        case LEDS_ERROR:
+            leds_stage_all(LED_RED, 50);
+            leds_commit();
+            rotating = false;
+            set_leds_idle_time = microsec_timer() + 300000;
+            break;
+        default:
+            break;
+        }
+        leds_cmd = 0;
+
+        if (set_leds_idle_time != 0 && microsec_timer() > set_leds_idle_time) {
+            set_leds(LEDS_IDLE, -1);
+        } else if (rotating && rotating_cnt++ >= 20) {
+            leds_stage_rotate(1);
+            leds_commit();
+            rotating_cnt = 0;
+        }
+
+        usleep(10000);
     }
 
-    leds_commit();
+    return NULL;
 }
 
 static void convert_angle_to_led_num(double angle, int *led_a, int *led_b)
 {
-    #define MAX_LEDS 12
-
     // this ifdef selects between returning one or two led_nums to
     // represent the angle
 #if 0
-    *led_a = nearbyint( normalize_angle(angle) / (360/MAX_LEDS) );
-    if (*led_a == MAX_LEDS) *led_a = 0;
+    *led_a = nearbyint( normalize_angle(angle) / (360/MAX_LED) );
+    if (*led_a == MAX_LED) *led_a = 0;
     *led_b = -1;
 #else
-    int tmp = nearbyint( normalize_angle(angle) / (360/(2*MAX_LEDS)) );
+    int tmp = nearbyint( normalize_angle(angle) / (360/(2*MAX_LED)) );
 
     if ((tmp & 1) == 0) {
         *led_a = tmp/2;
@@ -250,8 +298,7 @@ static void convert_angle_to_led_num(double angle, int *led_a, int *led_b)
         *led_b = *led_a + 1;
     }
 
-    if (*led_a == MAX_LEDS) *led_a = 0;
-    if (*led_b == MAX_LEDS) *led_b = 0;
+    if (*led_a == MAX_LED) *led_a = 0;
+    if (*led_b == MAX_LED) *led_b = 0;
 #endif
 }
-
