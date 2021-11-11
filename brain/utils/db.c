@@ -271,6 +271,10 @@ int db_get(int keyid, char *keystr, void **val, unsigned int *val_len)
 
     RW_RDLOCK;
 
+    // preset returns
+    *val = NULL;
+    *val_len = 0;
+
     // check keyid arg
     if (keyid < 0 || keyid >= MAX_KEYID) {
         ERROR("invalid keyid %d\n", keyid);

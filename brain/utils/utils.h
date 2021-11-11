@@ -245,8 +245,9 @@ bool grammar_match(char *cmd, hndlr_t *proc, args_t args);
 // -------- db.c --------
 
 #define KEYID_T2S       1
-#define KEYID_INFO      2
-#define KEYID_SETTINGS  3
+#define KEYID_INFO      2  // xxx USER_INFO
+#define KEYID_SETTINGS  3  // xxx PROGRAM_SETTINGS
+#define KEYID_COLOR_ORGAN 4
 
 void db_init(char *file_name, bool create, uint64_t file_len);
 
