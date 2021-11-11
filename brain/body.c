@@ -58,7 +58,7 @@ void body_init(void)
     pthread_t tid;
 
     pinMode(GPIO_BODY_POWER, OUTPUT);
-    pthread_create(&tid, NULL, connect_and_recv_thread, NULL);
+    //xxx pthread_create(&tid, NULL, connect_and_recv_thread, NULL);
     atexit(exit_handler);
 }
 
@@ -121,7 +121,7 @@ void body_power_on(void)
     digitalWrite(GPIO_BODY_POWER, 0);
     power_is_on = true;
     power_state_change_time_us = microsec_timer();
-    // xxx t2s_play("body power is on");
+    t2s_play("body power is on");
 }
 
 void body_power_off(void)
