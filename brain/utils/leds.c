@@ -33,6 +33,12 @@ static struct {
 
 static int tx_buff_size;
 
+//
+// prototypes
+//
+
+static void leds_exit(void);
+
 // -----------------  LEDS_INIT  ---------------------------------------------------------
 
 void leds_init(void)
@@ -63,6 +69,15 @@ void leds_init(void)
     memset(tx, 0, tx_buff_size);
 
     // set leds off, 
+    leds_stage_all(LED_OFF,0);
+    leds_commit();
+
+    // xxx
+    atexit(leds_exit);
+}
+
+static void leds_exit(void)
+{
     leds_stage_all(LED_OFF,0);
     leds_commit();
 }
