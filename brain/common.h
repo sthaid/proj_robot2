@@ -20,3 +20,5 @@ void body_power_off(void);
 void body_status_report(void);
 void body_weather_report(void);
 
+// music.c ...
+int play_music_file(char *filename);
