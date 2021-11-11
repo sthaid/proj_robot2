@@ -55,7 +55,7 @@ static void color_organ_rev1(char *filename)
 
     INFO("starting color_organ_rev1 for %s\n", filename);
 
-    // xxx comment
+    // precalibrated values are used for the white_noise and frequency_sweep files
     if (strcmp(filename, "white_noise.wav") == 0) {
         low_cal  = 2845.6;
         mid_cal  = 38.6;
@@ -79,7 +79,6 @@ static void color_organ_rev1(char *filename)
         usleep(10000);
 
         // ignore the first 100 ms because of possible startup sound glitches
-        // xxx del ?
         if (cnt++ < 10) {
             continue;
         }
@@ -87,22 +86,19 @@ static void color_organ_rev1(char *filename)
         // get the intensity of sound in the low, mid, and high frequency ranges
         audio_out_get_low_mid_high(&low, &mid, &high);
 
-        // xxx explain this
+        // if not using precalibrated values then the calibration values are
+        // cpomputed as the song is playing; the calibrated values directly track increases
+        // to low,mid,high; and slowly ramp down during quiet intervals
         if (!precal) {
             bool flag = false;
             if (low > low_cal) { low_cal = low; flag = true; } else { low_cal *= .9999; }
             if (mid > mid_cal) { mid_cal = mid; flag = true; } else { mid_cal *= .9999; }
             if (high > high_cal) { high_cal = high; flag = true; } else { high_cal *= .9999; }
             if (flag) INFO("AUTOCAL: %0.1f %0.1f %0.1f\n", low_cal, mid_cal, high_cal);
-        } else {
-            if (low > low_cal || mid > mid_cal || high > high_cal) {
-                INFO("PRECAL: %0.1f %0.1f %0.1f\n", low_cal, mid_cal, high_cal);
-            }
         }
 
         // set the leds, based on the sound intensity and the calibration values
-        // xxx use 100
-        #define MAX_BRIGHTNESS 60
+        #define MAX_BRIGHTNESS 100
         for (int i = 0; i < 4; i++) {
             leds_stage_led(i+0, LED_RED,   low * (MAX_BRIGHTNESS / low_cal));
             leds_stage_led(i+4, LED_GREEN, mid * (MAX_BRIGHTNESS / mid_cal));
@@ -172,22 +168,22 @@ static void color_organ_rev2(char *filename)
 
         // if any of the avg_vals is zero then continue
         if (avg_vals->low == 0 || avg_vals->mid == 0 || avg_vals->high == 0) {
-            INFO("xxx avg vals zero\n");
             continue;
         }
 
         // set the leds
+        // xxx more work needed to scale up low values, maybe shouldn't be linear func
         for (int i = 0; i < 4; i++) {
-            leds_stage_led(i+0, LED_RED,   low * (12 / avg_vals->low));
-            leds_stage_led(i+4, LED_GREEN, mid * (12 / avg_vals->mid));
-            leds_stage_led(i+8, LED_BLUE, high * (12 / avg_vals->high));
+            leds_stage_led(i+0, LED_RED,   low * (15 / avg_vals->low));
+            leds_stage_led(i+4, LED_GREEN, mid * (15 / avg_vals->mid));
+            leds_stage_led(i+8, LED_BLUE, high * (15 / avg_vals->high));
         }
         leds_commit();
     }
 
     // store avg low,mid,high in db (but only if we have a more complete average)
     INFO("new_avg_vals.n = %d  db_avg_vals.n = %d - %s to db\n", 
-         new_avg_vals.n, db_avg_vals.n
+         new_avg_vals.n, db_avg_vals.n,
          new_avg_vals.n > db_avg_vals.n ? "writing" : "not writiing");
     if (new_avg_vals.n > db_avg_vals.n) {
         db_set(KEYID_COLOR_ORGAN, filename, &new_avg_vals, sizeof(new_avg_vals));
@@ -195,4 +191,3 @@ static void color_organ_rev2(char *filename)
              new_avg_vals.n, new_avg_vals.low, new_avg_vals.mid, new_avg_vals.high);
     }
 }
-
