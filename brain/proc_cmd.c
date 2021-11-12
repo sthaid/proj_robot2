@@ -182,7 +182,7 @@ static int hndlr_reset_mic(args_t args)
 
 static int hndlr_playback(args_t args)
 {
-    #define MAX_DATA (5*16000)
+    #define MAX_DATA (10*16000)
     short data[MAX_DATA];
 
     brain_get_recording(data, MAX_DATA);
