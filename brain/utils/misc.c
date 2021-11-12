@@ -409,3 +409,18 @@ int get_filenames(char *dirname, char **names, int *max_names)
     closedir(dir); 
     return 0;
 }
+
+int clip_int(int val, int min, int max)
+{
+    if (val < min) return min;
+    if (val > max) return max;
+    return val;
+}
+
+double clip_double(double val, double min, double max)
+{
+    if (val < min) return min;
+    if (val > max) return max;
+    return val;
+}
+

@@ -54,7 +54,6 @@ char * s2t_feed(short sound_val)
         return ts;
     }
 
-    // xxx crash here
     sv[max_sv++] = sound_val;
     return NULL;
 }

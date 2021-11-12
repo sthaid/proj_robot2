@@ -204,7 +204,6 @@ static int hndlr_set(args_t args)
     if (sscanf(args[1], "%d", &val) != 1) {
         return -1;
     }
-    INFO("xxx val %d\n", val);
 
     if (strcmp(args[0], "volume") == 0) {
         settings.volume = clip_int(val, 0, 50);

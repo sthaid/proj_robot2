@@ -8,7 +8,12 @@ static pthread_t recv_mic_data_tid;
 
 // prototypes
 static void sig_hndlr(int sig);
-static void audio_out_init(void);
+
+static void *audio_out_thread(void *cx);
+static int audio_out_get_frame(void *data_arg, void *cx);
+static void lmh_init(void);
+static void lmh(short v);
+
 static int recv_mic_data(const void *frame, void *cx);
 static void *recv_mic_data_setup_thread(void *cx);
 
@@ -43,8 +48,8 @@ int main(int argc, char **argv)
     misc_init();
     pa_init();
 
-    // initialize audio output capability
-    audio_out_init();
+    // create the audio output thread
+    pthread_create(&tid, NULL, audio_out_thread, NULL);
 
     // call pa_record2 to start receiving the 4 channel respeaker mic data;
     // the recv_mic_data callback routine is called with mic data frames
@@ -87,32 +92,6 @@ static void sig_hndlr(int sig)
 
 // -----------------  AUDIO OUTPUT  -------------------------------------------
 
-#define BEEP_DURATION_MS 200
-#define BEEP_FREQUENCY   800
-#define BEEP_AMPLITUDE   6000
-#define MAX_BEEP_DATA    (24000 * BEEP_DURATION_MS / 1000)
-
-static short beep_data[MAX_BEEP_DATA];
-
-static void *audio_out_thread(void *cx);
-static int audio_out_get_frame(void *data_arg, void *cx);
-static void lmh_init(void);
-static void lmh(short v);
-
-// - - - - - - - - - - - 
-
-static void audio_out_init(void)
-{
-    int i;
-    pthread_t tid;
-
-    for (i = MAX_BEEP_DATA/4; i < MAX_BEEP_DATA*3/4; i++) {
-        beep_data[i] = BEEP_AMPLITUDE * sin(i * (2*M_PI / MAX_BEEP_DATA * BEEP_FREQUENCY));
-    }
-
-    pthread_create(&tid, NULL, audio_out_thread, NULL);
-}
-
 static void *audio_out_thread(void *cx)
 {
     while (true) {
@@ -136,30 +115,14 @@ static void *audio_out_thread(void *cx)
 static int audio_out_get_frame(void *data_arg, void *cx)
 {
     short *data = data_arg;
-    static int beep_idx;
     static int data_idx;
 
-    assert(shm->beep_count >= 0);
     assert(shm->max_data >= 0);
 
     if (shm->cancel) {
-        beep_idx = 0;
         data_idx = 0;
-        shm->beep_count = 0;
         shm->max_data = 0;
         return -1;
-    }
-
-    if (shm->beep_count > 0) {
-        data[0] = beep_data[beep_idx];
-        data[1] = beep_data[beep_idx];
-        beep_idx++;
-
-        if (beep_idx >= MAX_BEEP_DATA) {
-            beep_idx = 0;
-            shm->beep_count--;
-        }
-        return 0;
     }
 
     if (shm->max_data > 0) {

@@ -46,16 +46,17 @@ static void t2s_play_common(bool nodb, char *fmt, va_list ap)
     short       *data;
     int          max_data, len;
 
-    // sprint the caller's fmt/ap to text, and sprint the cmd to run synthesize_text
+    // sprint the caller's fmt/ap to text, and sprint the cmd to run synthesize_text;
+    // if newline char is present in text then remove it;
+    // if lenght of text is 0 then return
     vsprintf(text, fmt, ap);
-    sprintf(cmd, "./go/synthesize_text --text \"%s\"", text);
 
-    // if newline char is present then remove it
     len = strlen(text);
     if (len > 0 && text[len-1] == '\n') {
         text[len-1] = '\0';
         len--;
     }
+
     if (len == 0) {
         return;
     }
@@ -73,6 +74,7 @@ static void t2s_play_common(bool nodb, char *fmt, va_list ap)
     //   play the wav file that was provided by the call above to synthesize_text
     //   save synthesize_text result in db
     // endif
+    sprintf(cmd, "./go/synthesize_text --text \"%s\"", text);
     if (nodb) {
         if (system(cmd) < 0) {
             ERROR("system(synthesize_text)) failed, %s\n", strerror(errno));

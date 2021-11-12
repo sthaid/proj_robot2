@@ -4,11 +4,18 @@
 #define MUTEX_LOCK do { pthread_mutex_lock(&mutex); } while (0)
 #define MUTEX_UNLOCK do { pthread_mutex_unlock(&mutex); } while (0)
 
+#define BEEP_SAMPLE_RATE 24000
+#define BEEP_DURATION_MS 200
+#define BEEP_FREQUENCY   800
+#define BEEP_AMPLITUDE   6000
+#define MAX_BEEP_DATA    (BEEP_SAMPLE_RATE * BEEP_DURATION_MS / 1000)
+
 // variables
 static pthread_t proc_mic_data_tid;
 static audio_shm_t *shm;
 static bool audio_exitting;
 static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+static short beep_data[MAX_BEEP_DATA];
 
 // prototypes
 static void audio_exit(void);
@@ -46,6 +53,11 @@ void audio_init(int (*proc_mic_data)(short *frame), int volume)
     rc = madvise(shm, sizeof(audio_shm_t), MADV_DONTFORK);
     if (rc < 0) {
         FATAL("audio madvice(%p,%zd), %s\n", shm, sizeof(audio_shm_t), strerror(errno));
+    }
+
+    // init beep_data buffer
+    for (int i = MAX_BEEP_DATA/4; i < MAX_BEEP_DATA*3/4; i++) {
+        beep_data[i] = BEEP_AMPLITUDE * sin(i * (2*M_PI / MAX_BEEP_DATA * BEEP_FREQUENCY));
     }
 
     // start the audio pgm;
@@ -120,8 +132,11 @@ void audio_out_beep(int beep_count)
     shm->state = AUDIO_OUT_STATE_PREP;
     MUTEX_UNLOCK;
     
-    shm->sample_rate = 24000;  // xxx define
-    shm->beep_count = beep_count;
+    shm->sample_rate = BEEP_SAMPLE_RATE;
+    for (int i = 0; i < beep_count; i++) {
+        memcpy(shm->data + (i * MAX_BEEP_DATA), beep_data, sizeof(beep_data));
+    }
+    shm->max_data = beep_count * MAX_BEEP_DATA;
 
     __sync_synchronize();
     shm->state = AUDIO_OUT_STATE_PLAY;
@@ -178,7 +193,7 @@ void audio_out_play_wav(char *file_name, short **data, int *max_data)
 // Wait for audio output to complete.
 void audio_out_wait(void)
 {
-    while (shm->state != AUDIO_OUT_STATE_IDLE) usleep(3000);  // xxx check these times
+    while (shm->state != AUDIO_OUT_STATE_IDLE) usleep(3000);
 }
 
 // Return true if audio output has completed (is IDLE).

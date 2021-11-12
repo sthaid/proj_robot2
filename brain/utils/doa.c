@@ -63,7 +63,6 @@
 // variables
 //
 
-// xxx maybe these can be floats
 static double   data[MAX_CHAN][MAX_FRAME];
 static int      data_idx;
 

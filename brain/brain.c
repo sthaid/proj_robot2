@@ -66,28 +66,29 @@ static void initialize(void)
     sigaction(SIGINT, &act, NULL);
     sigaction(SIGTERM, &act, NULL);
 
-    // xxx
+    // workaround problem of audio not working if this program is
+    // started too soon after boot
     secs_since_boot = microsec_timer()/1000000;
     if (secs_since_boot < 20) {
         INFO("secs_since_boot=%lld, sleeping 20 secs\n", secs_since_boot);
         sleep(20);
     }
 
-    // xxx
+    // gpio is used to enable the respeaker leds and to turn body power on/off
     if (wiringPiSetupGpio() != 0) {
         FATAL("wiringPiSetupGpio failed\n");
     }
 
-    // xxx
+    // random numbers are used for play music shuffle
     srandom(time(NULL));
 
-    // xxx
+    // init access to the database, and read program settings
     db_init("db.dat", true, GB);
     settings.volume = db_get_int(KEYID_PROG_SETTINGS, "volume", 20);
     settings.brightness = db_get_int(KEYID_PROG_SETTINGS, "brightness", 60);
     settings.color_organ = db_get_int(KEYID_PROG_SETTINGS, "color_organ", 2);
 
-    // xxx
+    // init other functions
     misc_init();
     wwd_init();
     t2s_init();
@@ -99,7 +100,7 @@ static void initialize(void)
     audio_init(proc_mic_data, settings.volume);
     body_init();
 
-    // xxx
+    // create thread to display leds
     pthread_create(&tid, NULL, leds_thread, NULL);
 }
 

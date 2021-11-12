@@ -101,21 +101,8 @@ double min_doubles(double *x, int n, int *min_idx);
 char *stars(double v, double max_v, int max_stars, char *s);
 void shuffle(void *array, int elem_size, int num_elem);
 int get_filenames(char *dirname, char **names, int *max_names);
-
-// xxx move
-static inline int clip_int(int val, int min, int max)
-{
-    if (val < min) return min;
-    if (val > max) return max;
-    return val;
-}
-
-static inline double clip_double(double val, double min, double max)
-{
-    if (val < min) return min;
-    if (val > max) return max;
-    return val;
-}
+int clip_int(int val, int min, int max);
+double clip_double(double val, double min, double max);
 
 // -------- filter routines  --------
 
@@ -267,38 +254,13 @@ int db_set(int keyid, char *keystr, void *val, unsigned int val_len);
 int db_rm(int keyid, char *keystr);
 int db_get_keyid(int keyid, void (*callback)(int keyid, char *keystr, void *val, unsigned int val_len));
 
+void db_set_int(int keyid, char *keystr, int value);
+int db_get_int(int keyid, char *keystr, int default_value);
+
 void db_print_free_list(void);
 unsigned int db_get_free_list_len(void);
 void db_reset(void);
 void db_dump(void);
-
-// xxx maybe move
-static inline void db_set_int(int keyid, char *keystr, int value)
-{
-    char val_str[20];
-    int rc;
-
-    sprintf(val_str, "%d", value);
-    rc = db_set(keyid, keystr, val_str, strlen(val_str)+1);
-    assert(rc == 0);
-}
-
-static inline int db_get_int(int keyid, char *keystr, int default_value)
-{
-    char *val_str;
-    unsigned int val_len;
-    int val, rc;
-    
-    rc = db_get(keyid, keystr, (void**)&val_str, &val_len);
-    if (rc < 0) {
-        db_set_int(keyid, keystr, default_value);
-        return default_value;
-    } else {
-        rc = sscanf(val_str, "%d", &val);
-        assert(rc == 1);
-        return val;
-    }
-}
 
 // -------- audio.c --------
 
@@ -314,7 +276,6 @@ typedef struct {
     int   fidx;
     bool  reset_mic;
     // audio output ...
-    int   beep_count;
     short data[3600*24000];
     int   max_data;
     int   sample_rate;

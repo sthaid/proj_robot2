@@ -114,8 +114,6 @@ static void color_organ_rev1(char *filename)
 
 // -----------------  COLOR ORGAN REV2  --------------------------------------------
 
-// xxx pending audio output can accumulate in the averages
-
 typedef struct {
     double low;
     double mid;
@@ -176,7 +174,6 @@ static void color_organ_rev2(char *filename)
         }
 
         // set the leds
-        // xxx more work needed to scale up low values, maybe shouldn't be linear func
         for (int i = 0; i < 4; i++) {
             leds_stage_led(i+0, LED_RED,   low * (15 / avg_vals->low));
             leds_stage_led(i+4, LED_GREEN, mid * (15 / avg_vals->mid));

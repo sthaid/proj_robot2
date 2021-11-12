@@ -66,7 +66,7 @@ void body_init(void)
 
 static void exit_handler(void)
 {
-    // xxx nothing?
+    // nothing needed
 }
 
 // -----------------  API  ---------------------------------------

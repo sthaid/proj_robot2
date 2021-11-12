@@ -1,7 +1,5 @@
 #include <utils.h>
 
-// xxx msync?
-
 //
 // defines
 //
@@ -453,6 +451,39 @@ int db_get_keyid(int keyid, void (*callback)(int keyid, char *keystr, void *val,
     RW_UNLOCK;
     return 0;
 }
+
+// -----------------  DB ACCESS UTILS  ----------------------------------------------
+
+// these 2 routines set/get an integer value to the db;
+// and save the integer value in db as a character string
+void db_set_int(int keyid, char *keystr, int value)
+{
+    char val_str[20];
+    int rc;
+
+    sprintf(val_str, "%d", value);
+    rc = db_set(keyid, keystr, val_str, strlen(val_str)+1);
+    assert(rc == 0);
+}
+
+int db_get_int(int keyid, char *keystr, int default_value)
+{
+    char *val_str;
+    unsigned int val_len;
+    int val, rc;
+
+    rc = db_get(keyid, keystr, (void**)&val_str, &val_len);
+    if (rc < 0) {
+        db_set_int(keyid, keystr, default_value);
+        return default_value;
+    } else {
+        rc = sscanf(val_str, "%d", &val);
+        assert(rc == 1);
+        return val;
+    }
+}
+
+
 
 // -----------------  GENERAL UTILS  ------------------------------------------------
 

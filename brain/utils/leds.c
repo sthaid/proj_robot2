@@ -72,7 +72,7 @@ void leds_init(void)
     leds_stage_all(LED_OFF,0);
     leds_commit(0);
 
-    // xxx
+    // register exit handler to turn off the leds when program exits
     atexit(leds_exit);
 }
 

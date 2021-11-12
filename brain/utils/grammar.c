@@ -34,7 +34,8 @@ int grammar_init(char *filename, hndlr_lookup_t *hlu)
     int      max_def;
     int      line_num;
 
-    // xxx some memory leaks in here
+    // some memory leaks in here, but don't worry they are small
+    // and this routine is only called once at progarm initialization
 
     // init local vars
     fp = NULL;
@@ -147,7 +148,7 @@ int grammar_init(char *filename, hndlr_lookup_t *hlu)
     // close
     fclose(fp);
 
-#if 1
+#if 0
     // debug print the grammar table
     INFO("max_grammar = %d\n", max_grammar);
     for (int i = 0; i < max_grammar; i++) {
@@ -310,7 +311,9 @@ static int match(char *syntax, char *cmd, args_t args)
         // get the next token
         get_token(syntax, token, &token_len);
 
-        // xxx comment
+        // if this token is an arg (begins with N:) then set is_arg to
+        // remember the arg number, and remove the N: from the beginning
+        // of the token
         is_arg = -1;
         if (token[0] >= '0' && token[0] <= '9' && token[1] == ':') {
             is_arg = token[0] - '0';
@@ -387,7 +390,8 @@ static int match(char *syntax, char *cmd, args_t args)
             *p = save;
         }
 
-        // xxx comment
+        // if the token that was just processed is an arg then
+        // copy the matching string to the return arg buffer
         if (is_arg != -1) {
             memcpy(args[is_arg], cmd, match_len);
             args[is_arg][match_len] = '\0';
