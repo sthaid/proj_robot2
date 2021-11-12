@@ -3,6 +3,7 @@ audio
 output.raw
 db.dat
 db_dump
+db_rm
 audio.stderr
 brain.log
 music/*.wav
