@@ -70,7 +70,7 @@ void leds_init(void)
 
     // set leds off, 
     leds_stage_all(LED_OFF,0);
-    leds_commit();
+    leds_commit(0);
 
     // xxx
     atexit(leds_exit);
@@ -79,7 +79,7 @@ void leds_init(void)
 static void leds_exit(void)
 {
     leds_stage_all(LED_OFF,0);
-    leds_commit();
+    leds_commit(0);
 }
 
 // -----------------  LEDS API  ----------------------------------------------------------
@@ -103,8 +103,7 @@ void leds_stage_led(int num, unsigned int rgb, int led_brightness)
         return;
     }
 
-    if (led_brightness < 0) led_brightness = 0;
-    if (led_brightness > 100) led_brightness = 100;
+    led_brightness = clip_int(led_brightness, 0, 100);
 
     x->red   = nearbyint(((rgb >>  0) & 0xff) * b[led_brightness]);
     x->green = nearbyint(((rgb >>  8) & 0xff) * b[led_brightness]);
@@ -144,15 +143,17 @@ void leds_stage_rotate(int mode)
     }
 }
 
-void leds_commit(void)
+void leds_commit(int all_brightness)
 {
     int rc, num;
-    int all_brightness;
+
+    all_brightness = clip_int(all_brightness, 0, 100);
+    all_brightness = nearbyint(all_brightness * .31);
 
     for (num = 0; num < MAX_LED; num++) {
         if (*(unsigned int*)&tx->led[num] != 0) break;
     }
-    all_brightness = (num < MAX_LED ? 31 : 0);
+    if (num == MAX_LED) all_brightness = 0;
 
     for (num = 0; num < MAX_LED; num++) {
         struct led_s *x = &tx->led[num];

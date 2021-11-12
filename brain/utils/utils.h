@@ -102,6 +102,21 @@ char *stars(double v, double max_v, int max_stars, char *s);
 void shuffle(void *array, int elem_size, int num_elem);
 int get_filenames(char *dirname, char **names, int *max_names);
 
+// xxx move
+static inline int clip_int(int val, int min, int max)
+{
+    if (val < min) return min;
+    if (val > max) return max;
+    return val;
+}
+
+static inline double clip_double(double val, double min, double max)
+{
+    if (val < min) return min;
+    if (val > max) return max;
+    return val;
+}
+
 // -------- filter routines  --------
 
 static inline double low_pass_filter(double v, double *cx, double k2)
@@ -174,6 +189,7 @@ int sf_gen_white_wav(char *filename, int duration, int max_chan, int sample_rate
 
 // notes:
 // - led_brightness range  0 - 100
+// - all_brightness range  0 - 100
 // - mode: 0=counterclockwise, 1=clockwise (on respeaker)
 
 #define MAX_LED 12
@@ -197,7 +213,7 @@ void leds_stage_led(int num, unsigned int rgb, int led_brightness);
 void leds_stage_all(unsigned int rgb, int led_brightness);
 void leds_stage_rotate(int mode);
 
-void leds_commit(void);
+void leds_commit(int all_brightness);
 
 // -------- s2t.c --------
 
@@ -230,7 +246,7 @@ double doa_get(void);
 
 // -------- grammar.c --------
 
-typedef char args_t[10][1000];
+typedef char args_t[10][100];
 typedef int (*hndlr_t)(args_t args);
 
 typedef struct {
@@ -244,11 +260,6 @@ bool grammar_match(char *cmd, hndlr_t *proc, args_t args);
 
 // -------- db.c --------
 
-#define KEYID_T2S       1
-#define KEYID_INFO      2  // xxx USER_INFO
-#define KEYID_SETTINGS  3  // xxx PROGRAM_SETTINGS
-#define KEYID_COLOR_ORGAN 4
-
 void db_init(char *file_name, bool create, uint64_t file_len);
 
 int db_get(int keyid, char *keystr, void **val, unsigned int *val_len);
@@ -261,10 +272,35 @@ unsigned int db_get_free_list_len(void);
 void db_reset(void);
 void db_dump(void);
 
-// -------- audio.c --------
+// xxx maybe move
+static inline void db_set_int(int keyid, char *keystr, int value)
+{
+    char val_str[20];
+    int rc;
 
-#define DEFAULT_VOLUME 20
-#define DELTA_VOLUME   5
+    sprintf(val_str, "%d", value);
+    rc = db_set(keyid, keystr, val_str, strlen(val_str)+1);
+    assert(rc == 0);
+}
+
+static inline int db_get_int(int keyid, char *keystr, int default_value)
+{
+    char *val_str;
+    unsigned int val_len;
+    int val, rc;
+    
+    rc = db_get(keyid, keystr, (void**)&val_str, &val_len);
+    if (rc < 0) {
+        db_set_int(keyid, keystr, default_value);
+        return default_value;
+    } else {
+        rc = sscanf(val_str, "%d", &val);
+        assert(rc == 1);
+        return val;
+    }
+}
+
+// -------- audio.c --------
 
 #define AUDIO_SHM "/audio_shm"
 
@@ -290,7 +326,7 @@ typedef struct {
     double high;
 } audio_shm_t;
 
-void audio_init(int (*proc_mic_data)(short *frame));
+void audio_init(int (*proc_mic_data)(short *frame), int volume);
 
 int audio_in_reset_mic(void);
 
@@ -303,6 +339,5 @@ bool audio_out_is_complete(void);
 void audio_out_cancel(void);
 void audio_out_get_low_mid_high(double *low, double *mid, double *high);
 
-void audio_out_set_volume(int percent, bool relative);
-int audio_out_get_volume(void);
+void audio_out_set_volume(int volume);
 

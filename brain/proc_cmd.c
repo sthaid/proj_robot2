@@ -24,12 +24,12 @@ static int hndlr_end_program(args_t args);
 static int hndlr_restart_program(args_t args);
 static int hndlr_reset_mic(args_t args);
 static int hndlr_playback(args_t args);
-// volume control
-static int hndlr_set_volume(args_t args);
-static int hndlr_get_volume(args_t args);
-// personal info
-static int hndlr_set_info(args_t args);
-static int hndlr_get_info(args_t args);
+// program settings
+static int hndlr_set(args_t args);
+static int hndlr_get(args_t args);
+// user info
+static int hndlr_set_user_info(args_t args);
+static int hndlr_get_user_info(args_t args);
 // body status & power
 static int hndlr_body_power(args_t args);
 static int hndlr_status_report(args_t args);
@@ -52,12 +52,12 @@ static hndlr_lookup_t hndlr_lookup_tbl[] = {
     HNDLR(restart_program),
     HNDLR(reset_mic),
     HNDLR(playback),
-    // volume control
-    HNDLR(set_volume),
-    HNDLR(get_volume),
-    // personal info
-    HNDLR(set_info),
-    HNDLR(get_info),
+    // program settings
+    HNDLR(set),
+    HNDLR(get),
+    // user info
+    HNDLR(set_user_info),
+    HNDLR(get_user_info),
     // body status & power
     HNDLR(body_power),
     HNDLR(status_report),
@@ -189,63 +189,87 @@ static int hndlr_playback(args_t args)
     audio_out_play_data(data, MAX_DATA, 16000);
     return 0;
 }
+
 // ----------------------
-// volume control
+// program settings
 // ----------------------
 
-static int hndlr_set_volume(args_t args)
+static int hndlr_set(args_t args)
 {
-    char *action = args[0];
-    char *amount = args[1];
+    int val;
 
-    if (strmatch(action, "up", "increase", NULL)) {
-        audio_out_set_volume(getnum(amount, DELTA_VOLUME), true);
-    } else if (strmatch(action, "down", "decrease", NULL)) {
-        audio_out_set_volume(-getnum(amount, DELTA_VOLUME), true);
-    } else if (strmatch(action, "set", NULL)) {
-        audio_out_set_volume(getnum(amount, DEFAULT_VOLUME), false);
-    } else if (strmatch(action, "reset", NULL)) {
-        audio_out_set_volume(DEFAULT_VOLUME, false);
+    INFO("set '%s' to %s\n", args[0], args[1]);
+
+    if (strcmp(args[1], "to") == 0) strcpy(args[1], "2");
+    if (sscanf(args[1], "%d", &val) != 1) {
+        return -1;
+    }
+    INFO("xxx val %d\n", val);
+
+    if (strcmp(args[0], "volume") == 0) {
+        settings.volume = clip_int(val, 0, 50);
+        audio_out_set_volume(settings.volume);
+        db_set_int(KEYID_PROG_SETTINGS, "volume", settings.volume);
+        t2s_play("volume has been set to %d%%", settings.volume);
+    } else if (strcmp(args[0], "brightness") == 0) {
+        settings.brightness = clip_int(val, 20, 100);
+        db_set_int(KEYID_PROG_SETTINGS, "brightness", settings.brightness);
+        t2s_play("brightness has been set to %d%%", settings.brightness);
+    } else if ((strcmp(args[0], "color organ") == 0) ||
+               (strcmp(args[0], "color oregon") == 0)) {
+        settings.color_organ = clip_int(val, 1, 2);
+        db_set_int(KEYID_PROG_SETTINGS, "color organ", settings.color_organ);
+        t2s_play("color organ has been set to version %d%", settings.color_organ);
     } else {
-        ERROR("hndllr_se_volume unexpected action '%s'\n", action);
         return -1;
     }
 
-    t2s_play("The volume is now %d%%.", audio_out_get_volume());
-
     return 0;
 }
 
-static int hndlr_get_volume(args_t args)
+static int hndlr_get(args_t args)
 {
-    t2s_play("The volume is %d%%.", audio_out_get_volume());
-
+    if (strcmp(args[0], "settings") == 0) {
+        hndlr_get((args_t){"volume"});
+        hndlr_get((args_t){"brightness"});
+        hndlr_get((args_t){"color organ"});
+    } else if (strcmp(args[0], "volume") == 0) {
+        t2s_play("the volume is %d%%", settings.volume);
+    } else if (strcmp(args[0], "brightness") == 0) {
+        t2s_play("the brightness is %d%%", settings.brightness);
+    } else if ((strcmp(args[0], "color organ") == 0) ||
+               (strcmp(args[0], "color oregon") == 0)) {
+        t2s_play("the color organ is version %d", settings.color_organ);
+    } else {
+        return -1;
+    }
+    
     return 0;
 }
 
 // ----------------------
-// personal info
+// user info
 // ----------------------
 
-static int hndlr_set_info(args_t args)
+static int hndlr_set_user_info(args_t args)
 {
     char *info_id = args[0];
     char *info_val = args[1];
 
     t2s_play("your %s is %s, got it!", info_id, info_val);
-    db_set(KEYID_INFO, info_id, info_val, strlen(info_val)+1);
+    db_set(KEYID_USER_INFO, info_id, info_val, strlen(info_val)+1);
 
     return 0;
 }
 
-static int hndlr_get_info(args_t args)
+static int hndlr_get_user_info(args_t args)
 {
     char *info_id = args[0];
     char *info_val;
     unsigned int info_val_len;
     int rc;
 
-    if (db_get(KEYID_INFO, args[0], (void**)&info_val, &info_val_len) < 0) {
+    if (db_get(KEYID_USER_INFO, args[0], (void**)&info_val, &info_val_len) < 0) {
         t2s_play("I don't know your %s", info_id);
         rc = -1;
     } else {

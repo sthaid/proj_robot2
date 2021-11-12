@@ -19,33 +19,30 @@ playback
 END
 
 # ==================
-# VOLUME CONTROL
+# PROGRAM SETTINGS
 # ==================
 
-HNDLR set_volume
-0:<increase decrease> volume [by] [1:PERCENT]
-volume 0:<increase decrease up down> [by] [1:PERCENT]
-0:set volume [to] 1:PERCENT
-0:reset volume
+HNDLR set
+set 0:<volume brightness> to 1:PERCENT
+set 0:<(color organ) (color oregon)> to version 1:NUMBER
 END
 
-HNDLR get_volume
-get volume
-query volume
-what is <the your> volume
+HNDLR get
+<get (what is your)> 0:<volume brightness (color organ) (color oregon)>
+what are your 0:settings
 END
 
 # ==================
-# PERSONAL INFO
+# USER INFO
 # ==================
 
 DEFINE INFO <name  age  (favorite color)>
 
-HNDLR set_info
+HNDLR set_user_info
 my 0:INFO is 1:(WORD [WORD])
 END
 
-HNDLR get_info
+HNDLR get_user_info
 what is my 0:INFO
 END
 

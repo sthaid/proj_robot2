@@ -9,20 +9,16 @@ static pthread_t proc_mic_data_tid;
 static audio_shm_t *shm;
 static bool audio_exitting;
 static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
-static int curr_vol = DEFAULT_VOLUME;
 
 // prototypes
 static void audio_exit(void);
 static void *proc_mic_data_thread(void *cx);
-static void amixer_set_playback_volume(void);
 
 // -----------------  INIT  -------------------------------------------------
 
-void audio_init(int (*proc_mic_data)(short *frame))
+void audio_init(int (*proc_mic_data)(short *frame), int volume)
 {
     int rc, fd;
-    int *curr_vol_ptr; 
-    unsigned int unused_len;
 
     // if audio pgm is already running, then error
     rc = system("pgrep -x audio");
@@ -30,17 +26,9 @@ void audio_init(int (*proc_mic_data)(short *frame))
         FATAL("audio pgm is already running\n");
     }
 
-    // get the current volume, and invoke amixer to set it
-    rc = db_get(KEYID_SETTINGS, "curr_vol", (void**)&curr_vol_ptr, &unused_len);
-    if (rc == 0) {
-        curr_vol = *curr_vol_ptr;
-        INFO("retrieved db curr_vol, %d%%\n", curr_vol);
-    } else {
-        db_set(KEYID_SETTINGS, "curr_vol", &curr_vol, sizeof(curr_vol));
-        INFO("initialized db curr_vol, %d%%\n", curr_vol);
-    }
-    amixer_set_playback_volume();
-    
+    // set initial volume
+    audio_out_set_volume(volume);
+
     // create and map audio_shm; 
     // open with O_TRUNC so it will be zeroed
     fd = shm_open(AUDIO_SHM, O_CREAT|O_TRUNC|O_RDWR, 0666);
@@ -83,13 +71,6 @@ static void audio_exit(void)
 
     // stop audio pgm
     system("sudo killall -SIGTERM audio");
-}
-
-static void amixer_set_playback_volume(void)
-{
-    char cmd[100];
-    sprintf(cmd, "amixer -c 1 set PCM Playback Volume %d%%", curr_vol);
-    system(cmd);
 }
 
 static void * proc_mic_data_thread(void *cx)
@@ -220,30 +201,14 @@ void audio_out_get_low_mid_high(double *low, double *mid, double *high)
     *high = shm->high;
 }
 
-
-// The next 2 routines support audio output volume control.
-//
+// Set audio output volume.
 // Notes:
 // - aplay -l              - displays card numbers
 // - arecord -l            - ditto
 // - amixer -c 1 controls  - displays controls
-void audio_out_set_volume(int percent, bool relative)
+void audio_out_set_volume(int volume)
 {
-    if (!relative) {
-        curr_vol = percent;
-    } else {
-        curr_vol += percent;
-    }
-    if (curr_vol < 0) curr_vol = 0;
-    if (curr_vol > 100) curr_vol = 100;
-
-    db_set(KEYID_SETTINGS, "curr_vol", &curr_vol, sizeof(curr_vol));
-
-    amixer_set_playback_volume();
+    char cmd[100];
+    sprintf(cmd, "amixer -c 1 set PCM Playback Volume %d%%", volume);
+    system(cmd);
 }
-
-int audio_out_get_volume(void)
-{
-    return curr_vol;
-}
-

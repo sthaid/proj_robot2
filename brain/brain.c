@@ -82,6 +82,12 @@ static void initialize(void)
     srandom(time(NULL));
 
     // xxx
+    db_init("db.dat", true, GB);
+    settings.volume = db_get_int(KEYID_PROG_SETTINGS, "volume", 20);
+    settings.brightness = db_get_int(KEYID_PROG_SETTINGS, "brightness", 60);
+    settings.color_organ = db_get_int(KEYID_PROG_SETTINGS, "color_organ", 2);
+
+    // xxx
     misc_init();
     wwd_init();
     t2s_init();
@@ -89,9 +95,8 @@ static void initialize(void)
     doa_init();
     leds_init();
     sf_init();
-    db_init("db.dat", true, GB);
     proc_cmd_init();
-    audio_init(proc_mic_data);
+    audio_init(proc_mic_data, settings.volume);
     body_init();
 
     // xxx
@@ -238,7 +243,7 @@ static void *leds_thread(void *cx)
             for (int i = 0; i < MAX_LED; i++) {
                 leds_stage_led(i, LED_BLUE, 50 * (i + 3) / MAX_LED);
             }
-            leds_commit();
+            leds_commit(settings.brightness);
             rotating = true;
             set_leds_idle_time = 0;
             break;
@@ -250,13 +255,13 @@ static void *leds_thread(void *cx)
                 if (led_a != -1) leds_stage_led(led_a, LED_LIGHT_BLUE, 80);
                 if (led_b != -1) leds_stage_led(led_b, LED_LIGHT_BLUE, 80);
             }
-            leds_commit();
+            leds_commit(settings.brightness);
             rotating = false;
             set_leds_idle_time = 0;
             break;
         case LEDS_ERROR:
             leds_stage_all(LED_RED, 50);
-            leds_commit();
+            leds_commit(settings.brightness);
             rotating = false;
             set_leds_idle_time = microsec_timer() + 300000;
             break;
@@ -269,7 +274,7 @@ static void *leds_thread(void *cx)
             set_leds(LEDS_IDLE, -1);
         } else if (rotating && rotating_cnt++ >= 20) {
             leds_stage_rotate(1);
-            leds_commit();
+            leds_commit(settings.brightness);
             rotating_cnt = 0;
         }
 

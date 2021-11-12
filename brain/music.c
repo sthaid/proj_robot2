@@ -1,7 +1,5 @@
 #include <common.h>
 
-static int color_organ_select = 2;
-
 static void color_organ_rev1(char *filename);
 static void color_organ_rev2(char *filename);
 
@@ -34,10 +32,16 @@ int play_music_file(char *filename)
     audio_out_play_wav(pathname, NULL, 0);
 
     // call color_organ, this will return when then music is done
-    if (color_organ_select == 1) {
+    switch (settings.color_organ) {
+    case 1:
         color_organ_rev1(filename);
-    } else {
+        break;
+    case 2:
         color_organ_rev2(filename);
+        break;
+    default:
+        ERROR("settngs.color_organ %d is not supported\n", settings.color_organ);
+        break;
     }
 
     // success
@@ -104,7 +108,7 @@ static void color_organ_rev1(char *filename)
             leds_stage_led(i+4, LED_GREEN, mid * (MAX_BRIGHTNESS / mid_cal));
             leds_stage_led(i+8, LED_BLUE, high * (MAX_BRIGHTNESS / high_cal));
         }
-        leds_commit();
+        leds_commit(settings.brightness);
     }
 }
 
@@ -178,7 +182,7 @@ static void color_organ_rev2(char *filename)
             leds_stage_led(i+4, LED_GREEN, mid * (15 / avg_vals->mid));
             leds_stage_led(i+8, LED_BLUE, high * (15 / avg_vals->high));
         }
-        leds_commit();
+        leds_commit(settings.brightness);
     }
 
     // store avg low,mid,high in db (but only if we have a more complete average)

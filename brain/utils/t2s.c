@@ -1,5 +1,8 @@
 #include <utils.h>
 
+// defines
+#define KEYID_T2S 1   // also defined in common.h
+
 // variables
 static int cnt_db;
 static int cnt_synth_text;
