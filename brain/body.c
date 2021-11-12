@@ -1,15 +1,12 @@
-// xxx turn off body if not being used for 10 minutes
-
 #include <common.h>
-
 #include "../body/include/body_network_intfc.h"
 
 //
 // defines
 //
 
-//#define NODE "192.168.0.11"
-#define NODE "robot-body"
+//#define NODE "192.168.0.11"    // direct connect
+#define NODE "robot-body"        // wifi
 
 #define MUTEX_LOCK do { pthread_mutex_lock(&mutex); } while (0)
 #define MUTEX_UNLOCK do { pthread_mutex_unlock(&mutex); } while (0)
@@ -27,17 +24,22 @@
 
 #define GPIO_BODY_POWER  12
 
+#define MILLION 1000000
+
 //
 // variables
 //
 
-static struct msg_status_s          status;
-static uint64_t                     status_time_us;
+static pthread_mutex_t              mutex = PTHREAD_MUTEX_INITIALIZER;
+
 static int                          conn_sfd = -1;
 static bool                         power_is_on;
-static uint64_t                     power_state_change_time_us;
+static struct msg_status_s          status;
 static struct drive_proc_complete_s drive_proc_complete;
-static pthread_mutex_t              mutex = PTHREAD_MUTEX_INITIALIZER;
+
+static uint64_t                     status_time_us;
+static uint64_t                     power_state_change_time_us;
+static uint64_t                     last_body_drive_time_us;
 
 //
 // prototypes
@@ -74,6 +76,10 @@ int body_drive_cmd(int proc_id, int arg0, int arg1, int arg2, int arg3, char *fa
     static int unique_id;
     msg_t msg;
     bool succ;
+
+    // keep track of the last body drive time; so that body can be powered off
+    // if the body has not been driven in some time
+    last_body_drive_time_us = microsec_timer();
 
     // preset failure_reset to empty string
     failure_reason[0] = '\0';
@@ -118,17 +124,22 @@ void body_emer_stop(void)
 
 void body_power_on(void)
 {
+    last_body_drive_time_us = microsec_timer();
+    power_state_change_time_us = microsec_timer();
+    __sync_synchronize();
+
     digitalWrite(GPIO_BODY_POWER, 0);
     power_is_on = true;
-    power_state_change_time_us = microsec_timer();
     t2s_play("body power is on");
 }
 
 void body_power_off(void)
 {
+    power_state_change_time_us = microsec_timer();
+    __sync_synchronize();
+
     digitalWrite(GPIO_BODY_POWER, 1);
     power_is_on = false;
-    power_state_change_time_us = microsec_timer();
     t2s_play("body power is off");
 }
 
@@ -138,7 +149,7 @@ void body_status_report(void)
         t2s_play("Bbody is off.");
     } else if (conn_sfd == -1) {
         t2s_play("Brain is not connected to body.");
-    } else if (microsec_timer() - status_time_us > 3000000) {
+    } else if (microsec_timer() - status_time_us > 3*MILLION) {
         t2s_play("Status message has not been received from the body.");
     } else {
         t2s_play("Voltage = %0.2f volts", status.voltage);
@@ -153,7 +164,7 @@ void body_weather_report(void)
         t2s_play("Bbody is off.");
     } else if (conn_sfd == -1) {
         t2s_play("Brain is not connected to body.");
-    } else if (microsec_timer() - status_time_us > 3000000) {
+    } else if (microsec_timer() - status_time_us > 3*MILLION) {
         t2s_play("Status message has not been received from the body.");
     } else {
         t2s_play("Temperature = %0.0f degrees", status.temperature_degf);
@@ -178,11 +189,18 @@ static void *connect_and_recv_thread(void *cx)
             continue;
         }
 
+        // if body is on but hasn't been used in the past 10 minutes then turn body off
+        if (power_is_on && microsec_timer() - last_body_drive_time_us > 600*MILLION) {
+            t2s_play("body has not been used for 10 minutes");
+            body_power_off();
+            continue;
+        }
+
         // if not connected then establish connection
         if (conn_sfd == -1) {
             if (connect_to_body() < 0) {
                 // if the body is powered up but hasn't connected then notify of such
-                if ((microsec_timer() - power_state_change_time_us > 60000000) && !notified) {
+                if ((microsec_timer() - power_state_change_time_us > 60*MILLION) && !notified) {
                     t2s_play("body is on but not connected to brain");
                     notified = true;
                 }
