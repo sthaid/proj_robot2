@@ -5,6 +5,8 @@ build:
 	echo
 	make -f Makefile.db_dump
 	echo
+	make -f Makefile.db_rm
+	echo
 
 clean:
 	make -f Makefile.brain $@
@@ -12,4 +14,6 @@ clean:
 	make -f Makefile.audio $@
 	echo
 	make -f Makefile.db_dump $@
+	echo
+	make -f Makefile.db_rm $@
 	echo

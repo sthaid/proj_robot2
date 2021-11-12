@@ -1,0 +1,14 @@
+CC       = gcc
+CFLAGS   = -g -O2 -Wall -Iutils
+LDFLAGS  = -lm -lpthread
+
+TARGET   = db_rm
+SOURCES  = utils/db_rm.c utils/db.c utils/logging.c utils/misc.c
+
+OBJ := $(SOURCES:.c=.o)
+
+$(TARGET): $(OBJ)
+	$(CC) -o $@ $(OBJ) $(LDFLAGS)
+
+clean:
+	rm -f $(TARGET) $(OBJ)
