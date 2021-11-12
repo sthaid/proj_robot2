@@ -246,7 +246,7 @@ double doa_get(void);
 
 // -------- grammar.c --------
 
-typedef char args_t[10][100];
+typedef char args_t[10][200];
 typedef int (*hndlr_t)(args_t args);
 
 typedef struct {

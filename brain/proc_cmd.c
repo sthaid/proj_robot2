@@ -219,7 +219,7 @@ static int hndlr_set(args_t args)
                (strcmp(args[0], "color oregon") == 0)) {
         settings.color_organ = clip_int(val, 1, 2);
         db_set_int(KEYID_PROG_SETTINGS, "color_organ", settings.color_organ);
-        t2s_play("color organ has been set to version %d%", settings.color_organ);
+        t2s_play("color organ has been set to version %d", settings.color_organ);
     } else {
         return -1;
     }

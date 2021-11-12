@@ -250,6 +250,23 @@ bool grammar_match(char *cmd_arg, hndlr_t *proc, args_t args)
     int i, j, match_len,cmd_len;
     char cmd[1000];
 
+    static struct {
+        char *current;
+        char *replace;
+    } subst_tbl[] = {
+        { "zero",  "0" },
+        { "one",   "1" },
+        { "two",   "2" },
+        { "three", "3" },
+        { "four",  "4" },
+        { "five",  "5" },
+        { "six",   "6" },
+        { "seven", "7" },
+        { "eight", "8" },
+        { "nine",  "9" },
+            };
+
+
     // preset return proc to NULL
     *proc = NULL;
 
@@ -257,6 +274,11 @@ bool grammar_match(char *cmd_arg, hndlr_t *proc, args_t args)
     strcpy(cmd, cmd_arg);
     sanitize(cmd);
     for (i = 0; cmd[i]; i++) cmd[i] = tolower(cmd[i]);
+
+    // make substitutions
+    for (i = 0; i < sizeof(subst_tbl)/sizeof(subst_tbl[0]); i++) {
+        substitute(cmd, subst_tbl[i].current, subst_tbl[i].replace);
+    }
     cmd_len = strlen(cmd);
 
     // loop over grammar table to find a match;
