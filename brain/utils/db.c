@@ -807,7 +807,7 @@ static void dump_cb(int keyid, char *keystr, void *val, unsigned int val_len)
         if (keystr2[i] == '\n') keystr2[i] = '.';
     }
 
-    INFO("  %-32s = %s  len=%d\n", keystr2, val_str(val,val_len), val_len);
+    INFO("  %-32s = %-39s  len=%d\n", keystr2, val_str(val,val_len), val_len);
 }
 
 static char *val_str(void *val_arg, unsigned int val_len)
