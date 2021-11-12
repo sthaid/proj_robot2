@@ -102,7 +102,7 @@ static void * proc_mic_data_thread(void *cx)
             last_fidx = (last_fidx + 1) % 48000;
         }
 
-        usleep(1000);
+        usleep(1*MS);
     }
 
     return NULL;
@@ -115,8 +115,8 @@ int audio_in_reset_mic(void)
     int count = 0;
 
     shm->reset_mic = true;
-    while (shm->reset_mic && count++ < 100) {
-        usleep(10000);
+    while (shm->reset_mic && count++ < 200) {
+        usleep(10*MS);
     }
 
     return (shm->reset_mic == false ? 0 : -1);
@@ -128,7 +128,7 @@ int audio_in_reset_mic(void)
 void audio_out_beep(int beep_count)
 {
     MUTEX_LOCK;
-    while (shm->state != AUDIO_OUT_STATE_IDLE) usleep(1000);
+    while (shm->state != AUDIO_OUT_STATE_IDLE) usleep(10*MS);
     shm->state = AUDIO_OUT_STATE_PREP;
     MUTEX_UNLOCK;
     
@@ -145,7 +145,7 @@ void audio_out_beep(int beep_count)
 void audio_out_play_data(short *data, int max_data, int sample_rate)
 {
     MUTEX_LOCK;
-    while (shm->state != AUDIO_OUT_STATE_IDLE) usleep(1000);
+    while (shm->state != AUDIO_OUT_STATE_IDLE) usleep(10*MS);
     shm->state = AUDIO_OUT_STATE_PREP;
     MUTEX_UNLOCK;
 
@@ -163,7 +163,7 @@ void audio_out_play_wav(char *file_name, short **data, int *max_data)
 
     // wait for AUDIO_OUT_STATE_IDLE, and set state to AUDIO_OUT_STATE_PREP
     MUTEX_LOCK;
-    while (shm->state != AUDIO_OUT_STATE_IDLE) usleep(1000);
+    while (shm->state != AUDIO_OUT_STATE_IDLE) usleep(10*MS);
     shm->state = AUDIO_OUT_STATE_PREP;
     MUTEX_UNLOCK;
     
@@ -193,7 +193,7 @@ void audio_out_play_wav(char *file_name, short **data, int *max_data)
 // Wait for audio output to complete.
 void audio_out_wait(void)
 {
-    while (shm->state != AUDIO_OUT_STATE_IDLE) usleep(3000);
+    while (shm->state != AUDIO_OUT_STATE_IDLE) usleep(10*MS);
 }
 
 // Return true if audio output has completed (is IDLE).

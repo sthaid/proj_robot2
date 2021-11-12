@@ -80,6 +80,7 @@ END
 
 HNDLR time
 what [is the] time [is it]
+what's the time
 END
 
 HNDLR weather_report

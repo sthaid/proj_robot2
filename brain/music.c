@@ -80,7 +80,7 @@ static void color_organ_rev1(char *filename)
     // while song is playing, update the leds based on sound intensity
     while (audio_out_is_complete() == false) {
         // update leds at 10 ms interval
-        usleep(10000);
+        usleep(10*MS);
 
         // ignore the first 100 ms because of possible startup sound glitches
         if (cnt++ < 10) {
@@ -148,7 +148,7 @@ static void color_organ_rev2(char *filename)
     // while song is playing, update the leds based on sound intensity
     while (audio_out_is_complete() == false) {
         // update leds at 10 ms interval
-        usleep(10000);
+        usleep(10*MS);
 
         // get the intensity of sound in the low, mid, and high frequency ranges
         audio_out_get_low_mid_high(&low, &mid, &high);

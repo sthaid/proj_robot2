@@ -32,6 +32,9 @@
 #define GB (1024 * MB)
 #define PAGE_SIZE  (sysconf(_SC_PAGE_SIZE))
 
+#define SECONDS 1000000
+#define MS      1000
+
 // -------- logging.c  ------
 
 #define INFO(fmt, args...) log_msg("INFO", fmt, ## args);

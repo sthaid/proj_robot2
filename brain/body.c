@@ -101,7 +101,7 @@ int body_drive_cmd(int proc_id, int arg0, int arg1, int arg2, int arg3, char *fa
 
     // wait for response to be received
     while (drive_proc_complete.unique_id != unique_id) {
-        usleep(1000);
+        usleep(10*MS);
     }
 
     // if body drive command failed then copy the failure_reason string to caller
@@ -152,23 +152,23 @@ void body_status_report(void)
     } else if (microsec_timer() - status_time_us > 3*MILLION) {
         t2s_play("Status message has not been received from the body.");
     } else {
-        t2s_play("Voltage = %0.2f volts", status.voltage);
-        t2s_play("Current = %0.0f milliamps", 1000*status.total_current);
-        t2s_play("Magnetic heading = %0.0f degrees", status.mag_heading);
+        t2s_play_nodb("Voltage = %0.2f volts", status.voltage);
+        t2s_play_nodb("Current = %0.0f milliamps", 1000*status.total_current);
+        t2s_play_nodb("Magnetic heading = %0.0f degrees", status.mag_heading);
     }
 }
 
 void body_weather_report(void)
 {
     if (!power_is_on) {
-        t2s_play("Bbody is off.");
+        t2s_play("Body is off.");
     } else if (conn_sfd == -1) {
         t2s_play("Brain is not connected to body.");
     } else if (microsec_timer() - status_time_us > 3*MILLION) {
         t2s_play("Status message has not been received from the body.");
     } else {
-        t2s_play("Temperature = %0.0f degrees", status.temperature_degf);
-        t2s_play("Pressure = %0.2f inches of mercury", status.pressure_inhg);
+        t2s_play_nodb("Temperature = %0.0f degrees", status.temperature_degf);
+        t2s_play_nodb("Pressure = %0.2f inches of mercury", status.pressure_inhg);
     }
 }
 
@@ -294,7 +294,7 @@ try_again:
     if (rc != sizeof(msg_t)) {
         if (rc == -1 && errno == EAGAIN && eagain_count++ < 20) {
             WARN("EAGAIN, delay and try again\n");
-            usleep(100000);
+            usleep(10*MS);
             goto try_again;
         } else if (rc == 0) {
             ERROR("connection closed by peer\n");

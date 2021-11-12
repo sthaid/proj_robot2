@@ -75,7 +75,7 @@ static void *s2t_thread(void *cx)
         // wait for indication to start 
         while (max_sv == 0) {
             if (terminating) return NULL;
-            usleep(30000);
+            usleep(10*MS);
         }
 
         // execute the livecaption go program, and
@@ -126,8 +126,8 @@ static void *s2t_thread(void *cx)
                 break;
             }
 
-            // short sleep, 10ms
-            usleep(10000);
+            // short sleep
+            usleep(10*MS);
         }
 
         // the transcript is ready to be returned by s2t_feed
@@ -143,7 +143,7 @@ static void *s2t_thread(void *cx)
         // wait for s2t_feed to acknowledge that it has the transcript
         while (transcript) {
             if (terminating) return NULL;
-            usleep(10000);
+            usleep(10*MS);
         }
     }
 
@@ -160,12 +160,8 @@ static void *s2t_thread(void *cx)
         // wait for indication to start 
         while (max_sv == 0) {
             if (terminating) return NULL;
-            usleep(30000);
+            usleep(10*MS);
         }
-
-        // to test microphone, playback the last 3 secs
-        sleep(3);
-        audio_out_play_data(sv, max_sv, 16000);
 
         // provide a dummy transcript
         ts = malloc(100);
@@ -176,7 +172,7 @@ static void *s2t_thread(void *cx)
         // wait for s2t_feed to acknowledge that it has the transcript
         while (transcript) {
             if (terminating) return NULL;
-            usleep(10000);
+            usleep(10*MS);
         }
     }
 

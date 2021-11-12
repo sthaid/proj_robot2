@@ -43,7 +43,7 @@ int main(int argc, char **argv)
 
     // wait for end_pgm
     while (!end_program) {
-        usleep(100000);
+        usleep(10*MS);
     }
     
     // program is terminating
@@ -279,7 +279,7 @@ static void *leds_thread(void *cx)
             rotating_cnt = 0;
         }
 
-        usleep(10000);
+        usleep(10*MS);
     }
 
     return NULL;

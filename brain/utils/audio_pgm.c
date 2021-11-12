@@ -76,7 +76,7 @@ int main(int argc, char **argv)
     // wait for audio output to complete
     sleep(1);
     while (shm->state != AUDIO_OUT_STATE_IDLE) {
-        usleep(10000);
+        usleep(10*MS);
     }
 
     // terminate
@@ -97,7 +97,7 @@ static void *audio_out_thread(void *cx)
     while (true) {
         // wait
         while (shm->state != AUDIO_OUT_STATE_PLAY) {
-            usleep(2000);
+            usleep(10*MS);
         }
 
         // play
@@ -217,7 +217,7 @@ static int recv_mic_data(const void *frame, void *cx)
 static void *recv_mic_data_setup_thread(void *cx)
 {
     while (recv_mic_data_tid == 0) {
-        usleep(1000);
+        usleep(10*MS);
     }
 
     struct sched_param param;

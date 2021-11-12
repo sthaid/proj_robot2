@@ -13,7 +13,7 @@ static bool cancel;
 
 static void *cmd_thread(void *cx);
 static int getnum(char *s, int default_value);
-static bool strmatch(char *s, ...);
+static bool strmatch(char *s, ...) __attribute__((unused));
 
 //
 // handlers
@@ -123,7 +123,7 @@ static void *cmd_thread(void *cx)
     while (true) {
         // wait for cmd
         while (cmd == NULL || cmd == (void*)1) {
-            usleep(10000);
+            usleep(10*MS);
         }
 
         // check if cmd matches known grammar, and call hndlr proc
@@ -376,7 +376,7 @@ static int hndlr_count(args_t args)
 
     for (int i = 1; i <= cnt; i++) {
         t2s_play("%d", i);
-        usleep(200000);
+        usleep(200*MS);
         if (cancel) break;
     }        
 
@@ -389,6 +389,7 @@ static int hndlr_polite_conversation(args_t args)
         char *cmd;
         char *response;
     } tbl[] = {
+// xxx random responses
         { "hello",
           "Hello to you to" },
         { "how are you",
@@ -411,7 +412,7 @@ static int hndlr_polite_conversation(args_t args)
     }
 
     ERROR("polite_conversation: '%s'\n", args[0]);
-    t2s_play("Sorry, I do not understand you");
+    t2s_play("Sorry, I do not understand");
     return 0;
 }
 
@@ -450,9 +451,9 @@ static int hndlr_play_music(args_t args)
             return -1;
         }
         shuffle(names, sizeof(void*), max_names);
-        for (int i = 0; i < max_names; i++) {
-            INFO("shuffled music file list - %s\n", names[i]);
-        }
+        //for (int i = 0; i < max_names; i++) {
+        //    INFO("shuffled music file list - %s\n", names[i]);
+        //}
 
         // play the music files 
         for (int i = 0; i < max_names; i++) {
