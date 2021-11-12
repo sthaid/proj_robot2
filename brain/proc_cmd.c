@@ -389,19 +389,18 @@ static int hndlr_polite_conversation(args_t args)
         char *cmd;
         char *response;
     } tbl[] = {
-// xxx random responses
         { "hello",
-          "Hello to you to" },
+          "Hello." },
         { "how are you",
-          "I am well, thank you for asking" },
+          "Fine, thank you." },
         { "how do you feel",
-          "I am well, thank you for asking" },
+          "I am well today, thank you for asking." },
         { "how old are you", 
-          "I am still very young" },
+          "I am still very young." },
         { "what is your favorite color",
-          "I like purple" },
+          "I like all colors, especially purple." },
         { "what is your name",
-          "I haven't decided on a name yet" },
+          "My name is Porcupine." },
                 };
 
     for (int i = 0; i < sizeof(tbl)/sizeof(tbl[0]); i++) {
