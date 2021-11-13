@@ -41,11 +41,12 @@
 #define WARN(fmt, args...) log_msg("WARN", fmt, ## args);
 #define ERROR(fmt, args...) log_msg("ERROR", fmt, ## args);
 
+//xxx use us
 #define INFO_INTVL(ms, fmt, args...) \
     do { \
         static uint64_t last; \
         uint64_t now = microsec_timer(); \
-        if (now - last > 1000*ms) { \
+        if (now - last > 1000*(ms)) { \
             log_msg("INFO", fmt, ## args); \
             last = now; \
         } \
@@ -54,7 +55,7 @@
     do { \
         static uint64_t last; \
         uint64_t now = microsec_timer(); \
-        if (now - last > 1000*ms) { \
+        if (now - last > 1000*(ms)) { \
             log_msg("WARN", fmt, ## args); \
             last = now; \
         } \
@@ -63,7 +64,7 @@
     do { \
         static uint64_t last; \
         uint64_t now = microsec_timer(); \
-        if (now - last > 1000*ms) { \
+        if (now - last > 1000*(ms)) { \
             log_msg("ERROR", fmt, ## args); \
             last = now; \
         } \
