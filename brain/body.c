@@ -45,6 +45,7 @@ static int                          conn_sfd = -1;
 static bool                         power_is_on;
 static struct msg_status_s          status;
 static struct drive_proc_complete_s drive_proc_complete;
+static bool                         body_emer_stop_called;
 
 static uint64_t                     status_time;
 static uint64_t                     power_on_time;
@@ -110,6 +111,10 @@ int body_drive_cmd(int proc_id, int arg0, int arg1, int arg2, int arg3, char *fa
         return -1;
     }
 
+    // clear body_emer_stop_called flag; this flag will be
+    // set if body_emer_stop is called while processing this drive command
+    body_emer_stop_called = false;
+
     // send the body drive request
     msg.id = MSG_ID_DRIVE_PROC;
     msg.drive_proc.proc_id = proc_id;;
@@ -133,21 +138,58 @@ int body_drive_cmd(int proc_id, int arg0, int arg1, int arg2, int arg3, char *fa
     // release mutex
     MUTEX_UNLOCK;
 
-    // wait for response to be received
-    // xxx timeout or cancel ?
-    // xxx or conn_sfd
-    // xxx failure reason
-    while (drive_proc_complete.unique_id != unique_id) {
+    // wait for response to be received or abnormal completion
+    while (drive_proc_complete.unique_id != unique_id && 
+           conn_sfd != -1 &&
+           body_emer_stop_called == false)
+    {
         usleep(10*MS);
     }
 
-    // if body drive command failed then copy the failure_reason string to caller
-    if (!drive_proc_complete.succ) {
-        strcpy(failure_reason, drive_proc_complete.failure_reason);
+    // reached here because one of these:
+    // - received a response from body
+    // - lost connection to body
+    // - body_emer_stop has been called
+
+    // handle the completion possibilities
+    if (drive_proc_complete.unique_id == unique_id) {
+        if (drive_proc_complete.succ) {
+            return 0;
+        } else {
+            strcpy(failure_reason, drive_proc_complete.failure_reason);
+            return -1;
+        }
+    } else if (conn_sfd == -1) {
+        strcpy(failure_reason, "lost connection to body");
+        return -1;
+    } else {
+        // must be body_emer_stop was called ...
+        //
+        // there should be a drive_proc_complete received as a result of the emer stop;
+        // give one second to receive it
+        int cnt = 0;
+        while (drive_proc_complete.unique_id != unique_id && cnt++ < 100) {
+            usleep(10*MS);
+        }
+
+        // if the drive_proc_complete was received then return completion status
+        // from it, otherwise return error that the emergency stop acknowledgement was
+        // not received
+        if (drive_proc_complete.unique_id == unique_id) {
+            if (drive_proc_complete.succ) {
+                return 0;
+            } else {
+                strcpy(failure_reason, drive_proc_complete.failure_reason);
+                return -1;
+            }
+        } else {
+            strcpy(failure_reason, "did not receive emergency stop acknowledgement from body");
+            return -1;
+        }
     }
 
-    // return 0 for success, -1 for failure
-    return drive_proc_complete.succ ? 0 : -1;
+    // should not get here
+    assert(0);
 }
 
 void body_emer_stop(void)
@@ -156,6 +198,8 @@ void body_emer_stop(void)
     bool succ __attribute__((unused));
 
     MUTEX_LOCK;
+
+    body_emer_stop_called = true;
 
     msg.id = MSG_ID_DRIVE_EMER_STOP;
     SEND_MSG(&msg, succ);
