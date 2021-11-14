@@ -246,9 +246,9 @@ void body_status_report(void)
     } else if (microsec_timer() - status_time > 5*MILLION) {
         t2s_play("Status message has not been received from the body.");
     } else {
-        t2s_play_nodb("Voltage = %0.2f volts", status.voltage);
-        t2s_play_nodb("Current = %0.0f milliamps", 1000*status.total_current);
-        t2s_play_nodb("Magnetic heading = %0.0f degrees", status.mag_heading);
+        t2s_play("Voltage is"); t2s_play_nodb("%0.2f volts", status.voltage);
+        t2s_play("Current is"); t2s_play_nodb("%0.0f milliamps", 1000*status.total_current);
+        t2s_play("Magnetic heading is"); t2s_play_nodb("%0.0f degrees", status.mag_heading);
     }
 }
 
@@ -261,8 +261,8 @@ void body_weather_report(void)
     } else if (microsec_timer() - status_time > 5*MILLION) {
         t2s_play("Status message has not been received from the body.");
     } else {
-        t2s_play_nodb("Temperature = %0.0f degrees", status.temperature_degf);
-        t2s_play_nodb("Pressure = %0.2f inches of mercury", status.pressure_inhg);
+        t2s_play("Temperature is %0.0f degrees", status.temperature_degf);
+        t2s_play("Pressure is %0.1f inches of mercury", status.pressure_inhg);
     }
 }
 
@@ -437,9 +437,7 @@ static void *monitor_thread(void *cx)
             // if body power has been on for 60 seconds, but connection not established 
             // then issue warning
             if (conn_sfd == -1 && SECS(power_on_time) > 60) {
-                T2S_PLAY_INTVL(60*MILLION, 
-                    "Body power has been on for %d seconds, but brain is not connected to body.", 
-                    SECS(power_on_time));
+                T2S_PLAY_INTVL(60*MILLION, "Brain is not connected to body.");
                 break;
             }
 

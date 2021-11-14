@@ -81,10 +81,10 @@ static void t2s_play_common(bool nodb, char *fmt, va_list ap)
             return;
         }
         cnt_synth_text_nodb++;
-        audio_out_play_wav("output.raw", NULL, 0);
+        audio_out_play_wav("output.raw", NULL, 0, true);
     } else {
         if (db_get(KEYID_T2S, text, &val, &val_len) == 0) {
-            audio_out_play_data((short*)val, val_len/sizeof(short), 24000);
+            audio_out_play_data((short*)val, val_len/sizeof(short), 24000, true);
             cnt_db++;
         } else {
             if (system(cmd) < 0) {
@@ -93,7 +93,7 @@ static void t2s_play_common(bool nodb, char *fmt, va_list ap)
             }
             cnt_synth_text++;
 
-            audio_out_play_wav("output.raw", &data, &max_data);
+            audio_out_play_wav("output.raw", &data, &max_data, true);
 
             if (db_set(KEYID_T2S, text, data, max_data*sizeof(short)) < 0) {
                 ERROR("db_set %s failed\n", text);

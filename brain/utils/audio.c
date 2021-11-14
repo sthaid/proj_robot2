@@ -125,7 +125,7 @@ int audio_in_reset_mic(void)
 // -----------------  AUDIO OUT API ROUTINES  --------------------------------
 
 // These 3 routines return when audio output has started.
-void audio_out_beep(int beep_count)
+void audio_out_beep(int beep_count, bool complete_to_idle)
 {
     MUTEX_LOCK;
     while (shm->state != AUDIO_OUT_STATE_IDLE) usleep(10*MS);
@@ -137,12 +137,13 @@ void audio_out_beep(int beep_count)
         memcpy(shm->data + (i * MAX_BEEP_DATA), beep_data, sizeof(beep_data));
     }
     shm->max_data = beep_count * MAX_BEEP_DATA;
+    shm->complete_to_idle = complete_to_idle;
 
     __sync_synchronize();
     shm->state = AUDIO_OUT_STATE_PLAY;
 }
 
-void audio_out_play_data(short *data, int max_data, int sample_rate)
+void audio_out_play_data(short *data, int max_data, int sample_rate, bool complete_to_idle)
 {
     MUTEX_LOCK;
     while (shm->state != AUDIO_OUT_STATE_IDLE) usleep(10*MS);
@@ -152,12 +153,13 @@ void audio_out_play_data(short *data, int max_data, int sample_rate)
     shm->sample_rate = sample_rate;
     memcpy(shm->data, data, max_data*sizeof(short));
     shm->max_data = max_data;
+    shm->complete_to_idle = complete_to_idle;
 
     __sync_synchronize();
     shm->state = AUDIO_OUT_STATE_PLAY;
 }
 
-void audio_out_play_wav(char *file_name, short **data, int *max_data)
+void audio_out_play_wav(char *file_name, short **data, int *max_data, bool complete_to_idle)
 {
     int max_chan, rc;
 
@@ -178,6 +180,11 @@ void audio_out_play_wav(char *file_name, short **data, int *max_data)
     assert(shm->max_data > 0 && shm->max_data <= sizeof(shm->data)/sizeof(short));
     assert(max_chan == 1);
 
+    // set the complete_to_idle flag; 
+    // this will cause the audio_pgm code, when the audio output has completed, to
+    //  set the state to AUDIO_OUT_STATE_IDLE as opposed to AUDIO_OUT_STATE_PLAY_DONE
+    shm->complete_to_idle = complete_to_idle;
+
     // if caller wants copy of data then provide to caller
     if (data) {
         *data = malloc(shm->max_data * sizeof(short));
@@ -193,19 +200,33 @@ void audio_out_play_wav(char *file_name, short **data, int *max_data)
 // Wait for audio output to complete.
 void audio_out_wait(void)
 {
-    while (shm->state != AUDIO_OUT_STATE_IDLE) usleep(10*MS);
+    while (shm->state != AUDIO_OUT_STATE_IDLE && shm->state != AUDIO_OUT_STATE_PLAY_DONE)
+        usleep(10*MS);
 }
 
 // Return true if audio output has completed (is IDLE).
 bool audio_out_is_complete(void)
 {
-    return shm->state == AUDIO_OUT_STATE_IDLE;
+    return (shm->state == AUDIO_OUT_STATE_IDLE || shm->state == AUDIO_OUT_STATE_PLAY_DONE);
 }
 
 // Cancel audio output.
 void audio_out_cancel(void)
 {
     shm->cancel = true;
+}
+
+// Set audio output state to AUDIO_OUT_STATE_IDLE. 
+// This is intended to be used only after an audio_output that was started with
+// the complete_to_idle flag set false, has completed. Calling this routine will
+// then allow the next audio output to start.
+void audio_out_set_state_idle(void)
+{
+    if (shm->state != AUDIO_OUT_STATE_PLAY_DONE) {
+        ERROR("audio_out_state = %d, should be AUDIO_OUT_STATE_DONE\n", shm->state);
+        return;
+    }
+    shm->state = AUDIO_OUT_STATE_IDLE;
 }
 
 // Return sound level for the low, mid and high frequency bands

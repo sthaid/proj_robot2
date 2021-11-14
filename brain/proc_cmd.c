@@ -106,7 +106,7 @@ bool proc_cmd_in_progress(bool *succ)
 
 void proc_cmd_cancel(void)
 {
-    INFO("CANCEL CMD\n");
+    INFO("*** CANCEL ***\n");
     cancel = true;
     audio_out_cancel();
     body_emer_stop();
@@ -133,7 +133,7 @@ static void *cmd_thread(void *cx)
             cancel = false;
             rc = proc(args);
         } else {
-            audio_out_beep(2);
+            audio_out_beep(2, true);
             rc = -1;
         }
 
@@ -186,7 +186,7 @@ static int hndlr_playback(args_t args)
     short data[MAX_DATA];
 
     brain_get_recording(data, MAX_DATA);
-    audio_out_play_data(data, MAX_DATA, 16000);
+    audio_out_play_data(data, MAX_DATA, 16000, true);
     return 0;
 }
 
@@ -357,7 +357,7 @@ static int hndlr_time(args_t args)
     time_t t = time(NULL);
 
     tm = localtime(&t);
-    t2s_play("the time is");  // xxx make same change in other places
+    t2s_play("the time is");
     t2s_play_nodb("%d %2.2d", tm->tm_hour, tm->tm_min);
 
     return 0;

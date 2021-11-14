@@ -29,7 +29,7 @@ int play_music_file(char *filename)
 
     // announce what song is about to play, and play it
     t2s_play("playing %s", announce);
-    audio_out_play_wav(pathname, NULL, 0);
+    audio_out_play_wav(pathname, NULL, 0, false);
 
     // call color_organ, this will return when then music is done
     switch (settings.color_organ) {
@@ -41,6 +41,8 @@ int play_music_file(char *filename)
         break;
     default:
         ERROR("settngs.color_organ %d is not supported\n", settings.color_organ);
+        audio_out_wait();
+        audio_out_set_state_idle();
         break;
     }
 
@@ -110,6 +112,10 @@ static void color_organ_rev1(char *filename)
         }
         leds_commit(settings.brightness);
     }
+
+    // since the audio output was started with complete_to_idle set false,
+    // call audio_out_set_state_idle
+    audio_out_set_state_idle();
 }
 
 // -----------------  COLOR ORGAN REV2  --------------------------------------------
@@ -191,4 +197,8 @@ static void color_organ_rev2(char *filename)
         INFO("set db_avg_vals %8d %8.0f %8.0f %8.0f\n", 
              new_avg_vals.n, new_avg_vals.low, new_avg_vals.mid, new_avg_vals.high);
     }
+
+    // since the audio output was started with complete_to_idle set false,
+    // call audio_out_set_state_idle
+    audio_out_set_state_idle();
 }

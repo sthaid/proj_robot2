@@ -270,9 +270,10 @@ void db_dump(void);
 
 #define AUDIO_SHM "/audio_shm"
 
-#define AUDIO_OUT_STATE_IDLE   0
-#define AUDIO_OUT_STATE_PREP   1
-#define AUDIO_OUT_STATE_PLAY   2
+#define AUDIO_OUT_STATE_IDLE      0
+#define AUDIO_OUT_STATE_PREP      1
+#define AUDIO_OUT_STATE_PLAY      2
+#define AUDIO_OUT_STATE_PLAY_DONE 3
 
 typedef struct {
     // audio input ...
@@ -285,6 +286,7 @@ typedef struct {
     int   sample_rate;
     int   state;
     bool  cancel;
+    bool  complete_to_idle;
     // audio output amplitude of low, mid and high freq ranges
     double low;
     double mid;
@@ -295,13 +297,14 @@ void audio_init(int (*proc_mic_data)(short *frame), int volume);
 
 int audio_in_reset_mic(void);
 
-void audio_out_beep(int beep_count);
-void audio_out_play_data(short *data, int max_data, int sample_rate);
-void audio_out_play_wav(char *file_name, short **data, int *max_data);
+void audio_out_beep(int beep_count, bool complete_to_idle);
+void audio_out_play_data(short *data, int max_data, int sample_rate, bool complete_to_idle);
+void audio_out_play_wav(char *file_name, short **data, int *max_data, bool complete_to_idle);
 
 void audio_out_wait(void);
 bool audio_out_is_complete(void);
 void audio_out_cancel(void);
+void audio_out_set_state_idle(void);
 void audio_out_get_low_mid_high(double *low, double *mid, double *high);
 
 void audio_out_set_volume(int volume);

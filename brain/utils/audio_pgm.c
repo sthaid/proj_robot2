@@ -106,7 +106,8 @@ static void *audio_out_thread(void *cx)
         pa_play2("USB", 2, shm->sample_rate, PA_INT16, audio_out_get_frame, NULL);
 
         // done
-        shm->state = AUDIO_OUT_STATE_IDLE;
+        shm->state = (shm->complete_to_idle ? AUDIO_OUT_STATE_IDLE 
+                                            : AUDIO_OUT_STATE_PLAY_DONE);
     }
 
     return NULL;
