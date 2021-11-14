@@ -52,6 +52,7 @@ END
 
 HNDLR status_report
 status [report]
+what is your status
 END
 
 HNDLR body_power
