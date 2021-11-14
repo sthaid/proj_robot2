@@ -541,22 +541,20 @@ static int process_cmdline(void)
     } else if (strcmp(cmd, "log_mark") == 0) {
         msg.id = MSG_ID_LOG_MARK;
         send_msg(&msg);
-    } else if ( (strcmp(cmd, "scal") == 0 && (proc_id =   1))  ||
-                (strcmp(cmd, "mcal") == 0 && (proc_id =   2))  ||
-                (strcmp(cmd, "fwd")  == 0 && (proc_id =  11))  ||
-                (strcmp(cmd, "rev")  == 0 && (proc_id =  12))  ||
-                (strcmp(cmd, "rot")  == 0 && (proc_id =  13))  ||
-                (strcmp(cmd, "hdg")  == 0 && (proc_id =  14))  ||
-                (strcmp(cmd, "rad")  == 0 && (proc_id =  15))  ||
-                (strcmp(cmd, "tst1") == 0 && (proc_id = 101)) ||
-                (strcmp(cmd, "tst2") == 0 && (proc_id = 102)) ||
-                (strcmp(cmd, "tst3") == 0 && (proc_id = 103)) ||
-                (strcmp(cmd, "tst4") == 0 && (proc_id = 104)) ||
-                (strcmp(cmd, "tst5") == 0 && (proc_id = 105)) ||
-                (strcmp(cmd, "tst6") == 0 && (proc_id = 106)) ||
-                (strcmp(cmd, "tst7") == 0 && (proc_id = 107)) ||
-                (strcmp(cmd, "tst8") == 0 && (proc_id = 108)) ||
-                (strcmp(cmd, "tst9") == 0 && (proc_id = 109)) 
+    } else if ( (strcmp(cmd, "scal") == 0 && (proc_id = DRIVE_SCAL))  ||
+                (strcmp(cmd, "mcal") == 0 && (proc_id = DRIVE_MCAL))  ||
+                (strcmp(cmd, "fwd")  == 0 && (proc_id = DRIVE_FWD))  ||
+                (strcmp(cmd, "rev")  == 0 && (proc_id = DRIVE_REV))  ||
+                (strcmp(cmd, "rot")  == 0 && (proc_id = DRIVE_ROT))  ||
+                (strcmp(cmd, "hdg")  == 0 && (proc_id = DRIVE_HDG))  ||
+                (strcmp(cmd, "rad")  == 0 && (proc_id = DRIVE_RAD))  ||
+                (strcmp(cmd, "tst1") == 0 && (proc_id = DRIVE_TST1)) ||
+                (strcmp(cmd, "tst2") == 0 && (proc_id = DRIVE_TST2)) ||
+                (strcmp(cmd, "tst3") == 0 && (proc_id = DRIVE_TST3)) ||
+                (strcmp(cmd, "tst4") == 0 && (proc_id = DRIVE_TST4)) ||
+                (strcmp(cmd, "tst5") == 0 && (proc_id = DRIVE_TST5)) ||
+                (strcmp(cmd, "tst6") == 0 && (proc_id = DRIVE_TST6)) ||
+                (strcmp(cmd, "tst7") == 0 && (proc_id = DRIVE_TST7))
                         )
     {
         msg.id = MSG_ID_DRIVE_PROC;

@@ -23,6 +23,22 @@ extern "C" {
 #define MSG_ID_LOGMSG               0x2002
 #define MSG_ID_DRIVE_PROC_COMPLETE  0x2003
 
+// msg drive_proc, proc_id values
+#define DRIVE_SCAL     1   // scal [feet] - drive straight calibration
+#define DRIVE_MCAL     2   // mcal [secs] - magnetometer calibration
+#define DRIVE_FWD     11   // fwd [feet] [mph] - go straight forward
+#define DRIVE_REV     12   // rev [feet] [mph] - go straight reverse
+#define DRIVE_ROT     13   // rot [degress] [fudge] - rotate 
+#define DRIVE_HDG     14   // hdg [heading] [fudge] - rotate to magnetic heading
+#define DRIVE_RAD     15   // rad [degrees] [radius_feet] [fudge] - drive forward with turn radius
+#define DRIVE_TST1   101   // tst1 - repeat drive fwd/rev for range of mph, range 0.3 to 0.8  
+#define DRIVE_TST2   102   // tst2 [fudge] - drive fwd, turn around and return to start point, using gyro
+#define DRIVE_TST3   103   // tst3 [fudge] - drive fwd, turn around and return to start point, using magnetometer
+#define DRIVE_TST4   104   // tst4 [cycles] [fudge] - repeating figure eight
+#define DRIVE_TST5   105   // tst5 [cycles] [fudge] - repeating oval
+#define DRIVE_TST6   106   // tst6 [cycles] [fudge] - repeating square, corner turn radius = 1
+#define DRIVE_TST7   107   // tst7 [cycles] [fudge] - repeating square, corner turn radius = 0
+
 typedef struct {
     int id;
     union {

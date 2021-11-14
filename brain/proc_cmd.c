@@ -4,8 +4,9 @@
 // variables
 //
 
-static char *cmd;
-static bool cancel;
+static char  *cmd;
+static double doa;
+static bool   cancel;
 
 //
 // prototypes
@@ -34,8 +35,12 @@ static int hndlr_get_user_info(args_t args);
 static int hndlr_body_power(args_t args);
 static int hndlr_status_report(args_t args);
 // body drive
-static int hndlr_drive_fwd(args_t args);
-static int hndlr_drive_rotate(args_t args);
+static int hndlr_body_mcal(args_t args);
+static int hndlr_body_fwd(args_t args);
+static int hndlr_body_rev(args_t args);
+static int hndlr_body_rotate(args_t args);
+static int hndlr_body_rotate_to_hdg(args_t args);
+static int hndlr_body_rotate_to_doa(args_t args);
 // misc
 static int hndlr_time(args_t args);
 static int hndlr_weather_report(args_t args);
@@ -62,8 +67,12 @@ static hndlr_lookup_t hndlr_lookup_tbl[] = {
     HNDLR(body_power),
     HNDLR(status_report),
     // body drive
-    HNDLR(drive_fwd),
-    HNDLR(drive_rotate),
+    HNDLR(body_mcal),
+    HNDLR(body_fwd),
+    HNDLR(body_rev),
+    HNDLR(body_rotate),
+    HNDLR(body_rotate_to_hdg),
+    HNDLR(body_rotate_to_doa),
     // misc
     HNDLR(time),
     HNDLR(weather_report),
@@ -86,8 +95,9 @@ void proc_cmd_init(void)
 
 // -----------------  RUNTIME API  ------------------------------------------
 
-void proc_cmd_execute(char *transcript, double doa)
+void proc_cmd_execute(char *transcript, double doa_arg)
 {
+    doa = doa_arg;
     cmd = transcript;
 }
 
@@ -307,44 +317,97 @@ static int hndlr_body_power(args_t args)
 // body drive
 // ----------------------
 
-static int hndlr_drive_fwd(args_t args)
+static int hndlr_body_mcal(args_t args)
 {
-    int feet = getnum(args[0], 0);
-    char failure_reason[200];
-    int rc;
+    t2s_play("calibrating compass");
 
-    // xxx define for 11
-    rc = body_drive_cmd(11, feet, 0, 0, 0, failure_reason);
-    if (rc < 0) {
-        t2s_play("%s", failure_reason);
-    }
-
-    return rc;
+    return body_drive_cmd(DRIVE_MCAL, 0, 0, 0, 0);
 }
 
-static int hndlr_drive_rotate(args_t args)
+static int hndlr_body_fwd(args_t args)
 {
-    char *amount    = args[0];
-    char *direction = args[1];
-    bool dir_is_clockwise;
-    int  degrees;
+    int feet = getnum(args[0], 3);
 
-    dir_is_clockwise = (strcmp(direction, "clockwise") == 0) ||
-                       (strcmp(direction, "") == 0);
+    t2s_play("driving forward %d feed", feet);
 
-    if (sscanf(amount, "%d degrees", &degrees) == 1) {
+    return body_drive_cmd(DRIVE_FWD, feet, 0, 0, 0);
+}
+
+static int hndlr_body_rev(args_t args)
+{
+    int feet = getnum(args[0], 3);
+
+    t2s_play("driving backward %d feed", feet);
+
+    return body_drive_cmd(DRIVE_REV, feet, 0, 0, 0);
+}
+
+static int hndlr_body_rotate(args_t args)
+{
+    int degrees;
+
+    if (sscanf(args[0], "%d degrees", &degrees) == 1) {
         // okay
-    } else if (strcmp(amount, "halfway around") == 0) {
+    } else if (strcmp(args[0], "halfway around") == 0) {
         degrees = 180;
     } else {
         degrees = 360;
     }
+    if (strncmp(args[1], "counter", 7) == 0) {
+        degrees = -degrees;
+    }
 
-    t2s_play("rotate %s %d degrees",
-             dir_is_clockwise ? "clockwise" : "counterclockwise",
-             degrees);
+    t2s_play("rotating %s for %d degrees",
+             degrees >= 0 ? "clockwise" : "counterclockwise",
+             abs(degrees));
 
-    return 0;
+    return body_drive_cmd(DRIVE_ROT, degrees, 0, 0, 0);
+}
+
+static int hndlr_body_rotate_to_hdg(args_t args)
+{
+    static struct {
+        char *name;
+        int hdg;
+    } tbl[] = {
+        { "north", 0 },
+        { "east", 90 },
+        { "south",180 },
+        { "west", 270 },
+            };
+    int heading;
+
+    heading = getnum(args[0], -1);
+    if (heading == -1) {
+        for (int i = 0; i < sizeof(tbl)/sizeof(tbl[0]); i++) {
+            if (strcmp(tbl[i].name, args[0]) == 0) {
+                heading = tbl[i].hdg;
+                break;
+            }
+        } 
+    }
+    if (heading == -1) {
+        t2s_play("invalid heading %s", args[0]);
+        return -1;
+    }
+    
+    t2s_play("rotating to face compass heading %d degrees", heading);
+
+    return body_drive_cmd(DRIVE_HDG, heading, 0, 0, 0);
+}
+
+static int hndlr_body_rotate_to_doa(args_t args)
+{
+    int degrees;
+
+    INFO("doa = %0.0f\n", doa);
+
+    degrees = nearbyint(normalize_angle(doa - 90));
+    if (degrees > 180) degrees = degrees - 360;
+
+    t2s_play("turning %d degrees to face you", degrees);
+
+    return body_drive_cmd(DRIVE_ROT, degrees, 0, 0, 0);
 }
 
 // ----------------------

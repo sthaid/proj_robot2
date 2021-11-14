@@ -1,4 +1,5 @@
 #include <utils.h>
+#include "../body/include/body_network_intfc.h"
 
 #define KEYID_T2S            1
 #define KEYID_USER_INFO      2
@@ -24,7 +25,7 @@ void proc_cmd_cancel(void);
 
 // body.c ...
 void body_init(void);
-int body_drive_cmd(int proc_id, int arg0, int arg1, int arg2, int arg3, char *failure_reason);
+int body_drive_cmd(int proc_id, int arg0, int arg1, int arg2, int arg3);
 void body_emer_stop(void);
 void body_power_on(void);
 void body_power_off(void);

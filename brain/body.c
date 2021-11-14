@@ -1,5 +1,4 @@
 #include <common.h>
-#include "../body/include/body_network_intfc.h"
 
 //
 // defines
@@ -92,22 +91,22 @@ static void exit_handler(void)
 
 // -----------------  API  ---------------------------------------
 
-int body_drive_cmd(int proc_id, int arg0, int arg1, int arg2, int arg3, char *failure_reason)
+int body_drive_cmd(int proc_id, int arg0, int arg1, int arg2, int arg3)
 {
     static int unique_id;
     msg_t msg;
     bool succ;
 
+    // xxx
+    return 0;
+
     // acquire mutex
     MUTEX_LOCK;
 
-    // preset failure_reset to empty string
-    failure_reason[0] = '\0';
-
     // if not connected to body return error
     if (conn_sfd == -1) {
-        strcpy(failure_reason, "brain is not connected to body");
         MUTEX_UNLOCK;
+        t2s_play("brain is not connected to body");
         return -1;
     }
 
@@ -126,8 +125,8 @@ int body_drive_cmd(int proc_id, int arg0, int arg1, int arg2, int arg3, char *fa
 
     SEND_MSG(&msg, succ);
     if (!succ) {
-        strcpy(failure_reason, "failed to send message to body");
         MUTEX_UNLOCK;
+        t2s_play("failed to send message to body");
         return -1;
     }
 
@@ -156,11 +155,11 @@ int body_drive_cmd(int proc_id, int arg0, int arg1, int arg2, int arg3, char *fa
         if (drive_proc_complete.succ) {
             return 0;
         } else {
-            strcpy(failure_reason, drive_proc_complete.failure_reason);
+            t2s_play("%s", drive_proc_complete.failure_reason);
             return -1;
         }
     } else if (conn_sfd == -1) {
-        strcpy(failure_reason, "lost connection to body");
+        t2s_play("lost connection to body");
         return -1;
     } else {
         // must be body_emer_stop was called ...
@@ -179,11 +178,11 @@ int body_drive_cmd(int proc_id, int arg0, int arg1, int arg2, int arg3, char *fa
             if (drive_proc_complete.succ) {
                 return 0;
             } else {
-                strcpy(failure_reason, drive_proc_complete.failure_reason);
+                t2s_play(drive_proc_complete.failure_reason);
                 return -1;
             }
         } else {
-            strcpy(failure_reason, "did not receive emergency stop acknowledgement from body");
+            t2s_play("did not receive emergency stop acknowledgement from body");
             return -1;
         }
     }
@@ -437,7 +436,7 @@ static void *monitor_thread(void *cx)
             // if body power has been on for 60 seconds, but connection not established 
             // then issue warning
             if (conn_sfd == -1 && SECS(power_on_time) > 60) {
-                T2S_PLAY_INTVL(60*MILLION, "Brain is not connected to body.");
+                //xxx T2S_PLAY_INTVL(60*MILLION, "Brain is not connected to body.");
                 break;
             }
 

@@ -36,14 +36,14 @@ END
 # USER INFO
 # ==================
 
-DEFINE INFO <name  age  (favorite color)>
+DEFINE USER_INFO <name  age  (favorite color)>
 
 HNDLR set_user_info
-my 0:INFO is 1:(WORD [WORD])
+my 0:USER_INFO is 1:(WORD [WORD])
 END
 
 HNDLR get_user_info
-what is my 0:INFO
+what is my 0:USER_INFO
 END
 
 # ==================
@@ -63,16 +63,37 @@ END
 # BODY DRIVE
 # ==================
 
-HNDLR drive_fwd
-[<go drive>] forward [for] 0:NUMBER [<feet ft>]
+HNDLR body_mcal
+calibrate <compass magnetometer>
 END
 
-HNDLR drive_rotate
+HNDLR body_fwd
+<drive go> forward 0:[NUMBER] [<feet ft>]
+END
+
+HNDLR body_rev
+<drive go> <backward backwards> 0:[NUMBER] [<feet ft>]
+END
+
+HNDLR body_rotate
 DEFINE AMOUNT <(NUMBER degrees)  (halfway around)  (all [of] the way around)>
 DEFINE DIRECTION <clockwise  counter-clockwise  counterclockwise>
 <rotate turn> 0:[AMOUNT] 1:[DIRECTION]
 <rotate turn> 1:[DIRECTION] 0:[AMOUNT]
 END
+
+HNDLR body_rotate_to_hdg
+[turn to] face 0:<north south east west>
+[turn to] face [compass] heading 0:NUMBER [degrees]
+END
+
+HNDLR body_rotate_to_doa
+[turn to] face me
+END
+
+#tst2  fwd and back
+#tst4  fig eight
+#tst5  oval
 
 # ==================
 # MISC
