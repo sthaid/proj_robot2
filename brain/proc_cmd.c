@@ -41,6 +41,7 @@ static int hndlr_body_rev(args_t args);
 static int hndlr_body_rotate(args_t args);
 static int hndlr_body_rotate_to_hdg(args_t args);
 static int hndlr_body_rotate_to_doa(args_t args);
+static int hndlr_body_test(args_t args);
 // misc
 static int hndlr_time(args_t args);
 static int hndlr_weather_report(args_t args);
@@ -73,6 +74,7 @@ static hndlr_lookup_t hndlr_lookup_tbl[] = {
     HNDLR(body_rotate),
     HNDLR(body_rotate_to_hdg),
     HNDLR(body_rotate_to_doa),
+    HNDLR(body_test),
     // misc
     HNDLR(time),
     HNDLR(weather_report),
@@ -408,6 +410,20 @@ static int hndlr_body_rotate_to_doa(args_t args)
     t2s_play("turning %d degrees to face you", degrees);
 
     return body_drive_cmd(DRIVE_ROT, degrees, 0, 0, 0);
+}
+
+static int hndlr_body_test(args_t args)
+{
+    int testnum = getnum(args[0], 0);
+
+    if (testnum < 1 || testnum > 7) {
+        t2s_play("test number %d is invalid", testnum);
+        return -1;
+    }
+
+    t2s_play("running test number %d\n", testnum);
+
+    return body_drive_cmd(testnum+(DRIVE_TST1-1), 0, 0, 0, 0);
 }
 
 // ----------------------

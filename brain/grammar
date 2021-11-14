@@ -91,9 +91,9 @@ HNDLR body_rotate_to_doa
 [turn to] face me
 END
 
-#tst2  fwd and back
-#tst4  fig eight
-#tst5  oval
+HNDLR body_test
+run test [number] 0:NUMBER
+END
 
 # ==================
 # MISC
