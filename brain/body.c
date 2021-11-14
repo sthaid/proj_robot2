@@ -322,7 +322,7 @@ static int connect_to_body(void)
     // connect to body pgm
     sfd = socket(AF_INET, SOCK_STREAM, 0);
     if (connect(sfd, (struct sockaddr*)&sockaddr, sizeof(sockaddr)) < 0) {
-        ERROR_INTVL(60000, "failed connect to %s, %s\n",
+        ERROR_INTVL(60*SECONDS, "failed connect to %s, %s\n",
                     sock_addr_to_str(s, sizeof(s), (struct sockaddr *)&sockaddr),
                     strerror(errno));
         close(sfd);

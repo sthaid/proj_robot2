@@ -408,7 +408,7 @@ static int record_stream_cb2(const void *input,
         if (rc != 0) return paComplete;
 
         if (status_flags) {
-            WARN_INTVL(1000, "record_stream_cb2 status_flags 0x%lx\n", status_flags);
+            WARN_INTVL(1*SECONDS, "record_stream_cb2 status_flags 0x%lx\n", status_flags);
         }
     }
     return paContinue;
