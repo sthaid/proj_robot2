@@ -204,10 +204,19 @@ void audio_out_wait(void)
         usleep(10*MS);
 }
 
-// Return true if audio output has completed (is IDLE).
-bool audio_out_is_complete(void)
+// Return true if audio output has completed.
+bool audio_out_is_complete(bool *cancelled)
 {
-    return (shm->state == AUDIO_OUT_STATE_IDLE || shm->state == AUDIO_OUT_STATE_PLAY_DONE);
+    if (shm->state == AUDIO_OUT_STATE_PLAY_DONE) {
+        *cancelled = shm->cancel;
+        return true;
+    } else if (shm->state == AUDIO_OUT_STATE_IDLE) {
+        *cancelled = false;
+        return true;
+    } else {
+        *cancelled = false;
+        return false;
+    }
 }
 
 // Cancel audio output.

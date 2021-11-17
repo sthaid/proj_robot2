@@ -34,3 +34,4 @@ void body_weather_report(void);
 
 // music.c ...
 int play_music_file(char *filename);
+bool play_music_ignore_cancel(void);

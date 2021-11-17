@@ -1,5 +1,12 @@
 #include <common.h>
 
+typedef struct {
+    char     filename[200];
+    uint64_t start_time;
+} playing_t;
+
+static playing_t *now_playing;
+
 static void color_organ_rev1(char *filename);
 static void color_organ_rev2(char *filename);
 
@@ -10,6 +17,7 @@ int play_music_file(char *filename)
     int rc;
     struct stat buf;
     char announce[200], pathname[200], *p;
+    static playing_t playing;
 
     INFO("play_music_file: filename = %s\n", filename);
 
@@ -31,6 +39,13 @@ int play_music_file(char *filename)
     t2s_play("playing %s", announce);
     audio_out_play_wav(pathname, NULL, 0, false);
 
+    // set now_playing to indicate to the play_music_ignore_cancel routine
+    // what music is playing, and when it started
+    strcpy(playing.filename, filename);
+    playing.start_time = microsec_timer();
+    __sync_synchronize();
+    now_playing = &playing;
+
     // call color_organ, this will return when then music is done
     switch (settings.color_organ) {
     case 1:
@@ -46,18 +61,62 @@ int play_music_file(char *filename)
         break;
     }
 
+    // nothing is now_playing
+    now_playing = NULL;
+
     // success
     return 0;
+}
+
+// this routine is called by proc_cmd_cancel to check if the cancel is
+// due to a spurious Terminator work word detection from the music
+//
+// record of false cancel indications:
+// - song not_my_name.wav was cancelled at time 234.986 seconds
+bool play_music_ignore_cancel(void)
+{
+    static struct {
+        char   *filename;
+        int64_t ignore_cancel_duration[10];
+    } tbl[] = {
+        { "not_my_name.wav",  {235*SECONDS, 0} },
+            };
+
+    playing_t *playing = now_playing;
+    int64_t duration;
+
+    if (playing == NULL) {
+        return false;
+    }
+
+    duration = (microsec_timer() - playing->start_time);
+    
+    for (int i = 0; i < sizeof(tbl)/sizeof(tbl[0]); i++) {
+        if (strcmp(playing->filename, tbl[i].filename) == 0) {
+            for (int j = 0; j < 10; j++) {
+                int64_t us_low  = tbl[i].ignore_cancel_duration[j] - 3*SECONDS;
+                int64_t us_high = tbl[i].ignore_cancel_duration[j] + 3*SECONDS;
+                if (duration >= us_low && duration <= us_high) {
+                    INFO("play music ignore cancel, duration=%0.3f\n", (double)duration/SECONDS);
+                    return true;
+                }
+            }
+        }
+    }
+
+    return false;
 }
     
 // -----------------  COLOR ORGAN REV1  --------------------------------------------
 
 static void color_organ_rev1(char *filename)
 {
-    double low_cal, mid_cal, high_cal;
-    double low, mid, high;
-    bool precal;
-    int cnt = 0;
+    double   low_cal, mid_cal, high_cal;
+    double   low, mid, high;
+    bool     precal;
+    int      cnt = 0;
+    uint64_t start_time = microsec_timer();
+    bool     cancelled;
 
     INFO("starting color_organ_rev1 for %s\n", filename);
 
@@ -80,7 +139,7 @@ static void color_organ_rev1(char *filename)
     }
 
     // while song is playing, update the leds based on sound intensity
-    while (audio_out_is_complete() == false) {
+    while (audio_out_is_complete(&cancelled) == false) {
         // update leds at 10 ms interval
         usleep(10*MS);
 
@@ -113,6 +172,13 @@ static void color_organ_rev1(char *filename)
         leds_commit(settings.brightness);
     }
 
+    // if the music audio output was cancelled then print the time into the
+    // song that the cancel occurred
+    if (cancelled) {
+        double secs = (double)(microsec_timer() - start_time) / SECONDS;
+        INFO("song %s was cancelled at time %0.3f seconds\n", filename, secs);
+    }
+
     // since the audio output was started with complete_to_idle set false,
     // call audio_out_set_state_idle
     audio_out_set_state_idle();
@@ -135,6 +201,8 @@ static void color_organ_rev2(char *filename)
     avg_vals_t   new_avg_vals, db_avg_vals, *tmp, *avg_vals;
     double       low, mid, high;
     unsigned int tmp_len;
+    uint64_t     start_time = microsec_timer();
+    bool         cancelled;
 
     INFO("starting color_organ_rev2 for %s\n", filename);
 
@@ -152,7 +220,7 @@ static void color_organ_rev2(char *filename)
     }
 
     // while song is playing, update the leds based on sound intensity
-    while (audio_out_is_complete() == false) {
+    while (audio_out_is_complete(&cancelled) == false) {
         // update leds at 10 ms interval
         usleep(10*MS);
 
@@ -186,6 +254,13 @@ static void color_organ_rev2(char *filename)
             leds_stage_led(i+8, LED_BLUE, high * (15 / avg_vals->high));
         }
         leds_commit(settings.brightness);
+    }
+
+    // if the music audio output was cancelled then print the time into the
+    // song that the cancel occurred
+    if (cancelled) {
+        double secs = (double)(microsec_timer() - start_time) / SECONDS;
+        INFO("song %s was cancelled at time %0.3f seconds\n", filename, secs);
     }
 
     // store avg low,mid,high in db (but only if we have a more complete average)

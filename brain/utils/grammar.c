@@ -255,32 +255,38 @@ bool grammar_match(char *cmd_arg, hndlr_t *proc, args_t args)
         char *current;
         char *replace;
     } subst_tbl[] = {
-        { "zero",  "0" },
-        { "one",   "1" },
-        { "two",   "2" },
-        { "three", "3" },
-        { "four",  "4" },
-        { "five",  "5" },
-        { "six",   "6" },
-        { "seven", "7" },
-        { "eight", "8" },
-        { "nine",  "9" },
+        { " zero ",  " 0 " },
+        { " one ",   " 1 " },
+        { " two ",   " 2 " },
+        { " three ", " 3 " },
+        { " four ",  " 4 " },
+        { " five ",  " 5 " },
+        { " six ",   " 6 " },
+        { " seven ", " 7 " },
+        { " eight ", " 8 " },
+        { " nine ",  " 9 " },
             };
 
+    // there should not be any newline chars in cmd_arg
+    assert(strchr(cmd_arg, '\n') == NULL);
 
     // preset return proc to NULL
     *proc = NULL;
 
-    // make a copy of cmd because cmd is sanitized and converted to lower case hee
-    strcpy(cmd, cmd_arg);
-    sanitize(cmd);
-    for (i = 0; cmd[i]; i++) cmd[i] = tolower(cmd[i]);
-
-    // make substitutions
+    // the cmd is:
+    // - converted to lowercase
+    // - substitutions made from the above subst_tbl
+    // - sanitized: which removes leading and trailing spaces and double spaces
+    sprintf(cmd, " %s ", cmd_arg);
+    for (i = 0; cmd[i]; i++) {
+        cmd[i] = tolower(cmd[i]);
+    }
     for (i = 0; i < sizeof(subst_tbl)/sizeof(subst_tbl[0]); i++) {
         substitute(cmd, subst_tbl[i].current, subst_tbl[i].replace);
     }
+    sanitize(cmd);
     cmd_len = strlen(cmd);
+    INFO("CMD         '%s'\n", cmd);
 
     // loop over grammar table to find a match;
     // if match found return the handler proc to caller

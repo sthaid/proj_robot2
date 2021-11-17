@@ -18,6 +18,11 @@ HNDLR playback
 playback
 END
 
+HNDLR system_shutdown
+system shutdown
+shutdown system
+END
+
 # ==================
 # PROGRAM SETTINGS
 # ==================

@@ -29,10 +29,9 @@
         } \
     } while (0)
 
-
 #define GPIO_BODY_POWER  12
-
-#define MILLION 1000000
+#define BODY_ON  1
+#define BODY_OFF 0
 
 //
 // variables
@@ -41,14 +40,14 @@
 static pthread_mutex_t              mutex;
 
 static int                          conn_sfd = -1;
-static bool                         power_is_on;
 static struct msg_status_s          status;
 static struct drive_proc_complete_s drive_proc_complete;
 static bool                         body_emer_stop_called;
 
-static uint64_t                     status_time;
 static uint64_t                     power_on_time;
-static uint64_t                     last_drive_time;
+static uint64_t                     conn_time;
+static uint64_t                     status_msg_time;
+static uint64_t                     drive_cmd_time;
 
 //
 // prototypes
@@ -70,8 +69,6 @@ void body_init(void)
 {
     pthread_t tid;
     pthread_mutexattr_t mutex_attr;
-
-    pinMode(GPIO_BODY_POWER, OUTPUT);
 
     pthread_mutexattr_init(&mutex_attr);
     pthread_mutexattr_settype(&mutex_attr, PTHREAD_MUTEX_RECURSIVE);
@@ -96,9 +93,6 @@ int body_drive_cmd(int proc_id, int arg0, int arg1, int arg2, int arg3)
     static int unique_id;
     msg_t msg;
     bool succ;
-
-    // xxx
-    return 0;
 
     // acquire mutex
     MUTEX_LOCK;
@@ -132,7 +126,7 @@ int body_drive_cmd(int proc_id, int arg0, int arg1, int arg2, int arg3)
 
     // keep track of the last body drive time; so that body can be powered off
     // if the body has not been driven in some time
-    last_drive_time = microsec_timer();
+    drive_cmd_time = microsec_timer();
 
     // release mutex
     MUTEX_UNLOCK;
@@ -208,13 +202,17 @@ void body_emer_stop(void)
 
 void body_power_on(void)
 {
+    static bool first_call = true;
+
     MUTEX_LOCK;
 
     power_on_time = microsec_timer();
-    last_drive_time = microsec_timer();
-    status_time = microsec_timer();
-    power_is_on = true;
-    digitalWrite(GPIO_BODY_POWER, 0);
+    digitalWrite(GPIO_BODY_POWER, BODY_ON);
+
+    if (first_call) {
+        pinMode(GPIO_BODY_POWER, OUTPUT);
+        first_call = false;
+    }
 
     MUTEX_UNLOCK;
 
@@ -226,10 +224,8 @@ void body_power_off(void)
     MUTEX_LOCK;
 
     power_on_time = 0;
-    last_drive_time = 0;
-    status_time = 0;
-    power_is_on = false;
-    digitalWrite(GPIO_BODY_POWER, 1);
+    disconnect_from_body();
+    digitalWrite(GPIO_BODY_POWER, BODY_OFF);
 
     MUTEX_UNLOCK;
 
@@ -238,11 +234,11 @@ void body_power_off(void)
 
 void body_status_report(void)
 {
-    if (!power_is_on) {
+    if (power_on_time == 0) {
         t2s_play("Bbody is off.");
     } else if (conn_sfd == -1) {
         t2s_play("Brain is not connected to body.");
-    } else if (microsec_timer() - status_time > 5*MILLION) {
+    } else if (status_msg_time == 0 || microsec_timer() - status_msg_time > 5*SECONDS) {
         t2s_play("Status message has not been received from the body.");
     } else {
         t2s_play("Voltage is"); t2s_play_nodb("%0.2f volts", status.voltage);
@@ -253,11 +249,11 @@ void body_status_report(void)
 
 void body_weather_report(void)
 {
-    if (!power_is_on) {
+    if (power_on_time == 0) {
         t2s_play("Body is off.");
     } else if (conn_sfd == -1) {
         t2s_play("Brain is not connected to body.");
-    } else if (microsec_timer() - status_time > 5*MILLION) {
+    } else if (status_msg_time == 0 || microsec_timer() - status_msg_time > 5*SECONDS) {
         t2s_play("Status message has not been received from the body.");
     } else {
         t2s_play("Temperature is %0.0f degrees", status.temperature_degf);
@@ -272,11 +268,12 @@ static void *connect_and_recv_thread(void *cx)
     msg_t msg;
 
     sleep(3);
+
     body_power_on();
 
     while (true) {
         // if body is not on then delay and contine
-        if (power_is_on == false) {
+        if (power_on_time == 0) {
             sleep(1);
             continue;
         }
@@ -340,7 +337,7 @@ static int connect_to_body(void)
     // set global variable conn_sfd, indiating connection is established,
     MUTEX_LOCK;
     conn_sfd = sfd;
-    status_time = microsec_timer();
+    conn_time = microsec_timer();
     MUTEX_UNLOCK;
 
     // issue connected msg
@@ -350,13 +347,23 @@ static int connect_to_body(void)
 
 static void disconnect_from_body(void)
 {
-    // close socket and set conn_sfd to -1
+    // lock mutex
     MUTEX_LOCK;
-    if (conn_sfd != -1) {
-        close(conn_sfd);
-        conn_sfd = -1;
-        status_time = 0;
+
+    // if already disconnected then return
+    if (conn_sfd == -1) {
+        MUTEX_UNLOCK;
+        return;
     }
+
+    // close socket and clear conn_sfd, and time variables
+    close(conn_sfd);
+    conn_sfd = -1;
+    conn_time = 0;
+    status_msg_time = 0;
+    drive_cmd_time = 0;
+
+    // unlock mutex
     MUTEX_UNLOCK;
 
     // issue disconected msg
@@ -405,7 +412,7 @@ static void process_recvd_msg(msg_t *msg)
     switch (msg->id) {
     case MSG_ID_STATUS:
         status = msg->status;
-        status_time = microsec_timer();
+        status_msg_time = microsec_timer();
         break;
     case MSG_ID_LOGMSG:
         INFO("BODY: %s\n", msg->logmsg.str);
@@ -423,52 +430,70 @@ static void process_recvd_msg(msg_t *msg)
 
 static void *monitor_thread(void *cx)
 {
-    #define SECS(us)  ((int)((time_now - (us)) / MILLION))
-
     uint64_t time_now;
+    int      conn_secs, drive_cmd_secs, status_msg_secs;
 
     while (true) {
         MUTEX_LOCK;
 
         time_now = microsec_timer();
 
-        if (power_is_on) do {
-            // if body power has been on for 60 seconds, but connection not established 
-            // then issue warning
-            if (conn_sfd == -1 && SECS(power_on_time) > 60) {
-                //xxx T2S_PLAY_INTVL(60*MILLION, "Brain is not connected to body.");
-                break;
+        if (power_on_time != 0) do {
+            // if not connected to body
+            //   play message
+            //   continue
+            // endif
+            if (conn_time == 0) {
+                if (time_now - power_on_time > 60*SECONDS) {
+                    T2S_PLAY_INTVL(60*SECONDS, "Brain is not connected to body.");
+                }
+                continue;
             }
 
-            // if body has not been used in 10 minutes then disconnect from body and power off body
-            if (SECS(last_drive_time) > 600) {
+            // if have been connected to the body for < 5 secs
+            //   continue
+            // endif
+            conn_secs = (time_now - conn_time) / SECONDS;
+            if (conn_secs < 5) {
+                continue;
+            }
+
+            // if body has not been used for 10 minutes then
+            //   play message
+            //   power off body
+            //   continue
+            // endif
+            drive_cmd_secs = (drive_cmd_time == 0 
+                              ? conn_secs 
+                              : ((time_now - drive_cmd_time) / SECONDS));
+            if (drive_cmd_secs > 600) {
                 t2s_play("Body has not been used for 10 minutes, powering off body.");
-                disconnect_from_body();
                 body_power_off();
-                break;
+                continue;
             }
 
-            // if connection to body has not been established then continue
-            if (conn_sfd == -1) {
-                break;
-            }
-
-            if (SECS(status_time) > 5) {
-                T2S_PLAY_INTVL(5*MILLION, 
+            // if status message has not been received for 5 secs
+            //   play message
+            //   continue
+            // endif
+            status_msg_secs = (status_msg_time == 0 
+                               ? conn_secs 
+                               : ((time_now - status_msg_time) / SECONDS));
+            if (status_msg_secs > 5) {
+                T2S_PLAY_INTVL(5*SECONDS, 
                     "Status message has not been received from the body in %d seconds\n",
-                    SECS(status_time));
-                break;
+                    status_msg_secs);
             }
 
-            // --- the following code issues reports based on the latest status ---
-
-            // check status.voltage
+            // if voltage is out of range
+            //   play message
+            // endif
             if (status.voltage < 11.5) {
-                T2S_PLAY_INTVL(60*MILLION, 
+                T2S_PLAY_INTVL(60*SECONDS, 
                     "Voltage %0.1f is critically low, shutdown and recharge now.",
                     status.voltage);
             } else if (status.voltage < 12) {
-                T2S_PLAY_INTVL(600*MILLION, 
+                T2S_PLAY_INTVL(600*SECONDS, 
                     "Voltage %0.1f is low, recharge soon.",
                     status.voltage);
             }

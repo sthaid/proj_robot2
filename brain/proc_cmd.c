@@ -25,6 +25,7 @@ static int hndlr_end_program(args_t args);
 static int hndlr_restart_program(args_t args);
 static int hndlr_reset_mic(args_t args);
 static int hndlr_playback(args_t args);
+static int hndlr_system_shutdown(args_t args);
 // program settings
 static int hndlr_set(args_t args);
 static int hndlr_get(args_t args);
@@ -58,6 +59,7 @@ static hndlr_lookup_t hndlr_lookup_tbl[] = {
     HNDLR(restart_program),
     HNDLR(reset_mic),
     HNDLR(playback),
+    HNDLR(system_shutdown),
     // program settings
     HNDLR(set),
     HNDLR(get),
@@ -118,6 +120,10 @@ bool proc_cmd_in_progress(bool *succ)
 
 void proc_cmd_cancel(void)
 {
+    if (play_music_ignore_cancel()) {
+        return;
+    }
+
     INFO("*** CANCEL ***\n");
     cancel = true;
     audio_out_cancel();
@@ -199,6 +205,14 @@ static int hndlr_playback(args_t args)
 
     brain_get_recording(data, MAX_DATA);
     audio_out_play_data(data, MAX_DATA, 16000, true);
+    return 0;
+}
+
+static int hndlr_system_shutdown(args_t args)
+{
+    body_power_off();
+    audio_out_wait();
+    system("sudo shutdown now");
     return 0;
 }
 
@@ -479,7 +493,7 @@ static int hndlr_polite_conversation(args_t args)
         { "what is your favorite color",
           "I like all colors, especially purple." },
         { "what is your name",
-          "My name is Porcupine." },
+          "I haven't decided on a name yet." },
                 };
 
     for (int i = 0; i < sizeof(tbl)/sizeof(tbl[0]); i++) {

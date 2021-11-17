@@ -301,7 +301,7 @@ void audio_out_play_data(short *data, int max_data, int sample_rate, bool comple
 void audio_out_play_wav(char *file_name, short **data, int *max_data, bool complete_to_idle);
 
 void audio_out_wait(void);
-bool audio_out_is_complete(void);
+bool audio_out_is_complete(bool *cancelled);
 void audio_out_cancel(void);
 void audio_out_set_state_idle(void);
 void audio_out_get_low_mid_high(double *low, double *mid, double *high);
