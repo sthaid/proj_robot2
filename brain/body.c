@@ -412,6 +412,9 @@ static void process_recvd_msg(msg_t *msg)
     switch (msg->id) {
     case MSG_ID_STATUS:
         status = msg->status;
+        if (status_msg_time == 0) {
+            t2s_play("Voltage is"); t2s_play_nodb("%0.2f volts", status.voltage);
+        }
         status_msg_time = microsec_timer();
         break;
     case MSG_ID_LOGMSG:
