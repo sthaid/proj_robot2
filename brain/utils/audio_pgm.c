@@ -117,29 +117,37 @@ static int audio_out_get_frame(void *data_arg, void *cx)
 {
     short *data = data_arg;
     static int data_idx;
+    short x;
+    int ramp_samples = shm->sample_rate / 10;
 
     assert(shm->max_data >= 0);
 
-    if (shm->cancel) {
-        data_idx = 0;
-        shm->max_data = 0;
+    if (shm->max_data == 0) {
         return -1;
     }
 
-    if (shm->max_data > 0) {
-        lmh(shm->data[data_idx]);
-        data[0] = shm->data[data_idx];
-        data[1] = shm->data[data_idx];
-        data_idx++;
+    lmh(shm->data[data_idx]);
 
-        if (data_idx >= shm->max_data) {
-            data_idx = 0;
-            shm->max_data = 0;
-        }
-        return 0;
+    if (shm->cancel && (data_idx + ramp_samples <= shm->max_data)) {
+        shm->max_data = data_idx + ramp_samples;
     }
 
-    return -1;
+    if (data_idx < ramp_samples) {
+        x = shm->data[data_idx] * ((double)data_idx / ramp_samples);
+    } else if (data_idx >= shm->max_data - ramp_samples) {
+        x = shm->data[data_idx] * ((double)(shm->max_data-1 - data_idx) / ramp_samples);
+    } else {
+        x = shm->data[data_idx];
+    }
+    data[0] = data[1] = x;
+
+    data_idx++;
+    if (data_idx >= shm->max_data) {
+        data_idx = 0;
+        shm->max_data = 0;
+    }
+
+    return 0;
 }
 
 // - - - - - - - - - - - 
