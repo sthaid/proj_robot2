@@ -98,7 +98,7 @@ HNDLR body_rotate_to_doa
 END
 
 HNDLR body_test
-run test [number] 0:NUMBER
+[<run execute>] test [pattern] number 0:NUMBER
 END
 
 # ==================
