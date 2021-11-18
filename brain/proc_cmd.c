@@ -450,7 +450,12 @@ static int hndlr_time(args_t args)
     time_t t = time(NULL);
 
     tm = localtime(&t);
+#if 0
     t2s_play_nodb("the time is %d %2.2d", tm->tm_hour, tm->tm_min);
+#else
+    t2s_play("the time is ");
+    t2s_play_nodb("%d %2.2d", tm->tm_hour, tm->tm_min);
+#endif
 
     return 0;
 }
