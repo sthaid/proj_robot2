@@ -241,9 +241,12 @@ void body_status_report(void)
     } else if (status_msg_time == 0 || microsec_timer() - status_msg_time > 5*SECONDS) {
         t2s_play("Status message has not been received from the body.");
     } else {
-        t2s_play("Voltage is"); t2s_play_nodb("%0.2f volts", status.voltage);
-        t2s_play("Current is"); t2s_play_nodb("%0.0f milliamps", 1000*status.total_current);
-        t2s_play("Magnetic heading is"); t2s_play_nodb("%0.0f degrees", status.mag_heading);
+        double voltage = status.voltage;
+        double total_current = status.total_current;
+        double mag_heading = status.mag_heading;
+        t2s_play_nodb("Voltage is %0.2f volts", voltage);
+        t2s_play_nodb("Current is %0.0f milliamps", 1000*total_current);
+        t2s_play_nodb("Magnetic heading is %0.0f degrees", mag_heading);
     }
 }
 
@@ -413,7 +416,7 @@ static void process_recvd_msg(msg_t *msg)
     case MSG_ID_STATUS:
         status = msg->status;
         if (status_msg_time == 0) {
-            t2s_play("Voltage is"); t2s_play_nodb("%0.2f volts", status.voltage);
+            t2s_play_nodb("Voltage is %0.2f volts", status.voltage);
         }
         status_msg_time = microsec_timer();
         break;
