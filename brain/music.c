@@ -37,6 +37,8 @@ int play_music_file(char *filename)
 
     // announce what song is about to play, and play it
     t2s_play("playing %s", announce);
+    audio_out_wait();
+    sleep(1);
     audio_out_play_wav(pathname, NULL, 0, false);
 
     // set now_playing to indicate to the play_music_ignore_cancel routine
