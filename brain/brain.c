@@ -68,10 +68,10 @@ static void initialize(void)
 
     // workaround problem of audio not working if this program is
     // started too soon after boot
-    secs_since_boot = microsec_timer()/1000000;
+    secs_since_boot = microsec_timer()/SECONDS;
     if (secs_since_boot < 20) {
-        INFO("secs_since_boot=%lld, sleeping 20 secs\n", secs_since_boot);
-        sleep(20);
+        INFO("secs_since_boot=%lld, sleeping 10 secs\n", secs_since_boot);
+        sleep(10);
     }
 
     // gpio is used to enable the respeaker leds and to turn body power on/off
