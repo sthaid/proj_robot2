@@ -122,16 +122,23 @@ static int audio_out_get_frame(void *data_arg, void *cx)
 
     assert(shm->max_data >= 0);
 
+    // if no more data, return -1, causing the call to pa_play2 to return
     if (shm->max_data == 0) {
         return -1;
     }
 
+    // keep track of the amplitude in the low, medium and high frequency bands
     lmh(shm->data[data_idx]);
 
+    // if cancel audio output is requested and we're not already near the end
+    // of the audio data the reduce max_data so that just ramp_samples remain
     if (shm->cancel && (data_idx + ramp_samples <= shm->max_data)) {
         shm->max_data = data_idx + ramp_samples;
     }
 
+    // set return data; if data_idx is within ramp_samples of the begining or
+    // end of the audio data then ramp the data values up at the begining and 
+    // down at the end of the audio data
     if (data_idx < ramp_samples) {
         x = shm->data[data_idx] * ((double)data_idx / ramp_samples);
     } else if (data_idx >= shm->max_data - ramp_samples) {
@@ -141,12 +148,16 @@ static int audio_out_get_frame(void *data_arg, void *cx)
     }
     data[0] = data[1] = x;
 
+    // increment data_idx;
+    // if data_idx is now max_dat then reset data_idx and max_data to zero;
+    // resetting max_data to zero will cause this routine to return -1 on the next call
     data_idx++;
     if (data_idx >= shm->max_data) {
         data_idx = 0;
         shm->max_data = 0;
     }
 
+    // return 0, indicating that a frame of sound data has been returned
     return 0;
 }
 
