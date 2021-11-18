@@ -483,9 +483,10 @@ static void *monitor_thread(void *cx)
                                ? conn_secs 
                                : ((time_now - status_msg_time) / SECONDS));
             if (status_msg_secs > 5) {
-                T2S_PLAY_INTVL(5*SECONDS, 
-                    "Status message has not been received from the body in %d seconds\n",
-                    status_msg_secs);
+                t2s_play("Status message has not been received from the body in %d seconds.",
+                         status_msg_secs);
+                disconnect_from_body();
+                continue;
             }
 
             // if voltage is out of range
