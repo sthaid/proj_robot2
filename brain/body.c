@@ -492,11 +492,11 @@ static void *monitor_thread(void *cx)
             //   play message
             // endif
             if (status.voltage < 11.5) {
-                T2S_PLAY_INTVL(60*SECONDS, 
+                T2S_PLAY_INTVL(30*SECONDS, 
                     "Voltage %0.1f is critically low, shutdown and recharge now.",
                     status.voltage);
             } else if (status.voltage < 12) {
-                T2S_PLAY_INTVL(600*SECONDS, 
+                T2S_PLAY_INTVL(120*SECONDS, 
                     "Voltage %0.1f is low, recharge soon.",
                     status.voltage);
             }

@@ -469,7 +469,6 @@ static int hndlr_count(args_t args)
 
     for (int i = 1; i <= cnt; i++) {
         t2s_play("%d", i);
-        usleep(200*MS);
         if (cancel) break;
     }        
 
