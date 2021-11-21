@@ -149,17 +149,6 @@ static int proc_mic_data(short *frame)
     static int state = STATE_WAITING_FOR_WAKE_WORD;
     static double doa;
 
-    // xxx comment
-    // xxx can this be reset in reset_mic, or pass in a counter
-    // xxx or ifdef this out after it is working
-    static int debug_print_frame_cnt;
-    if (debug_print_frame_cnt < 10) {
-        INFO("first mic frame %d: %6d %6d %6d %6d\n", 
-             debug_print_frame_cnt,
-             frame[0], frame[1], frame[2], frame[3]);
-        debug_print_frame_cnt++;
-    }
-
     // supply the frame for doa analysis, frame is 4 shorts
     doa_feed(frame);
 

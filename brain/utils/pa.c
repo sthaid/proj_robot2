@@ -286,6 +286,9 @@ typedef struct {
     int                 sizeof_sample_format;
     int                 discard_samples;
     bool                done;
+    // the following are used for debug
+    int                 frame_count;
+    int                 status_flags;
 } record2_user_data_t;
 
 static int record_stream_cb2(const void *input,
@@ -366,8 +369,24 @@ int pa_record2(char *input_device, int max_chan, int sample_rate, int sample_for
 
     // wait for audio input to complete
     MUTEX_UNLOCK;
+    int cnt = 0, frame_count = 0;
     while (!ud.done) {
-        Pa_Sleep(10);  // 10 ms
+        // debug print frame_count and status_flags when value changes,
+        // and at most once per second
+        if (cnt++ == 100) {
+            if (ud.frame_count != frame_count) {
+                INFO("pa_record2 frame_count = %d\n", ud.frame_count);
+                frame_count = ud.frame_count;
+            }
+            if (ud.status_flags != 0) {
+                ERROR("pa_record2 status_flags = 0x%x\n", ud.status_flags);
+                ud.status_flags = 0;
+            }
+            cnt = 0;
+        }
+
+        // 10 ms sleep
+        Pa_Sleep(10);
     }
     MUTEX_LOCK;
 
@@ -407,8 +426,10 @@ static int record_stream_cb2(const void *input,
         input += (ud->max_chan * ud->sizeof_sample_format);
         if (rc != 0) return paComplete;
 
+        // debug code
+        ud->frame_count = frame_count;
         if (status_flags) {
-            WARN_INTVL(1*SECONDS, "record_stream_cb2 status_flags 0x%lx\n", status_flags);
+            ud->status_flags = status_flags;
         }
     }
     return paContinue;

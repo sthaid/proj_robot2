@@ -40,7 +40,7 @@
 #define CCA_MICY     2
 #define CCB_MICX     1
 #define CCB_MICY     3
-#define ANGLE_OFFSET 45
+#define ANGLE_OFFSET (45+180)
 #endif
 
 // N is half the number of cross correlations 

@@ -3,8 +3,9 @@
 
 // variables
 static audio_shm_t *shm;
-static bool end_program;
-static pthread_t recv_mic_data_tid;
+static bool         end_program;
+static pthread_t    recv_mic_data_tid;
+static int          recv_mic_data_start_fidx;
 
 // prototypes
 static void sig_hndlr(int sig);
@@ -22,7 +23,7 @@ static void *recv_mic_data_setup_thread(void *cx);
 int main(int argc, char **argv)
 {
     int rc, fd;
-    pthread_t tid;
+    pthread_t audio_out_tid;
 
     // register for SIGINT and SIGTERM
     static struct sigaction act;
@@ -49,13 +50,16 @@ int main(int argc, char **argv)
     pa_init();
 
     // create the audio output thread
-    pthread_create(&tid, NULL, audio_out_thread, NULL);
+    pthread_create(&audio_out_tid, NULL, audio_out_thread, NULL);
 
     // call pa_record2 to start receiving the 4 channel respeaker mic data;
     // the recv_mic_data callback routine is called with mic data frames
     INFO("AUDIO RUNNING\n");
     while (true) {
+        pthread_t tid;
+
         recv_mic_data_tid = 0;
+        recv_mic_data_start_fidx = shm->fidx;
         pthread_create(&tid, NULL, recv_mic_data_setup_thread, NULL);
         rc =  pa_record2("seeed-4mic-voicecard",
                          4,                   // max_chan
@@ -74,10 +78,7 @@ int main(int argc, char **argv)
     }
 
     // wait for audio output to complete
-    sleep(1);
-    while (shm->state != AUDIO_OUT_STATE_IDLE) {
-        usleep(10*MS);
-    }
+    pthread_join(audio_out_tid, NULL);
 
     // terminate
     INFO("AUDIO TERMINATING\n");
@@ -94,10 +95,15 @@ static void sig_hndlr(int sig)
 
 static void *audio_out_thread(void *cx)
 {
+    int end_program_cnt = 0;
+
     while (true) {
         // wait
         while (shm->state != AUDIO_OUT_STATE_PLAY) {
             usleep(10*MS);
+            if (end_program && end_program_cnt++ > 100) {
+                return NULL;
+            }
         }
 
         // play
@@ -182,7 +188,7 @@ static void lmh_init(void)
 
 static void lmh(short v)
 {
-    #define SMOOTH 0.995
+    #define SMOOTH 0.980   // also .995 was okay
     double low, high, mid;
 
     low = low_pass_filter_ex(v, cx_low, 7, .85);
@@ -216,6 +222,7 @@ static int recv_mic_data(const void *frame, void *cx)
     // stop receiving mic data, and cause the call to pa_record2 to return
     if (shm->reset_mic) {
         shm->reset_mic = false;
+        cnt = 0;
         return -1;
     }
 
@@ -269,6 +276,19 @@ static void *recv_mic_data_setup_thread(void *cx)
     rc = pthread_setschedparam(recv_mic_data_tid, SCHED_FIFO, &param);
     if (rc < 0) {
         FATAL("audio sched_setscheduler, %s\n", strerror(errno));
+    }
+
+    // print first few frames, for debug
+    int i, start, end;
+    while (recv_mic_data_start_fidx == shm->fidx) {
+        usleep(10*MS);
+    }
+    start = recv_mic_data_start_fidx;
+    end   = recv_mic_data_start_fidx + 10;
+    for (i = start; i < end; i++) {
+        short *frame = shm->frames[i];
+        INFO("first mic frames %d: %6d %6d %6d %6d\n",
+             i-start, frame[0], frame[1], frame[2], frame[3]);
     }
 
     // terminate thread
