@@ -222,29 +222,36 @@ static int hndlr_system_shutdown(args_t args)
 
 static int hndlr_set(args_t args)
 {
-    int val;
+    double val;
 
     INFO("set '%s' to %s\n", args[0], args[1]);
 
+// xxx put this in subst
     if (strcmp(args[1], "to") == 0) strcpy(args[1], "2");
-    if (sscanf(args[1], "%d", &val) != 1) {
+    if (sscanf(args[1], "%lf", &val) != 1) {
         return -1;
     }
 
     if (strcmp(args[0], "volume") == 0) {
         settings.volume = clip_int(val, 0, 50);
         audio_out_set_volume(settings.volume);
-        db_set_int(KEYID_PROG_SETTINGS, "volume", settings.volume);
+        db_set_num(KEYID_PROG_SETTINGS, "volume", settings.volume);
         t2s_play("volume has been set to %d%%", settings.volume);
     } else if (strcmp(args[0], "brightness") == 0) {
         settings.brightness = clip_int(val, 20, 100);
-        db_set_int(KEYID_PROG_SETTINGS, "brightness", settings.brightness);
+        db_set_num(KEYID_PROG_SETTINGS, "brightness", settings.brightness);
         t2s_play("brightness has been set to %d%%", settings.brightness);
     } else if ((strcmp(args[0], "color organ") == 0) ||
                (strcmp(args[0], "color oregon") == 0)) {
         settings.color_organ = clip_int(val, 1, 2);
-        db_set_int(KEYID_PROG_SETTINGS, "color_organ", settings.color_organ);
+        db_set_num(KEYID_PROG_SETTINGS, "color_organ", settings.color_organ);
         t2s_play("color organ has been set to version %d", settings.color_organ);
+    } else if ((strcmp(args[0], "led scale factor") == 0) ||
+               (strcmp(args[0], "lead scale factor") == 0)) {
+        settings.led_scale_factor = clip_double(val, 1.0, 10.0);
+        leds_set_scale_factor(settings.led_scale_factor);
+        db_set_num(KEYID_PROG_SETTINGS, "led_scale_factor", settings.led_scale_factor);
+        t2s_play("led scale factor has been set to %g", settings.led_scale_factor);
     } else {
         return -1;
     }
@@ -258,6 +265,7 @@ static int hndlr_get(args_t args)
         hndlr_get((args_t){"volume"});
         hndlr_get((args_t){"brightness"});
         hndlr_get((args_t){"color organ"});
+        hndlr_get((args_t){"led scale factor"});
     } else if (strcmp(args[0], "volume") == 0) {
         t2s_play("the volume is %d%%", settings.volume);
     } else if (strcmp(args[0], "brightness") == 0) {
@@ -265,6 +273,9 @@ static int hndlr_get(args_t args)
     } else if ((strcmp(args[0], "color organ") == 0) ||
                (strcmp(args[0], "color oregon") == 0)) {
         t2s_play("the color organ is version %d", settings.color_organ);
+    } else if ((strcmp(args[0], "led scale factor") == 0) ||
+               (strcmp(args[0], "lead scale factor") == 0)) {
+        t2s_play("the led scale factor is %g", settings.led_scale_factor);
     } else {
         return -1;
     }

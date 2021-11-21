@@ -197,8 +197,9 @@ int sf_gen_white_wav(char *filename, int duration, int max_chan, int sample_rate
 #define LED_PURPLE     LED_RGB(127,0,255)
 #define LED_OFF        LED_RGB(0,0,0)
 
-void leds_init(void);
+void leds_init(double sf);  // xxx notes on sf
 
+void leds_set_scale_factor(double sf);
 void leds_stage_led(int num, unsigned int rgb, int led_brightness);
 void leds_stage_all(unsigned int rgb, int led_brightness);
 void leds_stage_rotate(int mode);
@@ -257,8 +258,8 @@ int db_set(int keyid, char *keystr, void *val, unsigned int val_len);
 int db_rm(int keyid, char *keystr);
 int db_get_keyid(int keyid, void (*callback)(int keyid, char *keystr, void *val, unsigned int val_len));
 
-void db_set_int(int keyid, char *keystr, int value);
-int db_get_int(int keyid, char *keystr, int default_value);
+void db_set_num(int keyid, char *keystr, double value);
+double db_get_num(int keyid, char *keystr, double default_value);
 
 void db_print_free_list(void);
 unsigned int db_get_free_list_len(void);

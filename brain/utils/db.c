@@ -454,36 +454,34 @@ int db_get_keyid(int keyid, void (*callback)(int keyid, char *keystr, void *val,
 
 // -----------------  DB ACCESS UTILS  ----------------------------------------------
 
-// these 2 routines set/get an integer value to the db;
-// and save the integer value in db as a character string
-void db_set_int(int keyid, char *keystr, int value)
+// these 2 routines set/get a numeric value to the db
+void db_set_num(int keyid, char *keystr, double value)
 {
-    char val_str[20];
+    char val_str[50];
     int rc;
 
-    sprintf(val_str, "%d", value);
+    sprintf(val_str, "%g", value);
     rc = db_set(keyid, keystr, val_str, strlen(val_str)+1);
     assert(rc == 0);
 }
 
-int db_get_int(int keyid, char *keystr, int default_value)
+double db_get_num(int keyid, char *keystr, double default_value)
 {
     char *val_str;
     unsigned int val_len;
-    int val, rc;
+    int rc;
+    double val;
 
     rc = db_get(keyid, keystr, (void**)&val_str, &val_len);
     if (rc < 0) {
-        db_set_int(keyid, keystr, default_value);
+        db_set_num(keyid, keystr, default_value);
         return default_value;
     } else {
-        rc = sscanf(val_str, "%d", &val);
+        rc = sscanf(val_str, "%lg", &val);
         assert(rc == 1);
         return val;
     }
 }
-
-
 
 // -----------------  GENERAL UTILS  ------------------------------------------------
 

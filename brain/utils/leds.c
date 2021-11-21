@@ -31,6 +31,8 @@ static struct {
     // unsigned char trailer[MAX_LED+15)/16], set to zero
 } *tx;
 
+static double leds_scale_factor_tbl[101];
+
 static int tx_buff_size;
 
 //
@@ -41,7 +43,7 @@ static void leds_exit(void);
 
 // -----------------  LEDS_INIT  ---------------------------------------------------------
 
-void leds_init(void)
+void leds_init(double sf)
 {
     // this enables Vcc for the Respeaker LEDs
     pinMode (5, OUTPUT);
@@ -68,6 +70,9 @@ void leds_init(void)
     tx = malloc(tx_buff_size);
     memset(tx, 0, tx_buff_size);
 
+    // initialize led brightness scaling table
+    leds_set_scale_factor(sf);
+
     // set leds off, 
     leds_stage_all(LED_OFF,0);
     leds_commit(0);
@@ -84,19 +89,18 @@ static void leds_exit(void)
 
 // -----------------  LEDS API  ----------------------------------------------------------
 
+void leds_set_scale_factor(double sf)
+{
+    INFO("settings leds_scale_factor to %0.3f\n", sf);
+
+    for (int i = 0; i <= 100; i++) {
+        leds_scale_factor_tbl[i] = pow(i*.01, sf);
+    }
+}
+
 void leds_stage_led(int num, unsigned int rgb, int led_brightness)
 {
     struct led_s *x = &tx->led[num];
-
-    static double b[101];
-    static bool first_call = true;
-
-    if (first_call) {
-        first_call = false;
-        for (int i = 0; i <= 100; i++) {
-            b[i] = 1e-6 * (i * i * i);
-        }
-    }
 
     if (num < 0 || num >= MAX_LED) {
         ERROR("invalid arg num=%d\n", num);
@@ -105,9 +109,9 @@ void leds_stage_led(int num, unsigned int rgb, int led_brightness)
 
     led_brightness = clip_int(led_brightness, 0, 100);
 
-    x->red   = nearbyint(((rgb >>  0) & 0xff) * b[led_brightness]);
-    x->green = nearbyint(((rgb >>  8) & 0xff) * b[led_brightness]);
-    x->blue  = nearbyint(((rgb >> 16) & 0xff) * b[led_brightness]);
+    x->red   = nearbyint(((rgb >>  0) & 0xff) * leds_scale_factor_tbl[led_brightness]);
+    x->green = nearbyint(((rgb >>  8) & 0xff) * leds_scale_factor_tbl[led_brightness]);
+    x->blue  = nearbyint(((rgb >> 16) & 0xff) * leds_scale_factor_tbl[led_brightness]);
 }
 
 void leds_stage_all(unsigned int rgb, int led_brightness)

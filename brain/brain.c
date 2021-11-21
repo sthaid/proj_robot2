@@ -84,9 +84,10 @@ static void initialize(void)
 
     // init access to the database, and read program settings
     db_init("db.dat", true, GB);
-    settings.volume = db_get_int(KEYID_PROG_SETTINGS, "volume", 20);
-    settings.brightness = db_get_int(KEYID_PROG_SETTINGS, "brightness", 60);
-    settings.color_organ = db_get_int(KEYID_PROG_SETTINGS, "color_organ", 2);
+    settings.volume = db_get_num(KEYID_PROG_SETTINGS, "volume", 20);
+    settings.brightness = db_get_num(KEYID_PROG_SETTINGS, "brightness", 60);
+    settings.color_organ = db_get_num(KEYID_PROG_SETTINGS, "color_organ", 2);
+    settings.led_scale_factor = db_get_num(KEYID_PROG_SETTINGS, "led_scale_factor", 2.5);
 
     // init other functions
     misc_init();
@@ -94,7 +95,7 @@ static void initialize(void)
     t2s_init();
     s2t_init();
     doa_init();
-    leds_init();
+    leds_init(settings.led_scale_factor);
     sf_init();
     proc_cmd_init();
     audio_init(proc_mic_data, settings.volume);
@@ -147,6 +148,17 @@ static int proc_mic_data(short *frame)
 
     static int state = STATE_WAITING_FOR_WAKE_WORD;
     static double doa;
+
+    // xxx comment
+    // xxx can this be reset in reset_mic, or pass in a counter
+    // xxx or ifdef this out after it is working
+    static int debug_print_frame_cnt;
+    if (debug_print_frame_cnt < 10) {
+        INFO("first mic frame %d: %6d %6d %6d %6d\n", 
+             debug_print_frame_cnt,
+             frame[0], frame[1], frame[2], frame[3]);
+        debug_print_frame_cnt++;
+    }
 
     // supply the frame for doa analysis, frame is 4 shorts
     doa_feed(frame);
@@ -242,7 +254,7 @@ static void *leds_thread(void *cx)
         switch (leds_cmd) {
         case LEDS_IDLE:
             for (int i = 0; i < MAX_LED; i++) {
-                leds_stage_led(i, LED_BLUE, 50 * (i + 3) / MAX_LED);
+                leds_stage_led(i, LED_BLUE, 50 * (i + 2) / MAX_LED);
             }
             leds_commit(settings.brightness);
             rotating = true;

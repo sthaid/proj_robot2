@@ -10,6 +10,7 @@ struct {
     int volume;
     int brightness;
     int color_organ;
+    double led_scale_factor;
 } settings;
 
 // brain.c ...

@@ -28,12 +28,13 @@ END
 # ==================
 
 HNDLR set
-set 0:<volume brightness> to 1:PERCENT
-set 0:<(color organ) (color oregon)> to version 1:NUMBER
+set 0:<volume brightness> 1:PERCENT
+set 0:<(color organ) (color oregon)> version 1:NUMBER
+set 0:<(led scale factor) (lead scale factor)> 1:NUMBER
 END
 
 HNDLR get
-<get (what is your)> 0:<volume brightness (color organ) (color oregon)>
+<get (what is your)> 0:<volume brightness (color organ) (color oregon) (led scale factor) (lead scale factor)>
 what are your 0:settings
 END
 
