@@ -6,6 +6,7 @@ static audio_shm_t *shm;
 static bool         end_program;
 static pthread_t    recv_mic_data_tid;
 static int          recv_mic_data_start_fidx;
+static bool         recv_mic_data_workaround;
 
 // prototypes
 static void sig_hndlr(int sig);
@@ -188,7 +189,7 @@ static void lmh_init(void)
 
 static void lmh(short v)
 {
-    #define SMOOTH 0.980   // also .995 was okay
+    #define SMOOTH 0.995
     double low, high, mid;
 
     low = low_pass_filter_ex(v, cx_low, 7, .85);
@@ -203,9 +204,13 @@ static void lmh(short v)
 
 // -----------------  AUDIO INPUT FROM RESPEAKER 4 CHAN MIC  ------------------
 
-static int recv_mic_data(const void *frame, void *cx)
+static int recv_mic_data(const void *frame_arg_as_void, void *cx)
 {
     static int cnt;
+    static int cnt2;
+    static short frame_last[4];
+
+    const short *frame_arg = frame_arg_as_void;
 
     // get this thread id, for use by recv_mic_data_setup_thread
     if (recv_mic_data_tid == 0) {
@@ -222,12 +227,36 @@ static int recv_mic_data(const void *frame, void *cx)
     // stop receiving mic data, and cause the call to pa_record2 to return
     if (shm->reset_mic) {
         shm->reset_mic = false;
+
+        recv_mic_data_workaround = false;
         cnt = 0;
+        cnt2 = 0;
+        memset(frame_last, 0, sizeof(frame_last));
+
         return -1;
     }
 
+    // when starting to receive mic data we can detect if workaround is needed
+    // by checking initial frames for mic data values where mic 0 and 1 have zero
+    // values and mic 2 & 3 are non zero
+    if (cnt2 < 10) {
+        if (frame_arg[0] == 0 && frame_arg[1] == 0 && frame_arg[2] != 0 && frame_arg[3] != 0) {
+            recv_mic_data_workaround = true;
+        }
+        cnt2++;
+    }
+
     // store frame in array, to be processed by the proc_mic_data_thread, in brain.c
-    memcpy(shm->frames[shm->fidx+cnt], frame, sizeof(shm->frames[0]));
+    if (recv_mic_data_workaround == false) {
+        memcpy(shm->frames[shm->fidx+cnt], frame_arg, sizeof(shm->frames[0]));
+    } else {
+        short *frame = shm->frames[shm->fidx+cnt];
+        frame[0] = frame_last[2];        
+        frame[1] = frame_last[3];        
+        frame[2] = frame_arg[0];
+        frame[3] = frame_arg[1];
+        memcpy(frame_last, frame_arg, 8);
+    }
     cnt++;
 
     // publish every 48 values
@@ -285,6 +314,7 @@ static void *recv_mic_data_setup_thread(void *cx)
     }
     start = recv_mic_data_start_fidx;
     end   = recv_mic_data_start_fidx + 10;
+    INFO("WORKAROUND = %d\n", recv_mic_data_workaround);
     for (i = start; i < end; i++) {
         short *frame = shm->frames[i];
         INFO("first mic frames %d: %6d %6d %6d %6d\n",

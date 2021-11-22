@@ -81,7 +81,9 @@ bool play_music_ignore_cancel(void)
         char   *filename;
         int64_t ignore_cancel_duration[10];
     } tbl[] = {
-        { "not_my_name.wav",  {235*SECONDS, 0} },
+        { "not_my_name.wav",               { 235*SECONDS, 78.6*SECONDS, } },
+        { "1_bourbon_1_scotch_1_beer.wav", { 324*SECONDS, } },
+        { "thick_as_a_brick.wav",          {  44*SECONDS, } },
             };
 
     playing_t *playing = now_playing;
@@ -96,6 +98,10 @@ bool play_music_ignore_cancel(void)
     for (int i = 0; i < sizeof(tbl)/sizeof(tbl[0]); i++) {
         if (strcmp(playing->filename, tbl[i].filename) == 0) {
             for (int j = 0; j < 10; j++) {
+                if (tbl[i].ignore_cancel_duration[j] == 0) {
+                    break;
+                }
+
                 int64_t us_low  = tbl[i].ignore_cancel_duration[j] - 3*SECONDS;
                 int64_t us_high = tbl[i].ignore_cancel_duration[j] + 3*SECONDS;
                 if (duration >= us_low && duration <= us_high) {

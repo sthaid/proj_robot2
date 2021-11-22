@@ -133,5 +133,10 @@ lights 0:<on off>
 END
 
 HNDLR play_music
-play 0:<music (WORD [WORD] [WORD] [WORD])>
+play 0:<music (WORD [WORD] [WORD] [WORD] [WORD] [WORD])>
+END
+
+HNDLR list_music
+list music
+what songs do you know
 END

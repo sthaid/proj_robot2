@@ -15,6 +15,7 @@ static bool   cancel;
 static void *cmd_thread(void *cx);
 static int getnum(char *s, int default_value);
 static bool strmatch(char *s, ...) __attribute__((unused));
+static int cmpstringp(const void *p1, const void *p2);
 
 //
 // handlers
@@ -50,6 +51,7 @@ static int hndlr_count(args_t args);
 static int hndlr_polite_conversation(args_t args);
 static int hndlr_lights(args_t args);
 static int hndlr_play_music(args_t args);
+static int hndlr_list_music(args_t args);
 
 #define HNDLR(name) { #name, hndlr_##name }
 
@@ -84,6 +86,7 @@ static hndlr_lookup_t hndlr_lookup_tbl[] = {
     HNDLR(polite_conversation),
     HNDLR(lights),
     HNDLR(play_music),
+    HNDLR(list_music),
     { NULL, NULL }
                 };
 
@@ -226,7 +229,6 @@ static int hndlr_set(args_t args)
 
     INFO("set '%s' to %s\n", args[0], args[1]);
 
-// xxx put this in subst
     if (strcmp(args[1], "to") == 0) strcpy(args[1], "2");
     if (sscanf(args[1], "%lf", &val) != 1) {
         return -1;
@@ -590,6 +592,44 @@ static int hndlr_play_music(args_t args)
     return rc;
 }
 
+static int hndlr_list_music(args_t args)
+{
+    char *names[100], *p;
+    int i, rc, max_names;
+
+    // get list of files in the music direcotry, and 
+    // sort alphabetically
+    rc = get_filenames("music", names, &max_names);
+    if (rc < 0) {
+        ERROR("play music failed to get filenames\n");
+        return -1;
+    }
+    qsort(names, max_names, sizeof(char*), cmpstringp);
+
+    // play the list of song names
+    for (i = 0; i < max_names; i++) {
+        if (strstr(names[i], ".wav") == NULL) continue;
+        if (strstr(names[i], "frequency_sweep") != NULL) continue;
+        if (strstr(names[i], "white_noise") != NULL) continue;
+
+        p = strstr(names[i], ".wav");
+        *p = '\0';
+        for (p = names[i]; *p; p++) {
+            if (*p == '_') *p = ' ';
+        }
+
+        t2s_play("%s", names[i]);
+    }
+
+    // free names
+    for (i = 0; i < max_names; i++) {
+        free(names[i]);
+    }
+
+    // okay
+    return 0;
+}
+
 // -----------------  SUPPORT  ----------------------------------------------
 
 static int getnum(char *s, int default_value)
@@ -616,3 +656,9 @@ static bool strmatch(char *s, ...)
 
     return match;
 }
+
+static int cmpstringp(const void *p1, const void *p2)
+{
+    return strcmp(* (char * const *) p1, * (char * const *) p2);
+}
+

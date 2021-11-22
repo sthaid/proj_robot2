@@ -87,7 +87,7 @@ static void initialize(void)
     settings.volume = db_get_num(KEYID_PROG_SETTINGS, "volume", 20);
     settings.brightness = db_get_num(KEYID_PROG_SETTINGS, "brightness", 60);
     settings.color_organ = db_get_num(KEYID_PROG_SETTINGS, "color_organ", 2);
-    settings.led_scale_factor = db_get_num(KEYID_PROG_SETTINGS, "led_scale_factor", 2.5);
+    settings.led_scale_factor = db_get_num(KEYID_PROG_SETTINGS, "led_scale_factor", 3.0);
 
     // init other functions
     misc_init();
@@ -243,7 +243,7 @@ static void *leds_thread(void *cx)
         switch (leds_cmd) {
         case LEDS_IDLE:
             for (int i = 0; i < MAX_LED; i++) {
-                leds_stage_led(i, LED_BLUE, 50 * (i + 2) / MAX_LED);
+                leds_stage_led(i, LED_BLUE, 50 * (i + 4) / MAX_LED);
             }
             leds_commit(settings.brightness);
             rotating = true;
