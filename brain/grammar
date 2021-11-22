@@ -140,3 +140,7 @@ HNDLR list_music
 list music
 what songs do you know
 END
+
+HNDLR speedtest
+[run] [network] speed test
+END

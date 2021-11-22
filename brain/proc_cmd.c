@@ -52,6 +52,7 @@ static int hndlr_polite_conversation(args_t args);
 static int hndlr_lights(args_t args);
 static int hndlr_play_music(args_t args);
 static int hndlr_list_music(args_t args);
+static int hndlr_speedtest(args_t args);
 
 #define HNDLR(name) { #name, hndlr_##name }
 
@@ -87,6 +88,7 @@ static hndlr_lookup_t hndlr_lookup_tbl[] = {
     HNDLR(lights),
     HNDLR(play_music),
     HNDLR(list_music),
+    HNDLR(speedtest),
     { NULL, NULL }
                 };
 
@@ -627,6 +629,55 @@ static int hndlr_list_music(args_t args)
     }
 
     // okay
+    return 0;
+}
+
+static int hndlr_speedtest(args_t args)
+{
+    // to get speedtest-cli:
+    //  pip install speedtest-cli
+
+    FILE *fp;
+    char s[1000];
+    double speed;
+    int len;
+
+    fp = popen("/home/haid/.local/bin/speedtest-cli 2>&1", "r");
+    if (fp == NULL) {
+        t2s_play("unable to run network speedtest");
+        return -1;
+    }
+
+    t2s_play("running network speedtest, this will take a minute");
+    while (fgets(s, sizeof(s), fp) != NULL) {
+        len = strlen(s);
+        if (len > 0 && s[len-1] == '\n') s[len-1] = '\0';
+        INFO("speedtest-cli: '%s'\n", s);
+
+        if (strstr(s, "not found") != NULL) {
+            t2s_play("unable to run network speedtest");
+            pclose(fp);
+            return -1;
+        }
+
+        if (sscanf(s, "Download: %lf", &speed) == 1) {
+            if (speed >= 10) {
+                t2s_play("download speed is %0.0f Mbit/s", speed);
+            } else {
+                t2s_play("download speed is %0.1f Mbit/s", speed);
+            }
+        }
+
+        if (sscanf(s, "Upload: %lf", &speed) == 1) {
+            if (speed >= 10) {
+                t2s_play("upload speed is %0.0f Mbit/s", speed);
+            } else {
+                t2s_play("upload speed is %0.1f Mbit/s", speed);
+            }
+        }
+    }
+
+    pclose(fp);
     return 0;
 }
 
