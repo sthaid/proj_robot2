@@ -79,7 +79,7 @@ int drive_proc(struct msg_drive_proc_s *dpm)
         break; }
     case DRIVE_TST4: {
         // tst4 [cycles] [fudge] - repeating figure eight
-        double cycles = GET_ARG(0, 3);   // default cycles = 3
+        double cycles = GET_ARG(0, 1);   // default cycles = 1
         double fudge  = GET_ARG(1, 0);
         for (int i = 0; i < cycles; i++) {
             STEP(drive_radius(360, 1, DONT_STOP_MOTORS, fudge));
@@ -88,7 +88,7 @@ int drive_proc(struct msg_drive_proc_s *dpm)
         break; }
     case DRIVE_TST5: {
         // tst5 [cycles] [fudge] - repeating oval
-        double cycles = GET_ARG(0, 3);   // default cycles = 3
+        double cycles = GET_ARG(0, 1);   // default cycles = 1
         double fudge  = GET_ARG(1, 0);
         for (int i = 0; i < cycles; i++) {
             bool last = (i == cycles-1);
@@ -100,7 +100,7 @@ int drive_proc(struct msg_drive_proc_s *dpm)
         break; }
     case DRIVE_TST6: {
         // tst6 [cycles] [fudge] - repeating square, corner turn radius = 1
-        double cycles = GET_ARG(0, 3);   // default cycles = 3
+        double cycles = GET_ARG(0, 1);   // default cycles = 1
         double fudge  = GET_ARG(1, 0);
         double corner_radius = 1;
         double feet = 1.5;
@@ -118,7 +118,7 @@ int drive_proc(struct msg_drive_proc_s *dpm)
         break; }
     case DRIVE_TST7: {
         // tst7 [cycles] [fudge] - repeating square, corner turn radius = 0
-        double cycles = GET_ARG(0, 3);   // default cycles = 3
+        double cycles = GET_ARG(0, 1);   // default cycles = 1
         double fudge  = GET_ARG(1, 0);
         double corner_radius = 0;
         double feet = 2;

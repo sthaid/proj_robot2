@@ -685,7 +685,7 @@ static int drive_straight(double desired_feet, double mph, bool stop_motors_flag
             break;
         }
 
-#if 0   // note: comment this out on bench
+#if 1   // note: comment this out on bench
         // perform motor speed compensation, and
         // maintain sums for calculation of avg mtr speeds
         if ((ms % 100) == 0) {
