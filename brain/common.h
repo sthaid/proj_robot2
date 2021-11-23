@@ -30,7 +30,7 @@ int body_drive_cmd(int proc_id, int arg0, int arg1, int arg2, int arg3);
 void body_emer_stop(void);
 void body_power_on(void);
 void body_power_off(void);
-void body_status_report(void);
+void body_status_report(char *request);
 void body_weather_report(void);
 
 // music.c ...

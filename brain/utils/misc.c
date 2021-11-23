@@ -424,3 +424,21 @@ double clip_double(double val, double min, double max)
     return val;
 }
 
+bool strmatch(char *s, ...)
+{
+    va_list ap;
+    bool match = false;
+    char *s1;
+
+    va_start(ap, s);
+    while ((s1 = va_arg(ap, char*))) {
+        if (strcmp(s, s1) == 0) {
+            match = true;
+            break;
+        }
+    }
+    va_end(ap);
+
+    return match;
+}
+

@@ -265,6 +265,7 @@ bool grammar_match(char *cmd_arg, hndlr_t *proc, args_t args)
         { " seven ", " 7 " },
         { " eight ", " 8 " },
         { " nine ",  " 9 " },
+        { "\xc2\xb0", " degrees " },
             };
 
     // there should not be any newline chars in cmd_arg
@@ -372,7 +373,7 @@ static int match(char *syntax, char *cmd, args_t args)
             // check for failed match, and if so then return match_len = 0
             if (strcmp(token, "NUMBER") == 0) {
                 double tmp;
-                if (sscanf(cmd, "%lf", &tmp) != 1) {
+                if (strcmp(cmd, "to") != 0 && sscanf(cmd, "%lf", &tmp) != 1) {
                     *p = save;
                     return 0;
                 }

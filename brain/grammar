@@ -57,8 +57,8 @@ END
 # ==================
 
 HNDLR status_report
-status [report]
-what is your status
+0:status [report]
+what is your 0:<status voltage current (compass heading)>
 END
 
 HNDLR body_power
@@ -71,19 +71,19 @@ END
 # ==================
 
 HNDLR body_mcal
-calibrate <compass magnetometer>
+calibrate compass
 END
 
 HNDLR body_fwd
-<drive go> forward 0:[NUMBER] [<feet ft>]
+<drive go> forward 0:[NUMBER] [<feet ft foot>]
 END
 
 HNDLR body_rev
-<drive go> <backward backwards> 0:[NUMBER] [<feet ft>]
+<drive go> <backward backwards> 0:[NUMBER] [<feet ft foot>]
 END
 
 HNDLR body_rotate
-DEFINE AMOUNT <(NUMBER degrees)  (halfway around)  (all [of] the way around)>
+DEFINE AMOUNT <(NUMBER [degrees])  (halfway around)  (all [of] the way around)>
 DEFINE DIRECTION <clockwise  counter-clockwise  counterclockwise>
 <rotate turn> 0:[AMOUNT] 1:[DIRECTION]
 <rotate turn> 1:[DIRECTION] 0:[AMOUNT]
@@ -91,7 +91,7 @@ END
 
 HNDLR body_rotate_to_hdg
 [turn to] face 0:<north south east west>
-[turn to] face [compass] heading 0:NUMBER [degrees]
+[turn to] face compass heading 0:NUMBER [degrees]
 END
 
 HNDLR body_rotate_to_doa
@@ -99,7 +99,7 @@ HNDLR body_rotate_to_doa
 END
 
 HNDLR body_test
-[<run execute>] test [pattern] number 0:NUMBER
+[<run execute>] test [number] 0:NUMBER
 END
 
 # ==================

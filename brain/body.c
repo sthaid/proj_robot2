@@ -232,7 +232,7 @@ void body_power_off(void)
     t2s_play("body power is off");
 }
 
-void body_status_report(void)
+void body_status_report(char *request)
 {
     if (power_on_time == 0) {
         t2s_play("Bbody is off.");
@@ -244,9 +244,15 @@ void body_status_report(void)
         double voltage = status.voltage;
         double total_current = status.total_current;
         double mag_heading = status.mag_heading;
-        t2s_play_nodb("Voltage is %0.2f volts", voltage);
-        t2s_play_nodb("Current is %0.0f milliamps", 1000*total_current);
-        t2s_play_nodb("Magnetic heading is %0.0f degrees", mag_heading);
+        if (strmatch(request, "status", "voltage", NULL)) {
+            t2s_play_nodb("Voltage is %0.2f volts", voltage);
+        }
+        if (strmatch(request, "status", "current", NULL)) {
+            t2s_play_nodb("Current is %0.0f milliamps", 1000*total_current);
+        }
+        if (strmatch(request, "status", "compass heading", NULL)) {
+            t2s_play_nodb("Compass heading is %0.0f degrees", mag_heading);
+        }
     }
 }
 

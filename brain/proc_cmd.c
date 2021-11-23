@@ -13,8 +13,7 @@ static bool   cancel;
 //
 
 static void *cmd_thread(void *cx);
-static int getnum(char *s, int default_value);
-static bool strmatch(char *s, ...) __attribute__((unused));
+static double getnum(char *s, double default_value);
 static int cmpstringp(const void *p1, const void *p2);
 
 //
@@ -231,8 +230,8 @@ static int hndlr_set(args_t args)
 
     INFO("set '%s' to %s\n", args[0], args[1]);
 
-    if (strcmp(args[1], "to") == 0) strcpy(args[1], "2");
-    if (sscanf(args[1], "%lf", &val) != 1) {
+    val = getnum(args[1], -1);
+    if (val == -1) {
         return -1;
     }
 
@@ -326,7 +325,7 @@ static int hndlr_get_user_info(args_t args)
 
 static int hndlr_status_report(args_t args)
 {
-    body_status_report();
+    body_status_report(args[0]);
 
     return 0;
 }
@@ -359,7 +358,7 @@ static int hndlr_body_fwd(args_t args)
 {
     int feet = getnum(args[0], 3);
 
-    t2s_play("driving forward %d feed", feet);
+    t2s_play("driving forward %d feet", feet);
 
     return body_drive_cmd(DRIVE_FWD, feet, 0, 0, 0);
 }
@@ -368,7 +367,7 @@ static int hndlr_body_rev(args_t args)
 {
     int feet = getnum(args[0], 3);
 
-    t2s_play("driving backward %d feed", feet);
+    t2s_play("driving backward %d feet", feet);
 
     return body_drive_cmd(DRIVE_REV, feet, 0, 0, 0);
 }
@@ -683,29 +682,15 @@ static int hndlr_speedtest(args_t args)
 
 // -----------------  SUPPORT  ----------------------------------------------
 
-static int getnum(char *s, int default_value)
+static double getnum(char *s, double default_value)
 {
-    int n = default_value;
-    sscanf(s, "%d", &n);
-    return n;
-}
-
-static bool strmatch(char *s, ...)
-{
-    va_list ap;
-    bool match = false;
-    char *s1;
-
-    va_start(ap, s);
-    while ((s1 = va_arg(ap, char*))) {
-        if (strcmp(s, s1) == 0) {
-            match = true;
-            break;
-        }
+    if (strcmp(s, "to") == 0) {
+        return 2;
     }
-    va_end(ap);
 
-    return match;
+    double n = default_value;
+    sscanf(s, "%lf", &n);
+    return n;
 }
 
 static int cmpstringp(const void *p1, const void *p2)

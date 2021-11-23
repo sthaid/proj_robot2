@@ -106,6 +106,7 @@ void shuffle(void *array, int elem_size, int num_elem);
 int get_filenames(char *dirname, char **names, int *max_names);
 int clip_int(int val, int min, int max);
 double clip_double(double val, double min, double max);
+bool strmatch(char *s, ...);
 
 // -------- filter routines  --------
 
