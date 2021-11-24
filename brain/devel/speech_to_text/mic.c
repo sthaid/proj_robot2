@@ -31,10 +31,14 @@ int main(int argc, char **argv)
 static int put_frame(const void *frame_arg, void *cx)
 {
     #define MAX 160
-    static int cnt;
+    static int cnt, total_cnt;
     static short buffer[MAX];
 
     const short *frame = frame_arg;
+
+    if (total_cnt++ == 5*16000) {
+        return -1;
+    }
 
     // collect 160 values, in 16 bit format, and write them to stdout
     buffer[cnt++] = frame[0];

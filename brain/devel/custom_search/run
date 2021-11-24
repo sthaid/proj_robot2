@@ -1,0 +1,35 @@
+#!/bin/bash
+
+gcc -Wall -o prog prog.c
+if [ $? -ne 0 ]; then
+  echo ABORT
+  exit
+fi
+
+while [ 1 = 1 ]; do
+  # play "ready for transcript"
+  #    echo ready > ready.txt
+  #    ../text_to_speech/synthesize_file --text ready.txt 
+  #    mv output.raw ready.wav
+  aplay ready.wav
+
+  # get transcript using livecaption
+  transcript=`../speech_to_text/mic | ../speech_to_text/livecaption |  awk -F'"' '{ print $2 }'`
+  #transcript="collatz conjecture"
+  echo "TRANSCRIPT = '$transcript'"
+
+  # run program that will:
+  #   perform google customsearch of  www.en.wikipedia.org/*
+  #   extract the best match url from the result
+  #   if file <url>.scrape does not exist
+  #     run beautifulsoup web scraper on the url
+  #   endif
+  #   read the <url>.scrape file, and extract the Title and Intro paragraph
+  #   play the title 
+  #   play the intro paragraph
+  ./prog "$transcript"
+
+  # prompt to continue
+  #read -p "Enter <cr> to continue." dummy
+  exit
+done
