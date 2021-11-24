@@ -10,17 +10,8 @@ if response is not None:
     html = bs4.BeautifulSoup(response.text, 'html.parser')
 
     title = html.select("#firstHeading")[0].text
-    print ("Title:", title)
-    paragraphs = html.select("p")
-    #for para in paragraphs:
-    #    print (para.text)
+    print (title)
 
-    # just grab the text up to contents as stated in question
-    #intro = '\n'.join([ para.text for para in paragraphs[0:5]])
-    #print (intro)
-    #print ("-----------------------------------------------")
-    print("Paragraph:", paragraphs[0].text)
-    #print ("-----------------------------------------------")
-    print("Paragraph:", paragraphs[1].text)
-    #print ("-----------------------------------------------")
-    print("Paragraph:", paragraphs[2].text)
+    paragraphs = html.select("p")
+    for para in paragraphs:
+        print (para.text)
