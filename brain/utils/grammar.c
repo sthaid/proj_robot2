@@ -360,6 +360,10 @@ static int match(char *syntax, char *cmd, args_t args)
                 return 0;
             }
 
+        // match rest of line
+        } else if (strcmp(token, "REST") == 0) {
+            match_len = strlen(cmd);
+
         // match a word or number or percent
         } else {
             // put a temporary '\0' at the end of the first word of cmd

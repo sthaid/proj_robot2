@@ -45,7 +45,7 @@ END
 DEFINE USER_INFO <name  age  (favorite color)>
 
 HNDLR set_user_info
-my 0:USER_INFO is 1:(WORD [WORD])
+my 0:USER_INFO is 1:REST
 END
 
 HNDLR get_user_info
@@ -133,7 +133,7 @@ lights 0:<on off>
 END
 
 HNDLR play_music
-play 0:<music (WORD [WORD] [WORD] [WORD] [WORD] [WORD])>
+play 0:<music REST>
 END
 
 HNDLR list_music
