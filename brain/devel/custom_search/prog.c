@@ -13,8 +13,11 @@
 #define WARN(fmt, args...) log_msg("WARN", fmt, ## args);
 #define ERROR(fmt, args...) log_msg("ERROR", fmt, ## args);
 
+int customsearch(char *transcript);
+void readline(char *s, int slen, FILE *fp, bool *eof);
 void cleanup_url(char *url);
 void cleanup_description(char *description);
+
 void log_msg(char *lvl, char *fmt, ...) __attribute__ ((format (printf, 2, 3)));
 void t2s_play(char *fmt, ...) __attribute__((format(printf, 1, 2)));
 
@@ -22,12 +25,8 @@ void t2s_play(char *fmt, ...) __attribute__((format(printf, 1, 2)));
 
 int main(int argc, char **argv)
 {
-    FILE       *fp;
-    char       *transcript, *s, *description;
-    char        cmd[1000], url[1000], wikipedia_page[1000], filename[1000];
-    char        lines[10][10000];
-    struct stat statbuf;
-    int         rc, n;
+    char *transcript;
+    int rc;
 
     // transcript must be supplied in argv[1]
     if (argc != 2) {
@@ -35,75 +34,124 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    // print program starting message
+    // call customesearch
     transcript = argv[1];
-    INFO("STARTING: TRANSCRIPT = '%s'\n", transcript);
+    rc = customsearch(transcript);
+
+    // done 
+    return rc < 0 ? 1 : 0;
+}
+
+int customsearch(char *transcript)
+{
+    FILE       *fp;
+    char        title[1000], description[10000];
+    char        cmd[1000], url[1000], wikipedia_page[1000], filename[1000];
+    struct stat statbuf;
+    int         rc;
+    bool        eof;
+
+    // print search request transcript
+    INFO("transcript = '%s'\n", transcript);
 
     // perform google customsearch of  www.en.wikipedia.org/*, and
     // extract the best match url from the result
     sprintf(cmd, "./customsearch.py \"%s\" | grep htmlFormattedUrl | awk -F\\' '{ print $4}' | head -1", transcript);
-    INFO("CUSTOMSEARCH CMD = '%s'\n", cmd);
+    INFO("customsearch cmd = '%s'\n", cmd);
     fp = popen(cmd, "r");
-    fgets(url, sizeof(url), fp);
+    if (fp == NULL) {
+        ERROR("popen customsearch.py failed, %s\n", strerror(errno));
+        return -1;
+    }
+    readline(url, sizeof(url), fp, &eof);
     pclose(fp);
+    if (eof) {
+        ERROR("failed to read url from customsearch.py\n");
+        return -1;
+    }
     cleanup_url(url);
-    INFO("URL = '%s'\n", url);
+    INFO("url = '%s'\n", url);
 
-    // if file scrape/<url> does not exist
-    //   run beautifulsoup web scraper on the url
-    // endif
+    // generate scrape filename from url
     if (sscanf(url, "https://en.wikipedia.org/wiki/%s", wikipedia_page) != 1) {
-        ERROR("XXX\n");
+        ERROR("bad url '%s'\n", url);
+        return -1;
     }
     sprintf(filename, "scrape/%s", wikipedia_page);
-    INFO("FILENAME = '%s'\n", filename);
+    INFO("filename = '%s'\n", filename);
+
+    // if file scrape file does not exist
+    //   run beautifulsoup web scraper on the url
+    // endif
     if (stat(filename, &statbuf) < 0) {
         sprintf(cmd, "./beautifulsoup.py %s > %s", url, filename);
-        INFO("BEAUTIFYSOUP CMD = '%s'\n", cmd);
+        INFO("beautifysoup cmd = '%s'\n", cmd);
         if ((rc = system(cmd)) != 0) {
             ERROR("beautifysoup.py rc=0x%xx\n", rc);
-            // xxx returns
+            return -1;
         }
     } else {
-        INFO("FILE ALREADY EXISTS\n");
+        INFO("file %s already exists\n", filename);
     }
 
-    // read the scrape file contents into lines array
-    n = 0;
-    fp = fopen(filename, "r");  // xxx check
-    while (s = lines[n], fgets(s, sizeof(lines[n]), fp) != NULL) {
-        if (strlen(s) <= 1) continue;
-        if (++n == 10) break;
+    // open the scrape file
+    fp = fopen(filename, "r");
+    if (fp == NULL) {
+        ERROR("failed to open %s, %s\n", filename, strerror(errno));
+        return -1;
     }
+
+    // get title from the scrape file
+    readline(title, sizeof(title), fp, &eof);
+
+    // get description from the scrape file;
+    //
+    // sample wikipedia pages have been examined, and the following seems okay:
+    // - description is first line following the title whose length is
+    //   greater than 100 chars, with the subsequent line appended
+    while (true) {
+        readline(description, sizeof(description), fp, &eof);
+        if (eof) break;
+
+        int len = strlen(description);
+        if (len > 100) {
+            readline(description+len, sizeof(description)-len, fp, &eof);
+            break;
+        }
+    }
+    if (description[0] == '\0') {
+        strcpy(description, "no information available");
+    }
+
+    // close scrape file
     fclose(fp);
 
-    // debug print lines
-    for (int i = 0; i < n; i++) {
-        INFO("LINE[%d] = %s\n", i, lines[i]);
-    }
+    // play the title and description
+    t2s_play("%s", title);
 
-    // play the title
-    t2s_play("%s", lines[0]);
-
-    // xxx check this
-    if (strlen(lines[1]) < 100 && strlen(lines[2]) > 100) {
-        description = lines[2];
-    } else {
-        description = lines[1];
-    }
     cleanup_description(description);
+    INFO("description len=%zd - '%s'\n", strlen(description), description);
     t2s_play("%s", description);
 
     // done
     return 0;
 }
 
+void readline(char *s, int slen, FILE *fp, bool *eof)
+{
+    if (fgets(s, slen, fp) == NULL) {
+        s[0] = '\0';
+        *eof = true;
+        return;
+    }
+
+    s[strcspn(s, "\n")] = '\0';
+    *eof = false;
+}
+
 void cleanup_url(char *url)
 {
     char *p;
-
-    // remove trailing newline
-    url[strcspn(url, "\n")] = '\0';
 
     // remove <b> from url
     while (true) {
@@ -113,7 +161,6 @@ void cleanup_url(char *url)
     }
 
     // remove </b> from url
-// xxx optimize
     while (true) {
         p = strstr(url, "</b>");
         if (p == NULL) break;
@@ -123,7 +170,16 @@ void cleanup_url(char *url)
 
 void cleanup_description(char *description)
 {
-    char *p, *end;
+    char *p, *end, *start;
+    int level;
+
+    // remove double quote char
+    p = description;
+    while (true) {
+        p = strchr(p, '"');
+        if (p == NULL) break;
+        memmove(p, p+1, strlen(p+1)+1);
+    }
 
     // remove [...]
     p = description;
@@ -135,18 +191,50 @@ void cleanup_description(char *description)
         memmove(p, end+1, strlen(end+1)+1);
     }
 
-    // remove double quote char
+    // remove (...(...)...)
     p = description;
-    while (true) {
-        p = strchr(p, '"');
-        if (p == NULL) break;
-        memmove(p, p+1, strlen(p+1)+1);
+    level = 0;
+    start = NULL;
+    while (*p != '\0') {
+        if (*p == '(') {
+            if (level == 0) start = p;
+            level++;
+        }
+        if (*p == ')') {
+            level--;
+            if ((level < 0) || (level == 0 && start == NULL)) {
+                break;
+            }
+            if (level == 0) {
+#if 0
+                // debug print what is being removed
+                char tmp[10000];
+                memcpy(tmp, start, p-start+1);
+                tmp[p-start+1] = '\0';
+                INFO("removing '%s'\n", tmp);
+#endif
+
+                memmove(start, p+1, strlen(p+1)+1);
+                p = start-1;
+                start = NULL;
+            }
+        }
+        p++;
+    }
+
+    // if descriptin len is > 500 then shorten it by starting at 500 and
+    // null terminating at the first period found
+    if (strlen(description) > 500) {
+        for (p = description+500; *p; p++) {
+            if (*p == '.' && *(p+1) == ' ') {
+                *(p+1) = '\0';
+                break;
+            }
+        }
     }
 }
 
 // -----------------  LOGGING  ------------------------------------
-
-// xxx review brain log_msg and t2s_play against this
 
 void log_msg(char *lvl, char *fmt, ...)
 {
@@ -177,7 +265,6 @@ void t2s_play(char *fmt, ...)
     va_end(ap);
 }
 
-// xxx this is calling into brain dir
 void t2s_play_common(bool nodb, char *fmt, va_list ap)
 {
     char  text[10000], cmd[10000];
@@ -195,12 +282,10 @@ void t2s_play_common(bool nodb, char *fmt, va_list ap)
     // if lenght of text is 0 then return
     if (len == 0) return;
 
-    // debug print text
-    INFO("PLAY: %s\n", text);
-
     // conver text to sound file
-    snprintf(cmd, sizeof(cmd), "../../go/synthesize_text --text \"%s\"", text);
-    INFO("T2S CMD: '%s'\n", cmd);
+    snprintf(cmd, sizeof(cmd), "../text_to_speech/synthesize_text --text \"%s\"", text);
+    INFO("t2s cmd: '%s'\n", cmd);
+
     if (system(cmd) < 0) {
         ERROR("system(synthesize_text)) failed, %s\n", strerror(errno));
         return;
@@ -212,4 +297,3 @@ void t2s_play_common(bool nodb, char *fmt, va_list ap)
         return;
     }
 }
-

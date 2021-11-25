@@ -1,4 +1,4 @@
-TARGETS = synthesize_file list_voices
+TARGETS = synthesize_file synthesize_text list_voices
 
 .PHONY: build clean clobber test
 
@@ -13,6 +13,9 @@ build: $(TARGETS)
 
 synthesize_file: synthesize_file.go go.mod
 	go build synthesize_file.go
+
+synthesize_text: synthesize_text.go go.mod
+	go build synthesize_text.go
 
 list_voices: list_voices.go go.mod
 	go build list_voices.go
