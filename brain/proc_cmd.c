@@ -39,9 +39,9 @@ static int hndlr_status_report(args_t args);
 static int hndlr_body_mcal(args_t args);
 static int hndlr_body_fwd(args_t args);
 static int hndlr_body_rev(args_t args);
-static int hndlr_body_rotate(args_t args);
-static int hndlr_body_rotate_to_hdg(args_t args);
-static int hndlr_body_rotate_to_doa(args_t args);
+static int hndlr_body_turn(args_t args);
+static int hndlr_body_turn_to_hdg(args_t args);
+static int hndlr_body_turn_to_doa(args_t args);
 static int hndlr_body_test(args_t args);
 // misc
 static int hndlr_time(args_t args);
@@ -75,9 +75,9 @@ static hndlr_lookup_t hndlr_lookup_tbl[] = {
     HNDLR(body_mcal),
     HNDLR(body_fwd),
     HNDLR(body_rev),
-    HNDLR(body_rotate),
-    HNDLR(body_rotate_to_hdg),
-    HNDLR(body_rotate_to_doa),
+    HNDLR(body_turn),
+    HNDLR(body_turn_to_hdg),
+    HNDLR(body_turn_to_doa),
     HNDLR(body_test),
     // misc
     HNDLR(time),
@@ -372,7 +372,7 @@ static int hndlr_body_rev(args_t args)
     return body_drive_cmd(DRIVE_REV, feet, 0, 0, 0);
 }
 
-static int hndlr_body_rotate(args_t args)
+static int hndlr_body_turn(args_t args)
 {
     int degrees;
 
@@ -383,18 +383,19 @@ static int hndlr_body_rotate(args_t args)
     } else {
         degrees = 360;
     }
+
     if (strncmp(args[1], "counter", 7) == 0) {
         degrees = -degrees;
     }
 
-    t2s_play("rotating %s for %d degrees",
-             degrees >= 0 ? "clockwise" : "counterclockwise",
-             abs(degrees));
+    t2s_play("turning %d degrees %s",
+             abs(degrees),
+             degrees >= 0 ? "clockwise" : "counterclockwise");
 
     return body_drive_cmd(DRIVE_ROT, degrees, 0, 0, 0);
 }
 
-static int hndlr_body_rotate_to_hdg(args_t args)
+static int hndlr_body_turn_to_hdg(args_t args)
 {
     static struct {
         char *name;
@@ -421,12 +422,12 @@ static int hndlr_body_rotate_to_hdg(args_t args)
         return -1;
     }
     
-    t2s_play("rotating to face compass heading %d degrees", heading);
+    t2s_play("turning to face compass heading %d degrees", heading);
 
     return body_drive_cmd(DRIVE_HDG, heading, 0, 0, 0);
 }
 
-static int hndlr_body_rotate_to_doa(args_t args)
+static int hndlr_body_turn_to_doa(args_t args)
 {
     int degrees;
 
