@@ -77,8 +77,9 @@ TITLE: RESPEAKER - NOTES
 TITLE: RESPEAKER - APA102 LEDS C LANGUAGE DEMO PGM
 TITLE: RESPEAKER - SOUND DIRECTION OF ARRIVAL DEVEL
 
-TITLE: SPEECH TO TEXT
-TITLE: TEXT TO SPEECH
+TITLE: GOOGLE SPEECH TO TEXT & PORCUPINE WWD ENGINE
+TITLE: GOOGLE TEXT TO SPEECH
+TITLE: GOOGLE CUSTOM SEARCH API
 
 TITLE: LINUX AUDIO RECORDING
 
@@ -1717,7 +1718,7 @@ My Test Programs   ~/proj/proj_robot2/brain/devel/portaudio
        https://www.bragitoff.com/2018/06/polynomial-fitting-c-program/
 
 ===============================================
-TITLE: SPEECH TO TEXT
+TITLE: GOOGLE SPEECH TO TEXT & PORCUPINE WWD ENGINE
 ===============================================
 
 Investigating alternatives to Picovoice ...
@@ -1797,7 +1798,7 @@ Authenticate your client by running.
     The gcloud auth login command gets your OAuth2 credentials and saves them locally on your computer.
 
 Set your default project ID.
-    gcloud config set project square-root-2
+    gcloud config set project xxxxxx-xxxx-x
     gcloud config list
 
 Enable Speech-to-Text API, and create a service account
@@ -1811,7 +1812,7 @@ Enable Speech-to-Text API, and create a service account
         download the key
 
 Add environment variable , with pathname to the downloaded service account key.
-  export GOOGLE_APPLICATION_CREDENTIALS=/home/haid/Downloads/square-root-2-1256570f4acc.json
+  export GOOGLE_APPLICATION_CREDENTIALS=/home/haid/Downloads/xxxxxx-xxxx-x-1256570f4acc.json
 
 ---------------------------------
 "Google Cloud Speech-to-Text API" - Streaming Input
@@ -1885,7 +1886,7 @@ porcupine_demo_mic  \
   sysdefault:CARD=Device
 
 ===============================================
-TITLE: TEXT TO SPEECH
+TITLE: GOOGLE TEXT TO SPEECH
 ===============================================
 
 ---------------------
@@ -1943,7 +1944,7 @@ but this does ...
 install go on Raspberry Pi, described earlier
 
 Add environment variable , with pathname to the downloaded service account key.
-  export GOOGLE_APPLICATION_CREDENTIALS=/home/haid/Downloads/square-root-2-1256570f4acc.json
+  export GOOGLE_APPLICATION_CREDENTIALS=/home/haid/Downloads/xxxxxx-xxxx-x-1256570f4acc.json
 
 mkdir text_to_speech
 cd text_to_speech
@@ -1959,6 +1960,79 @@ go build synthesize_file.go
 echo Open the pod bay door, please Hal. > hello.txt
 ./synthesize_file --text hello.txt
 /usr/bin/aplay   -D sysdefault:CARD=Device -t raw -r 24000 -c 1 -f S16_LE output.raw
+
+===============================================
+TITLE: GOOGLE CUSTOM SEARCH API
+===============================================
+
+https://console.cloud.google.com/home/dashboard?pli=1&project=xxxxxx-xxxx-x
+  API & Services
+  Library
+  search for search
+  Custom Search API    https://console.cloud.google.com/apis/library/customsearch.googleapis.com?project=xxxxxx-xxxx-x
+    Enable,  and Back
+
+Try This API
+  Create Programmable Search Engine
+  Control Panel ( https://programmablesearchengine.google.com/cse/all ) => Get Started
+    For Example, enter:  www.en.wikipedia.org/*
+      and make note of: ...
+       . search engine name En.wikipedia.org
+       . search engine id  xxxxxxxxxxxxxxxxx
+       . Public URL:  https://cse.google.com/cse?cx=xxxxxxxxxxxxxxxxx
+  Get a Key
+       Your API Key: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+Libraries and Samples
+  Python Samples
+  Customsearch
+     copy main.py
+     create copy of this file
+     edit the file
+     updata q=               what you search for
+            cx=              search engine id
+            developerKey=    Your API Key
+
+Install google-api-python-client   - https://developers.google.com/docs/api/quickstart/python
+    pip install --upgrade google-api-python-client google-auth-httplib2 google-auth-oauthlib
+    pip3 install --upgrade google-api-python-client google-auth-httplib2 google-auth-oauthlib
+
+Run program
+   python main.py
+   python3 main.py
+
+---- To later find the API key: ----
+
+  API & Services -> Credentials
+  Key Restrictions   (google recomends restricting the key)
+    Restrict Key to Custom Search API
+
+---- Web scraping notes ----
+
+web scraping wikipedia paragraphs with beautifulsoup
+  https://stackoverflow.com/questions/53804643/how-can-i-get-a-wikipedia-articles-text-using-python-3-with-beautiful-soup/53804726
+
+apt install -y python3-pip
+pip3 install requests bs4
+
+python program from stackoverflow above ...
+
+import bs4
+import requests
+
+response = requests.get("https://en.wikipedia.org/wiki/Mathematics")
+
+if response is not None:
+    html = bs4.BeautifulSoup(response.text, 'html.parser')
+
+    title = html.select("#firstHeading")[0].text
+    paragraphs = html.select("p")
+    for para in paragraphs:
+        print (para.text)
+
+    # just grab the text up to contents as stated in question
+    intro = '\n'.join([ para.text for para in paragraphs[0:5]])
+    print (intro)
 
 ===============================================
 TITLE: LINUX AUDIO RECORDING
