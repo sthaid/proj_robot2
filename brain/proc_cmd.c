@@ -684,13 +684,37 @@ static int hndlr_speedtest(args_t args)
 
 static double getnum(char *s, double default_value)
 {
-    if (strcmp(s, "to") == 0) {
-        return 2;
-    }
+    double n;
 
-    double n = default_value;
-    sscanf(s, "%lf", &n);
-    return n;
+    static struct {
+        char *str;
+        double value;
+     } tbl[] = {
+         { "zero",  0 },
+         { "one",   1 },
+         { "two",   2 },
+         { "three", 3 },
+         { "four",  4 },
+         { "five",  5 },
+         { "six",   6 },
+         { "seven", 7 },
+         { "eight", 8 },
+         { "nine",  9 },
+         { "too",   2 },
+         { "to",    2 },
+         { "for",   4 },
+                };
+
+    if (sscanf(s, "%lf", &n) == 1) {
+        return n;
+    } else {
+        for (int i = 0; i < sizeof(tbl)/sizeof(tbl[0]); i++) {
+            if (strcmp(s, tbl[i].str) == 0) {
+                return tbl[i].value;
+            }
+        }
+        return default_value;
+    }
 }
 
 static int cmpstringp(const void *p1, const void *p2)

@@ -255,16 +255,6 @@ bool grammar_match(char *cmd_arg, hndlr_t *proc, args_t args)
         char *current;
         char *replace;
     } subst_tbl[] = {
-        { " zero ",  " 0 " },
-        { " one ",   " 1 " },
-        { " two ",   " 2 " },
-        { " three ", " 3 " },
-        { " four ",  " 4 " },
-        { " five ",  " 5 " },
-        { " six ",   " 6 " },
-        { " seven ", " 7 " },
-        { " eight ", " 8 " },
-        { " nine ",  " 9 " },
         { "\xc2\xb0", " degrees " },
             };
 
@@ -377,7 +367,21 @@ static int match(char *syntax, char *cmd, args_t args)
             // check for failed match, and if so then return match_len = 0
             if (strcmp(token, "NUMBER") == 0) {
                 double tmp;
-                if (strcmp(cmd, "to") != 0 && sscanf(cmd, "%lf", &tmp) != 1) {
+                if (sscanf(cmd, "%lf", &tmp) != 1 &&
+                    strcmp(cmd, "zero") != 0 &&
+                    strcmp(cmd, "one") != 0 &&
+                    strcmp(cmd, "two") != 0 &&
+                    strcmp(cmd, "three") != 0 &&
+                    strcmp(cmd, "four") != 0 &&
+                    strcmp(cmd, "five") != 0 &&
+                    strcmp(cmd, "six") != 0 &&
+                    strcmp(cmd, "seven") != 0 &&
+                    strcmp(cmd, "eight") != 0 &&
+                    strcmp(cmd, "nine") != 0 &&
+                    strcmp(cmd, "to") != 0 &&
+                    strcmp(cmd, "too") != 0 &&
+                    strcmp(cmd, "for") != 0)
+                {
                     *p = save;
                     return 0;
                 }
