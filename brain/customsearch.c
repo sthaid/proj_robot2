@@ -68,19 +68,21 @@ int customsearch(char *transcript)
     // get title from the scrape file
     readline(title, sizeof(title), fp, &eof);
 
-    // get description from the scrape file;
-    //
-    // xxx
-    // sample wikipedia pages have been examined, and the following seems okay:
-    // - description is first line following the title whose length is
-    //   greater than 100 chars, with the subsequent line appended
+    // get description from the scrape file
     while (true) {
+        // get candidate for description
         readline(description, sizeof(description), fp, &eof);
+
+        // if eof then we have failed to get a description
         if (eof) break;
 
+        // if description begins with "Coordinates:", or is shorter than 100 chars
+        // then we won't use this candidate
         if (strncmp(description, "Coordinates:", 12) == 0) continue;
         if ((len=strlen(description)) < 100) continue;
 
+        // this description will be used; also append the contents of the
+        // next line to description
         readline(description+len, sizeof(description)-len, fp, &eof);
         break;
     }
@@ -157,6 +159,16 @@ void cleanup_description(char *description)
         memmove(p, end+1, strlen(end+1)+1);
     }
 
+    // remove {...}
+    p = description;
+    while (true) {
+        p = strchr(p, '{');
+        if (p == NULL) break;
+        end = strchr(p, '}');
+        if (end == NULL) break;
+        memmove(p, end+1, strlen(end+1)+1);
+    }
+
     // remove (...(...)...)
     p = description;
     level = 0;
@@ -172,20 +184,30 @@ void cleanup_description(char *description)
                 break;
             }
             if (level == 0) {
-#if 0
-                // debug print what is being removed
-                char tmp[10000];
-                memcpy(tmp, start, p-start+1);
-                tmp[p-start+1] = '\0';
-                INFO("removing '%s'\n", tmp);
-#endif
-
                 memmove(start, p+1, strlen(p+1)+1);
                 p = start-1;
                 start = NULL;
             }
         }
         p++;
+    }
+
+    // remove these strings
+    static char *strs[] = {
+        ".mw-parser-output", 
+        ".frac", 
+        ".num", 
+        ".den", 
+        ".sr-only", 
+                };
+    for (int i = 0; i < sizeof(strs)/sizeof(strs[0]); i++) {
+        p = description;
+        while (true) {
+            p = strstr(p, strs[i]);
+            if (p == NULL) break;
+            int len = strlen(strs[i]);
+            memmove(p, p+len, strlen(p+len)+1);
+        }
     }
 
     // if descriptin len is > 500 then shorten it by starting at 500 and
