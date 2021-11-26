@@ -245,13 +245,13 @@ void body_status_report(char *request)
         double total_current = status.total_current;
         double mag_heading = status.mag_heading;
         if (strmatch(request, "status", "voltage", NULL)) {
-            t2s_play_nodb("Voltage is %0.2f volts", voltage);
+            t2s_play_nocache("Voltage is %0.2f volts", voltage);
         }
         if (strmatch(request, "status", "current", NULL)) {
-            t2s_play_nodb("Current is %0.0f milliamps", 1000*total_current);
+            t2s_play_nocache("Current is %0.0f milliamps", 1000*total_current);
         }
         if (strmatch(request, "status", "compass heading", NULL)) {
-            t2s_play_nodb("Compass heading is %0.0f degrees", mag_heading);
+            t2s_play_nocache("Compass heading is %0.0f degrees", mag_heading);
         }
     }
 }
@@ -422,7 +422,7 @@ static void process_recvd_msg(msg_t *msg)
     case MSG_ID_STATUS:
         status = msg->status;
         if (status_msg_time == 0) {
-            t2s_play_nodb("Voltage is %0.2f volts", status.voltage);
+            t2s_play_nocache("Voltage is %0.2f volts", status.voltage);
         }
         status_msg_time = microsec_timer();
         break;

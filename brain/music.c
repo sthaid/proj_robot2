@@ -39,7 +39,7 @@ int play_music_file(char *filename)
     t2s_play("playing %s", announce);
     audio_out_wait();
     sleep(1);
-    audio_out_play_wav(pathname, NULL, 0, false);
+    audio_out_play_wav(pathname, false);
 
     // set now_playing to indicate to the play_music_ignore_cancel routine
     // what music is playing, and when it started

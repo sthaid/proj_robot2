@@ -98,6 +98,8 @@ void run_program(pid_t *prog_pid, int *fd_to_prog, int *fd_from_prog, char *prog
 
 void poly_fit(int max_data, double *x_data, double *y_data, int degree_of_poly, double *coefficients);
 
+uint32_t crc32(const void *buf, size_t size);
+
 double normalize_angle(double angle);
 double max_doubles(double *x, int n, int *max_idx);
 double min_doubles(double *x, int n, int *min_idx);
@@ -218,7 +220,7 @@ char *s2t_feed(short sound_val);
 void t2s_init(void);
 
 void t2s_play(char *fmt, ...) __attribute__((format(printf, 1, 2)));
-void t2s_play_nodb(char *fmt, ...) __attribute__((format(printf, 1, 2)));
+void t2s_play_nocache(char *fmt, ...) __attribute__((format(printf, 1, 2)));
 
 // -------- wwd.c --------
 
@@ -300,7 +302,7 @@ int audio_in_reset_mic(void);
 
 void audio_out_beep(int beep_count, bool complete_to_idle);
 void audio_out_play_data(short *data, int max_data, int sample_rate, bool complete_to_idle);
-void audio_out_play_wav(char *file_name, short **data, int *max_data, bool complete_to_idle);
+void audio_out_play_wav(char *file_name, bool complete_to_idle);
 
 void audio_out_wait(void);
 bool audio_out_is_complete(bool *cancelled);

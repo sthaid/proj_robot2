@@ -1,7 +1,6 @@
 #include <utils.h>
 #include "../body/include/body_network_intfc.h"
 
-#define KEYID_T2S            1
 #define KEYID_USER_INFO      2
 #define KEYID_PROG_SETTINGS  3
 #define KEYID_COLOR_ORGAN    4
@@ -36,3 +35,6 @@ void body_weather_report(void);
 // music.c ...
 int play_music_file(char *filename);
 bool play_music_ignore_cancel(void);
+
+// customsearch.c ...
+int customsearch(char *transcript);

@@ -75,11 +75,11 @@ calibrate compass
 END
 
 HNDLR body_fwd
-drive forward 0:[NUMBER] [<feet ft foot>]
+<drive go> forward 0:[NUMBER] [<feet ft foot>]
 END
 
 HNDLR body_rev
-drive <backward backwards> 0:[NUMBER] [<feet ft foot>]
+<drive go> <backward backwards> 0:[NUMBER] [<feet ft foot>]
 END
 
 HNDLR body_turn
@@ -128,7 +128,7 @@ HNDLR polite_conversation
 END
 
 HNDLR lights
-lights 0:<on off>
+[turn] lights 0:<on off>
 END
 
 HNDLR play_music
@@ -142,4 +142,9 @@ END
 
 HNDLR speedtest
 [run] [network] speed test
+END
+
+HNDLR search
+search wikipedia [for] 0:REST
+wikipedia search [for] 0:REST
 END

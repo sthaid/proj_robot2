@@ -674,6 +674,7 @@ static unsigned int hash(int keyid, char *keystr)
      *      }
      */
     
+// xxx use misc
     #define CALC_CRC(x) \
         do { \
             crc = crc32_tab[(crc ^ (x)) & 0xFF] ^ (crc >> 8); \

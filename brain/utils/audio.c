@@ -159,7 +159,7 @@ void audio_out_play_data(short *data, int max_data, int sample_rate, bool comple
     shm->state = AUDIO_OUT_STATE_PLAY;
 }
 
-void audio_out_play_wav(char *file_name, short **data, int *max_data, bool complete_to_idle)
+void audio_out_play_wav(char *file_name, bool complete_to_idle)
 {
     int max_chan, rc;
 
@@ -174,6 +174,7 @@ void audio_out_play_wav(char *file_name, short **data, int *max_data, bool compl
     rc = sf_read_wav_file2(file_name, shm->data, &max_chan, &shm->max_data, &shm->sample_rate);
     if (rc < 0) {
         ERROR("sf_read_wav_file failed, %s\n", file_name);
+        shm->state = AUDIO_OUT_STATE_IDLE;
         return;
     }
     INFO("max_data=%d  max_chan=%d  sample_rate=%d\n", shm->max_data, max_chan, shm->sample_rate);
@@ -184,13 +185,6 @@ void audio_out_play_wav(char *file_name, short **data, int *max_data, bool compl
     // this will cause the audio_pgm code, when the audio output has completed, to
     //  set the state to AUDIO_OUT_STATE_IDLE as opposed to AUDIO_OUT_STATE_PLAY_DONE
     shm->complete_to_idle = complete_to_idle;
-
-    // if caller wants copy of data then provide to caller
-    if (data) {
-        *data = malloc(shm->max_data * sizeof(short));
-        memcpy(*data, shm->data, shm->max_data * sizeof(short));
-        *max_data = shm->max_data;
-    }
 
     // set AUDIO_OUT_STATE_PLAY
     __sync_synchronize();

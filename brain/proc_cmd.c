@@ -52,6 +52,7 @@ static int hndlr_lights(args_t args);
 static int hndlr_play_music(args_t args);
 static int hndlr_list_music(args_t args);
 static int hndlr_speedtest(args_t args);
+static int hndlr_search(args_t args);
 
 #define HNDLR(name) { #name, hndlr_##name }
 
@@ -88,6 +89,7 @@ static hndlr_lookup_t hndlr_lookup_tbl[] = {
     HNDLR(play_music),
     HNDLR(list_music),
     HNDLR(speedtest),
+    HNDLR(search),
     { NULL, NULL }
                 };
 
@@ -466,10 +468,10 @@ static int hndlr_time(args_t args)
 
     tm = localtime(&t);
 #if 0
-    t2s_play_nodb("the time is %d %2.2d", tm->tm_hour, tm->tm_min);
+    t2s_play_nocache("the time is %d %2.2d", tm->tm_hour, tm->tm_min);
 #else
     t2s_play("the time is ");
-    t2s_play_nodb("%d %2.2d", tm->tm_hour, tm->tm_min);
+    t2s_play_nocache("%d %2.2d", tm->tm_hour, tm->tm_min);
 #endif
 
     return 0;
@@ -679,6 +681,14 @@ static int hndlr_speedtest(args_t args)
 
     pclose(fp);
     return 0;
+}
+
+static int hndlr_search(args_t args)
+{
+    char *transcript = args[0];
+
+    t2s_play("searching wikipedia for %s", transcript);
+    return customsearch(transcript);
 }
 
 // -----------------  SUPPORT  ----------------------------------------------
