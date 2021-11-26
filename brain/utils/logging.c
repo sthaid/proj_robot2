@@ -22,7 +22,7 @@ void log_init(char *filename, bool append, bool brief)
 
 void log_msg(char *lvl, char *fmt, ...)
 {
-    char str[1000], s[100];
+    char str[10000], s[100];
     va_list ap;
 
     if (log_fp == NULL) {
@@ -31,7 +31,7 @@ void log_msg(char *lvl, char *fmt, ...)
     }
 
     va_start(ap, fmt);
-    vsprintf(str, fmt, ap);
+    vsnprintf(str, sizeof(str), fmt, ap);
     va_end(ap);
 
     if (!log_brief) { 

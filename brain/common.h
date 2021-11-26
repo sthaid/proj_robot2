@@ -1,9 +1,9 @@
 #include <utils.h>
 #include "../body/include/body_network_intfc.h"
 
+#define KEYID_PROG_SETTINGS  1
 #define KEYID_USER_INFO      2
-#define KEYID_PROG_SETTINGS  3
-#define KEYID_COLOR_ORGAN    4
+#define KEYID_COLOR_ORGAN    3
 
 struct {
     int volume;

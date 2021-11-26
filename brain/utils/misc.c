@@ -374,6 +374,27 @@ uint32_t crc32(const void *buf, size_t size)
     return crc ^ ~0U;
 }
 
+// example: 
+//   crc32_multi_buff(2, buff1, sizeof(buff1), buff2, sizeof(buff2))
+uint32_t crc32_multi_buff(int n, ...)
+{
+    uint32_t crc = ~0U;
+    va_list ap;
+    int i;
+
+    va_start(ap, n);
+    for (i = 0; i < n; i++) {
+        uint8_t *p = va_arg(ap, uint8_t*);
+        size_t size = va_arg(ap, size_t);
+        while (size--) {
+            crc = crc32_tab[(crc ^ *p++) & 0xFF] ^ (crc >> 8);
+        }
+    }
+    va_end(ap);
+
+    return crc ^ ~0U;
+}
+
 // -----------------  GENERAL UTILS  ------------------------------------
 
 double normalize_angle(double angle)

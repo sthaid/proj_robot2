@@ -99,6 +99,7 @@ void run_program(pid_t *prog_pid, int *fd_to_prog, int *fd_from_prog, char *prog
 void poly_fit(int max_data, double *x_data, double *y_data, int degree_of_poly, double *coefficients);
 
 uint32_t crc32(const void *buf, size_t size);
+uint32_t crc32_multi_buff(int n, ...);  // buff,sizeof(buff),repeat
 
 double normalize_angle(double angle);
 double max_doubles(double *x, int n, int *max_idx);
