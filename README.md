@@ -81,3 +81,9 @@ The following software packages or sample code are used:
 * Respeaker LEDs: https://github.com/tinue/apa102-pi
 * TP-Link WiFi SmartPlug Client: https://github.com/softScheck/tplink-smartplug
 * Polynomial Fitting: https://www.bragitoff.com/2018/06/polynomial-fitting-c-program/
+
+## Images
+
+!(/robot1.jpg)
+
+!(/robot2.jpg)
