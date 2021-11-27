@@ -13,7 +13,7 @@ struct {
 } settings;
 
 // brain.c ...
-void brain_get_recording(short *data, int max);
+void brain_get_recording(short *mic[4], int max);
 void brain_end_program(void);
 void brain_restart_program(void);
 

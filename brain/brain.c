@@ -15,7 +15,7 @@
 //
 
 static bool  end_program;
-static short recording[MAX_RECORDING];
+static short recording[4][MAX_RECORDING];
 static int   recording_idx;
 
 //
@@ -122,16 +122,20 @@ void brain_restart_program(void)
     system("sudo systemctl restart robot-brain &");
 }
 
-void brain_get_recording(short *data, int max)
+void brain_get_recording(short *mic[4], int max)
 {
     int ri = recording_idx;
 
-    if (ri-max >= 0) {
-        memcpy(data, recording+(ri-max), max*sizeof(short));
-    } else {
-        int tmp = -(ri-max);
-        memcpy(data, recording+(MAX_RECORDING-tmp), tmp*sizeof(short));
-        memcpy(data+tmp, recording, (max-tmp)*sizeof(short));
+    assert(max < MAX_RECORDING - 1*16000);
+
+    for (int i = 0; i < 4; i++) {
+        if (ri-max >= 0) {
+            memcpy(mic[i], recording[i]+(ri-max), max*sizeof(short));
+        } else {
+            int tmp = -(ri-max);
+            memcpy(mic[i], recording[i]+(MAX_RECORDING-tmp), tmp*sizeof(short));
+            memcpy(mic[i]+tmp, recording[i], (max-tmp)*sizeof(short));
+        }
     }
 }
 
@@ -146,8 +150,12 @@ static int proc_mic_data(short *frame)
     #define STATE_COMPLETED_CMD_OKAY     3
     #define STATE_COMPLETED_CMD_ERROR    4
 
-    static int state = STATE_WAITING_FOR_WAKE_WORD;
+    static int    state = STATE_WAITING_FOR_WAKE_WORD;
     static double doa;
+    static double filter_cx[4];
+
+    short filtered_frame[4];
+    short sound_val;
 
     // supply the frame for doa analysis, frame is 4 shorts
     doa_feed(frame);
@@ -159,18 +167,21 @@ static int proc_mic_data(short *frame)
     }
     discard_cnt = 0;
 
-    // the sound value used for the remaining of this routine is the value from mic chan 0;
-    // low pass filter is used to eliminate high frequency background noise
-#if 1
-    static double cx[2];
-    short sound_val = 5 * low_pass_filter_ex(frame[0], cx, 2, 0.90);
-#else
-    short sound_val = frame[0];
-#endif
+    // filter the 4 microphone channels to remove some of the high pitch background noise
+    for (int mic = 0; mic < 4; mic++) {
+        int tmp = 4 * low_pass_filter(frame[mic], &filter_cx[mic], 0.90);
+        filtered_frame[mic] = clip_int(tmp, -32767, 32767);
+    }
 
     // save sound recording so it can be played to test audio quality
-    recording[recording_idx] = sound_val;
+    for (int mic = 0; mic < 4; mic++) {
+        recording[mic][recording_idx] = filtered_frame[mic];
+    }
     recording_idx = (recording_idx == MAX_RECORDING-1 ? 0 : recording_idx+1);
+
+    // all channels sound about the same; so the code following will always use
+    // the sound from microphone channel 0
+    sound_val = filtered_frame[0];
 
     // process mic data state machine
     switch (state) {

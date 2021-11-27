@@ -206,11 +206,21 @@ static int hndlr_reset_mic(args_t args)
 
 static int hndlr_playback(args_t args)
 {
-    #define MAX_DATA (10*16000)
-    short data[MAX_DATA];
+    #define MAX_MIC_DATA (10*16000)
 
-    brain_get_recording(data, MAX_DATA);
-    audio_out_play_data(data, MAX_DATA, 16000, true);
+    short buffer[4][MAX_MIC_DATA];
+    short *mic[4] = { buffer[0], buffer[1], buffer[2], buffer[3] };
+
+    brain_get_recording(mic, MAX_MIC_DATA);
+
+    for (int i = 0; i < 4; i++) {
+        t2s_play("microphone %d", i);
+        if (cancel) break;
+
+        audio_out_play_data(mic[i], MAX_MIC_DATA, 16000, true);
+        if (cancel) break;
+    }
+
     return 0;
 }
 
