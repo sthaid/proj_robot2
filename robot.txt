@@ -1108,6 +1108,8 @@ isolcpus example:
   $ cat /boot/cmdline.txt 
     console=serial0,115200 console=tty1 root=PARTUUID=f0413295-02 rootfstype=ext4 
        elevator=deadline fsck.repair=yes rootwait quiet splash plymouth.ignore-serial-consoles isolcpus=3
+  $ cat /sys/devices/system/cpu/isolated    # after reboot, check this
+  $ cat /sys/devices/system/cpu/present
 
 apt examples
 - apt update   - download package information from all configured sources
