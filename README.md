@@ -84,6 +84,6 @@ The following software packages or sample code are used:
 
 ## Images
 
-!(/robot1.jpg)
+![robot1.jpg](/robot1.jpg)
 
-!(/robot2.jpg)
+![robot2.jpg](/robot2.jpg)
