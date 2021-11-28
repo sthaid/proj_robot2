@@ -28,8 +28,8 @@ High level software flow:
   do forever
     Wait for 'Porcupine' wake word.
     Display the direction of sound arrival on LEDs.
-    Send the following sound data to Google to be converted to speech.
-    Match the speech with defined grammar, and obtain the software handler name.
+    Send the subsequent sound data to Google to be converted to text.
+    Match the text with the defined grammar, and obtain the software handler.
     Call the handler to process the command.
     The handler will process the command and play audio response. Google text to speech
      is used to create the audio response wav file.
