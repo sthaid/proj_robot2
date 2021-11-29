@@ -20,20 +20,20 @@ The body receives and processes commands from the brain.
 The brain is mounted on a platform above the center of the body.
 
 The brain consists of:
-* Raspberry Pi with SeeedStudio Respeaker HAT
+* Raspberry Pi with SeeedStudio Respeaker (4 Microphone Array) HAT
 * USB Speaker
 
 High level software flow:
 ```
-  do forever
-    Wait for 'Porcupine' wake word.
-    Display the direction of sound arrival on LEDs.
-    Send the subsequent sound data to Google to be converted to text.
-    Match the text with the defined grammar, and obtain the software handler.
-    Call the handler to process the command.
-    The handler will process the command and play audio response. Google text to speech
-     is used to create the audio response wav file.
-  enddo
+do forever
+   Wait for 'Porcupine' wake word.
+   Display the direction of sound arrival on LEDs.
+   Send the subsequent sound data to Google to be converted to text.
+   Match the text with the defined grammar, and obtain the software handler.
+   Call the handler to process the command.
+   The handler will process the command and play audio response. Google text to speech
+    is used to create the audio response wav file.
+enddo
 ```
 
 ## Grammar Examples
